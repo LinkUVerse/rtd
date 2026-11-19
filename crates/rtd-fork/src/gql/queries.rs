@@ -231,8 +231,8 @@ pub(crate) mod address_owned_objects_query {
     use cynic::QueryBuilder as _;
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::ObjectRef;
-    use rtd_types::base_types::RtdAddress as RtdAddressType;
     use rtd_types::base_types::SequenceNumber;
+    use rtd_types::base_types::RtdAddress as RtdAddressType;
     use rtd_types::digests::ObjectDigest;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 
@@ -517,7 +517,7 @@ pub(crate) mod address_owned_objects_query {
                 .mount(&server)
                 .await;
 
-            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test")
+            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test", vec![])
                 .expect("graphql client should build");
             let entries = query(owner, 10, &gql)
                 .await
@@ -556,7 +556,7 @@ pub(crate) mod address_owned_objects_query {
                 .respond_with(ResponseTemplate::new(200).set_body_json(missing_address_response()))
                 .mount(&server)
                 .await;
-            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test")
+            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test", vec![])
                 .expect("graphql client should build");
 
             assert!(
@@ -572,7 +572,7 @@ pub(crate) mod address_owned_objects_query {
                 .respond_with(ResponseTemplate::new(200).set_body_json(missing_objects_response()))
                 .mount(&server)
                 .await;
-            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test")
+            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test", vec![])
                 .expect("graphql client should build");
 
             assert!(
@@ -768,8 +768,8 @@ pub(crate) mod address_balances_query {
 pub(crate) mod object_seed_query {
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::ObjectRef;
-    use rtd_types::base_types::RtdAddress as RtdAddressType;
     use rtd_types::base_types::SequenceNumber;
+    use rtd_types::base_types::RtdAddress as RtdAddressType;
     use rtd_types::digests::ObjectDigest;
     use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 
@@ -1126,7 +1126,7 @@ pub(crate) mod object_seed_query {
                 .mount(&server)
                 .await;
 
-            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test")
+            let gql = GraphQLClient::new(Node::Custom(server.uri()), "test", vec![])
                 .expect("graphql client should build");
             let entries = query(&[first.id(), missing, second.id()], 10, &gql)
                 .await
@@ -1214,7 +1214,7 @@ pub(crate) mod object_seed_query {
                     .mount(&server)
                     .await;
 
-                let gql = GraphQLClient::new(Node::Custom(server.uri()), "test")
+                let gql = GraphQLClient::new(Node::Custom(server.uri()), "test", vec![])
                     .expect("graphql client should build");
                 let err = query(&[object.id()], 10, &gql)
                     .await

@@ -18,7 +18,7 @@ use crate::coin::TreasuryCap;
 use crate::coin_registry::Currency;
 pub use crate::committee::EpochId;
 use crate::crypto::{
-    AuthorityPublicKeyBytes, DefaultHash, PublicKey, RtdPublicKey, RtdSignature, SignatureScheme,
+    AuthorityPublicKeyBytes, DefaultHash, PublicKey, SignatureScheme, RtdPublicKey, RtdSignature,
 };
 pub use crate::digests::{ObjectDigest, TransactionDigest, TransactionEffectsDigest};
 use crate::dynamic_field::DynamicFieldInfo;
@@ -41,10 +41,10 @@ use crate::messages_checkpoint::CheckpointTimestamp;
 use crate::multisig::MultiSigPublicKey;
 use crate::object::{Object, Owner};
 use crate::parse_rtd_struct_tag;
+use crate::signature::GenericSignature;
 use crate::rtd_serde::Readable;
 use crate::rtd_serde::to_custom_deser_error;
 use crate::rtd_serde::to_rtd_struct_tag_string;
-use crate::signature::GenericSignature;
 use crate::transaction::Transaction;
 use crate::transaction::VerifiedTransaction;
 use crate::zk_login_authenticator::ZkLoginAuthenticator;
@@ -65,7 +65,6 @@ use move_core_types::language_storage::ModuleId;
 use move_core_types::language_storage::StructTag;
 use move_core_types::language_storage::TypeTag;
 use rand::Rng;
-use rtd_protocol_config::ProtocolConfig;
 use schemars::JsonSchema;
 use serde::Deserializer;
 use serde::Serializer;
@@ -78,9 +77,11 @@ use serde_with::serde_as;
 use shared_crypto::intent::HashingIntentScope;
 use std::borrow::Cow;
 use std::cmp::max;
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
 use std::str::FromStr;
+use rtd_protocol_config::ProtocolConfig;
 
 #[cfg(test)]
 #[path = "unit_tests/base_types_tests.rs"]
@@ -233,28 +234,38 @@ pub struct ConsensusObjectVersion {
     pub version: SequenceNumber,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SystemObjectVersions {
-    accumulator_version: Option<ConsensusObjectVersion>,
-}
+/// Versions of the implicitly read system objects pinned for one transaction, keyed by object
+/// ID. Only members of `IMPLICITLY_READ_SYSTEM_OBJECTS` may appear.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SystemObjectVersions(BTreeMap<ObjectID, ConsensusObjectVersion>);
 
 impl SystemObjectVersions {
-    pub fn new(accumulator_version: Option<ConsensusObjectVersion>) -> Self {
-        Self {
-            accumulator_version,
-        }
+    pub fn empty() -> Self {
+        Self::default()
     }
 
-    pub fn empty() -> Self {
-        Self::new(None)
+    pub fn from_map(versions: BTreeMap<ObjectID, ConsensusObjectVersion>) -> Self {
+        for object_id in versions.keys() {
+            Self::assert_implicitly_read(object_id);
+        }
+        Self(versions)
     }
 
     pub fn get(&self, object_id: &ObjectID) -> Option<ConsensusObjectVersion> {
-        if *object_id == crate::RTD_ACCUMULATOR_ROOT_OBJECT_ID {
-            self.accumulator_version
-        } else {
-            panic!("{object_id} is not an implicitly read system object")
-        }
+        Self::assert_implicitly_read(object_id);
+        self.0.get(object_id).copied()
+    }
+
+    pub fn insert_for_testing(&mut self, object_id: ObjectID, version: ConsensusObjectVersion) {
+        Self::assert_implicitly_read(&object_id);
+        self.0.insert(object_id, version);
+    }
+
+    fn assert_implicitly_read(object_id: &ObjectID) {
+        assert!(
+            object_id.is_implicitly_read_system_object(),
+            "{object_id} is not an implicitly read system object"
+        );
     }
 }
 

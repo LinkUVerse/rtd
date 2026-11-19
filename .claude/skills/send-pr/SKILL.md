@@ -75,6 +75,20 @@ Obvious code quality issues:
 
 Fix anything found. Stage changes but do not commit yet — they will be amended in Step 9. If something looks intentional but questionable, note it to the user but continue.
 
+### Review tier
+
+Invoke `/review-author` and follow its Steps 1 and 2: check eligibility, classify the tier, and meet the tier's requirements. If any changed file is eligible, the PR opts in to the tiered review policy unless the author has said to use normal code review. If no file is eligible or the author opts out, skip the tier steps below. If some files are ineligible, tell the author that the approver agent will not approve the PR and that a human must review those files. Keep the tier for the review focus below and for Step 13.
+
+### AI review gate
+
+Skip this gate if the diff changes no code: every changed file is prose, such as Markdown, plain text, or a skill file under `.claude/skills/`. Comment-only edits inside source files still count as code changes. Otherwise, the diff must go through a final review before it is pushed. The review-command table in `/review-author` Step 3 lists the iteration and final review for each harness, such as `/code-review high` and `/code-review max` in Claude Code or `/review` in omp. Follow the two phases in `/review-author` Step 3: iterate with the iteration review until it returns no finding the author accepts, then run the final review once on the final diff. Run every review against `$BASE` so it reviews the same `$BASE...HEAD` range as above, not the default upstream diff. The review must run on a model in the allowed model list in `/review-author` Step 3. If the review would run on a model outside that list, STOP and report. For a Tier 2 or Tier 3 PR, give it the tier focus from `/review-author` Step 3. If the final review already ran in this session on the current changes and nothing but fixes for its own findings has changed since, that is sufficient — do not run it again. On a run that updates an existing PR with new commits, run both phases again. If this harness has no row in the table, or the review is unavailable, does not complete, or caps its findings (such as `--max-findings` in Claude Code), STOP and report; never substitute a review outside the table or write the Step 13 review tag without a completed final review.
+
+Triage the findings:
+- Trivial findings (a local rename, a small simplification) inside hunks of this diff, not touching public, serialized, or RPC-facing identifiers: fix them and stage as above. Dismiss a trivial finding that conflicts with CLAUDE.md conventions.
+- Everything else — correctness bugs, security issues, anything from the bugs & security list above, behavior changes, and any finding you cannot confidently dismiss as a false positive — is meaningful: STOP. Do not push and do not open or update the PR. Report each finding to the author and ask how to proceed. Resume only once the author has decided each one: confirmed it as a false positive, deferred it explicitly, or supplied or approved a fix. Apply approved fixes yourself and stage them, then confirm `git status` shows only staged changes before moving on.
+
+Do not post the findings or their resolution to the PR. Once the author has decided every finding, Step 13 records the review with a tag.
+
 ## Step 5 — Run relevant tests
 
 Determine which packages were changed on this branch (compare against `$BASE`).
@@ -119,12 +133,12 @@ If the remote branch exists and has diverged (due to rebase), force-push with `g
 ## Step 12 — Open or update PR
 
 Check if a PR already exists for this branch (`gh pr view`).
-- If a PR is open: done. Print the PR URL.
+- If a PR is open: refresh the review tag and the tier tag (see Step 13) without touching the rest of the body — fetch the body with `gh pr view --json body`, replace or append only those tags, and write it back with `gh pr edit --body`. For a Tier 3 PR, also add any new `Implementation note:` bullets to the MDD. Print the PR URL.
 - If no PR exists: open one in **draft** mode with `gh pr create --draft`. Write a title and body following the description guidelines below. Print the PR URL.
 
 ## Step 13 — Write the PR description
 
-Follow the repo template (`.github/PULL_REQUEST_TEMPLATE.md`): `## Description`, `## Test plan`, `## Release notes`.
+Follow the repo template (`.github/PULL_REQUEST_TEMPLATE.md`): `## Description`, `## Test plan`, `## Release notes`. A PR under the tiered review policy also has a tier tag, and a Tier 3 PR has a `## Mini design doc` section after `## Description`. `/review-author` Steps 2 and 4 define both.
 
 ### Description
 
@@ -152,6 +166,7 @@ Only state what a reviewer genuinely needs in order to trust the change. Do NOT 
 - If new tests were added, say which behavior they cover (one line).
 - If you verified something manually or by a non-obvious command, give the steps so a reviewer could repeat them.
 - If the change is covered entirely by existing automated tests and there is nothing else to convey, write a single short line saying so (e.g. "Covered by existing tests in `<area>`.") rather than a paragraph of boilerplate.
+- End the test plan with the review tag defined in `/review-author` Step 4. Its `<sha>` is the full hash of the head commit pushed in Step 11. The tag records a check CI does not run, and `/review-approver` relies on the hash to skip a second review. If Step 4 skipped the gate because the diff changes no code, omit the tag.
 
 ### Release notes
 

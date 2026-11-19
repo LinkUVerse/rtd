@@ -12,7 +12,6 @@ use move_command_line_common::error_bitset::ErrorBitset;
 use move_core_types::annotated_value::{MoveStruct, MoveValue, MoveVariant};
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::StructTag;
-use rtd_macros::EnumVariantOrder;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -21,10 +20,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 use std::hash::Hash;
+use rtd_macros::EnumVariantOrder;
 use tracing::warn;
 
 use rtd_types::base_types::{ObjectID, RtdAddress};
+use rtd_types::error::{RtdErrorKind, RtdResult};
 use rtd_types::execution_status::MoveLocation;
+use rtd_types::gas_coin::GasCoin;
 use rtd_types::rtd_serde::RtdStructTag;
 
 pub type RtdMoveTypeParameterIndex = u16;
@@ -749,6 +751,54 @@ impl From<MoveStruct> for RtdMoveStruct {
                 .map(|(id, value)| (id.into_string(), value.into()))
                 .collect(),
         }
+    }
+}
+
+impl TryFrom<&RtdMoveStruct> for GasCoin {
+    type Error = anyhow::Error;
+    fn try_from(move_struct: &RtdMoveStruct) -> Result<Self, Self::Error> {
+        match move_struct {
+            RtdMoveStruct::WithFields(fields) | RtdMoveStruct::WithTypes { type_: _, fields } => {
+                if let Some(RtdMoveValue::String(balance)) = fields.get("balance")
+                    && let Ok(balance) = balance.parse::<u64>()
+                    && let Some(RtdMoveValue::UID { id }) = fields.get("id")
+                {
+                    return Ok(GasCoin::new(*id, balance));
+                }
+            }
+            _ => {}
+        }
+        Err(anyhow::anyhow!("Struct is not a gas coin: {move_struct:?}"))
+    }
+}
+
+/// Split an event's payload into its type and its fields rendered as JSON.
+/// Events always carry a struct or an enum variant at the top level; every
+/// other `MoveValue` shape is rejected rather than rendered.
+pub fn type_and_fields_from_move_event_data(
+    event_data: MoveValue,
+) -> RtdResult<(StructTag, Value)> {
+    match event_data.into() {
+        RtdMoveValue::Struct(move_struct) => match &move_struct {
+            RtdMoveStruct::WithTypes { type_, .. } => {
+                Ok((type_.clone(), move_struct.clone().to_json_value()))
+            }
+            _ => Err(RtdErrorKind::ObjectDeserializationError {
+                error: "Found non-type RtdMoveStruct in MoveValue event".to_string(),
+            }
+            .into()),
+        },
+        RtdMoveValue::Variant(v) => Ok((v.type_.clone(), v.clone().to_json_value())),
+        RtdMoveValue::Vector(_)
+        | RtdMoveValue::Number(_)
+        | RtdMoveValue::Bool(_)
+        | RtdMoveValue::Address(_)
+        | RtdMoveValue::String(_)
+        | RtdMoveValue::UID { .. }
+        | RtdMoveValue::Option(_) => Err(RtdErrorKind::ObjectDeserializationError {
+            error: "Invalid MoveValue event type -- this should not be possible".to_string(),
+        }
+        .into()),
     }
 }
 

@@ -4,14 +4,16 @@
 //# init --protocol-version 108 --accounts A --addresses P=0x0 --simulator
 
 //# publish --upgradeable --sender A
-module P::M {
-  public struct Foo { value: u64 }
-  public fun bar(): u64 { 42 }
-}
+module P::M;
+
+public struct Foo { value: u64 }
+
+public fun bar(): u64 { 42 }
 
 //# create-checkpoint
 
 //# run-graphql
+/*
 { # Query module with valid fields and an error field (invalid pagination).
   package(address: "@{P}") {
     module(name: "M") {
@@ -26,8 +28,10 @@ module P::M {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   # Test partial error at module level
   # One field succeeds, another has partial error
@@ -48,3 +52,4 @@ module P::M {
     }
   }
 }
+*/

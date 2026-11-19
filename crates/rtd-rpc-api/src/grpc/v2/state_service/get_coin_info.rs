@@ -4,10 +4,10 @@
 use crate::Result;
 use crate::RpcError;
 use crate::RpcService;
-use rtd_rpc::proto::rtd::rpc::v2::CoinTreasury;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoResponse;
-use rtd_rpc::proto::rtd::rpc::v2::coin_treasury::SupplyState as RpcSupplyState;
+use rtd_rpc::proto::sui::rpc::v2::CoinTreasury;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::coin_treasury::SupplyState as RpcSupplyState;
 use rtd_sdk_types::{Address, StructTag};
 use rtd_types::base_types::{ObjectID as RtdObjectID, RtdAddress};
 use rtd_types::coin::RegulatedCoinMetadata;

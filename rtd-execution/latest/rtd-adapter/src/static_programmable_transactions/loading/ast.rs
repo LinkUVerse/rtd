@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    gas_charger::GasPayment,
+    metering::gas_charger::GasPayment,
     static_programmable_transactions::linkage::resolved_linkage::{
         ExecutableLinkage, ResolvedLinkage,
     },
@@ -18,13 +18,13 @@ use move_core_types::{
     language_storage::{ModuleId, StructTag},
     u256::U256,
 };
+use std::{collections::BTreeSet, rc::Rc};
 use rtd_types::{
     Identifier, TypeTag,
     base_types::{ObjectID, ObjectRef, RESOLVED_TX_CONTEXT, SequenceNumber, TxContextKind},
     object::ObjectPermissions,
 };
 use rtd_verifier::INIT_FN_NAME;
-use std::{collections::BTreeSet, rc::Rc};
 
 //**************************************************************************************************
 // AST Nodes
@@ -32,13 +32,13 @@ use std::{collections::BTreeSet, rc::Rc};
 
 #[derive(Debug)]
 pub struct Transaction {
-    pub gas_payment: Option<GasPayment>,
+    pub(crate) gas_payment: Option<GasPayment>,
     pub inputs: Inputs,
     /// Original number of commands in the transaction. After typing, Spanned indices in the AST
     /// should be < `original_command_len`
     pub original_command_len: usize,
     pub commands: Commands,
-    pub unified_linkage: Option<ExecutableLinkage>,
+    pub unified_linkage: ExecutableLinkage,
 }
 
 pub type Inputs = Vec<(InputArg, InputType)>;
@@ -166,7 +166,6 @@ pub enum Command {
 
 #[derive(Debug, Clone)]
 pub enum PackagePayload {
-    Serialized(Vec<Vec<u8>>),
     Deserialized(DeserializedPackage),
 }
 
@@ -400,22 +399,6 @@ impl Command {
                 Box::new(std::iter::once(coin).chain(coins.iter_mut()))
             }
             Command::MakeMoveVec(_, elements) => Box::new(elements.iter_mut()),
-            Command::Publish(_, _, _) => Box::new(std::iter::empty()),
-            Command::Upgrade(_, _, _, obj, _) => Box::new(std::iter::once(obj)),
-        }
-    }
-
-    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Argument> + '_> {
-        match self {
-            Command::MoveCall(mc) => Box::new(mc.arguments.iter()),
-            Command::TransferObjects(objs, recipient) => {
-                Box::new(objs.iter().chain(std::iter::once(recipient)))
-            }
-            Command::SplitCoins(coin, amounts) => {
-                Box::new(std::iter::once(coin).chain(amounts.iter()))
-            }
-            Command::MergeCoins(coin, coins) => Box::new(std::iter::once(coin).chain(coins.iter())),
-            Command::MakeMoveVec(_, elements) => Box::new(elements.iter()),
             Command::Publish(_, _, _) => Box::new(std::iter::empty()),
             Command::Upgrade(_, _, _, obj, _) => Box::new(std::iter::once(obj)),
         }

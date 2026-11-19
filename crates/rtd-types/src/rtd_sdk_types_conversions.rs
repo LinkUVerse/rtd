@@ -17,17 +17,17 @@ use rtd_sdk_types::{
     CommandArgumentError, ConsensusDeterminedVersionAssignments, Digest, Ed25519PublicKey,
     Ed25519Signature, EndOfEpochTransactionKind, Event, ExecutionError, ExecutionStatus,
     ExecutionTimeObservationKey, ExecutionTimeObservations, FundsWithdrawal, IdOperation,
-    Identifier, Input, Jwk, JwkId, MakeMoveVector, MergeCoins, MoveCall, MoveLocation, MovePackage,
-    MultisigMemberPublicKey, MultisigMemberSignature, Mutability, Object, ObjectIn, ObjectOut,
-    ObjectReference, Owner, PackageUpgradeError, PasskeyAuthenticator, PasskeyPublicKey, Publish,
-    Secp256k1PublicKey, Secp256k1Signature, Secp256r1PublicKey, Secp256r1Signature, SharedInput,
-    SignatureScheme, SignedCheckpointSummary, SignedTransaction, SimpleSignature, SplitCoins,
-    StructTag, SystemPackage, Transaction, TransactionEffects, TransactionEffectsV1,
-    TransactionEffectsV2, TransactionEvents, TransactionExpiration, TransactionKind,
-    TransferObjects, TypeArgumentError, TypeParseError, TypeTag, UnchangedConsensusKind, Upgrade,
-    UserSignature, ValidatorAggregatedSignature, ValidatorCommittee, ValidatorCommitteeMember,
-    ValidatorExecutionTimeObservation, VersionAssignment, VersionAssignmentV2,
-    ZkLoginAuthenticator, ZkLoginPublicIdentifier,
+    Identifier, Input, Jwk, JwkId, MakeMoveVector, MergeCoins, MlDsa65PublicKey, MlDsa65Signature,
+    MoveCall, MoveLocation, MovePackage, MultisigMemberPublicKey, MultisigMemberSignature,
+    Mutability, Object, ObjectIn, ObjectOut, ObjectReference, Owner, PackageUpgradeError,
+    PasskeyAuthenticator, PasskeyPublicKey, Publish, Secp256k1PublicKey, Secp256k1Signature,
+    Secp256r1PublicKey, Secp256r1Signature, SharedInput, SignatureScheme, SignedCheckpointSummary,
+    SignedTransaction, SimpleSignature, SplitCoins, StructTag, SystemPackage, Transaction,
+    TransactionEffects, TransactionEffectsV1, TransactionEffectsV2, TransactionEvents,
+    TransactionExpiration, TransactionKind, TransferObjects, TypeArgumentError, TypeParseError,
+    TypeTag, UnchangedConsensusKind, Upgrade, UserSignature, ValidatorAggregatedSignature,
+    ValidatorCommittee, ValidatorCommitteeMember, ValidatorExecutionTimeObservation,
+    VersionAssignment, VersionAssignmentV2, ZkLoginAuthenticator, ZkLoginPublicIdentifier,
 };
 use tap::Pipe;
 
@@ -963,7 +963,7 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
             crate::execution_status::ExecutionErrorKind::InsufficientCoinBalance => Self::InsufficientCoinBalance,
             crate::execution_status::ExecutionErrorKind::CoinBalanceOverflow => Self::CoinBalanceOverflow,
             crate::execution_status::ExecutionErrorKind::PublishErrorNonZeroAddress => Self::PublishErrorNonZeroAddress,
-            crate::execution_status::ExecutionErrorKind::RtdMoveVerificationError => Self::RtdMoveVerificationError,
+            crate::execution_status::ExecutionErrorKind::RtdMoveVerificationError => Self::SuiMoveVerificationError,
             crate::execution_status::ExecutionErrorKind::MovePrimitiveRuntimeError(move_location_opt) => Self::MovePrimitiveRuntimeError { location: move_location_opt.0.map(Into::into) },
             crate::execution_status::ExecutionErrorKind::MoveAbort(move_location, code) => Self::MoveAbort { location: move_location.into(), code },
             crate::execution_status::ExecutionErrorKind::VMVerificationOrDeserializationError => Self::VmVerificationOrDeserializationError,
@@ -983,7 +983,7 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
             crate::execution_status::ExecutionErrorKind::PackageUpgradeError { upgrade_error } => Self::PackageUpgradeError { kind: upgrade_error.into() },
             crate::execution_status::ExecutionErrorKind::WrittenObjectsTooLarge { current_size, max_size } => Self::WrittenObjectsTooLarge { object_size: current_size, max_object_size:max_size },
             crate::execution_status::ExecutionErrorKind::CertificateDenied => Self::CertificateDenied,
-            crate::execution_status::ExecutionErrorKind::RtdMoveVerificationTimedout => Self::RtdMoveVerificationTimedout,
+            crate::execution_status::ExecutionErrorKind::RtdMoveVerificationTimedout => Self::SuiMoveVerificationTimedout,
             crate::execution_status::ExecutionErrorKind::SharedObjectOperationNotAllowed => Self::ConsensusObjectOperationNotAllowed,
             crate::execution_status::ExecutionErrorKind::InputObjectDeleted => Self::InputObjectDeleted,
             crate::execution_status::ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion { congested_objects } => Self::ExecutionCanceledDueToConsensusObjectCongestion { congested_objects: congested_objects.0.into_iter().map(Into::into).collect() },
@@ -998,6 +998,12 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
             }
             crate::execution_status::ExecutionErrorKind::NonExclusiveWriteInputObjectModified { id } => {
                 Self::NonExclusiveWriteInputObjectModified { object: id.into() }
+            }
+            // TODO: map to `Self::TransactionExpired` once rtd-sdk-types has the variant. Until
+            // then this conversion is lossy, which is acceptable only while the variant is
+            // produced on devnet alone.
+            crate::execution_status::ExecutionErrorKind::TransactionExpired => {
+                Self::InvariantViolation
             }
         }
     }
@@ -1030,7 +1036,7 @@ impl From<ExecutionError> for crate::execution_status::ExecutionErrorKind {
             ExecutionError::InsufficientCoinBalance => Self::InsufficientCoinBalance,
             ExecutionError::CoinBalanceOverflow => Self::CoinBalanceOverflow,
             ExecutionError::PublishErrorNonZeroAddress => Self::PublishErrorNonZeroAddress,
-            ExecutionError::RtdMoveVerificationError => Self::RtdMoveVerificationError,
+            ExecutionError::SuiMoveVerificationError => Self::RtdMoveVerificationError,
             ExecutionError::MovePrimitiveRuntimeError { location } => {
                 Self::MovePrimitiveRuntimeError(crate::execution_status::MoveLocationOpt(
                     location.map(Into::into),
@@ -1090,7 +1096,7 @@ impl From<ExecutionError> for crate::execution_status::ExecutionErrorKind {
                 max_size: max_object_size,
             },
             ExecutionError::CertificateDenied => Self::CertificateDenied,
-            ExecutionError::RtdMoveVerificationTimedout => Self::RtdMoveVerificationTimedout,
+            ExecutionError::SuiMoveVerificationTimedout => Self::RtdMoveVerificationTimedout,
             ExecutionError::ConsensusObjectOperationNotAllowed => {
                 Self::SharedObjectOperationNotAllowed
             }
@@ -1212,6 +1218,9 @@ impl TryFrom<crate::crypto::PublicKey> for MultisigMemberPublicKey {
             crate::crypto::PublicKey::Passkey(p) => {
                 Self::Passkey(PasskeyPublicKey::new(Secp256r1PublicKey::new(p.0)))
             }
+            crate::crypto::PublicKey::MLDSA65(pk) => {
+                Self::MlDsa65(Box::new(MlDsa65PublicKey::from_bytes(&pk.0)?))
+            }
         }
         .pipe(Ok)
     }
@@ -1235,6 +1244,9 @@ impl TryFrom<crate::crypto::CompressedSignature> for MultisigMemberSignature {
                 Self::ZkLogin(Box::new(z.try_into()?))
             }
             crate::crypto::CompressedSignature::Passkey(p) => Self::Passkey(p.try_into()?),
+            crate::crypto::CompressedSignature::MLDSA65(s) => {
+                Self::MlDsa65(Box::new(MlDsa65Signature::from_bytes(&s.0)?))
+            }
         }
         .pipe(Ok)
     }
@@ -1270,21 +1282,28 @@ impl TryFrom<crate::crypto::Signature> for SimpleSignature {
                     )?,
                 }
             }
+            crate::crypto::Signature::MLDSA65RtdSignature(s) => Self::MlDsa65 {
+                signature: Box::new(MlDsa65Signature::from_bytes(s.signature_bytes())?),
+                public_key: Box::new(MlDsa65PublicKey::from_bytes(s.public_key_bytes())?),
+            },
         }
         .pipe(Ok)
     }
 }
 
-impl From<crate::crypto::SignatureScheme> for SignatureScheme {
-    fn from(value: crate::crypto::SignatureScheme) -> Self {
+impl TryFrom<crate::crypto::SignatureScheme> for SignatureScheme {
+    type Error = SdkTypeConversionError;
+
+    fn try_from(value: crate::crypto::SignatureScheme) -> Result<Self, Self::Error> {
         match value {
-            crate::crypto::SignatureScheme::ED25519 => Self::Ed25519,
-            crate::crypto::SignatureScheme::Secp256k1 => Self::Secp256k1,
-            crate::crypto::SignatureScheme::Secp256r1 => Self::Secp256r1,
-            crate::crypto::SignatureScheme::BLS12381 => Self::Bls12381,
-            crate::crypto::SignatureScheme::MultiSig => Self::Multisig,
-            crate::crypto::SignatureScheme::ZkLoginAuthenticator => Self::ZkLogin,
-            crate::crypto::SignatureScheme::PasskeyAuthenticator => Self::Passkey,
+            crate::crypto::SignatureScheme::ED25519 => Ok(Self::Ed25519),
+            crate::crypto::SignatureScheme::Secp256k1 => Ok(Self::Secp256k1),
+            crate::crypto::SignatureScheme::Secp256r1 => Ok(Self::Secp256r1),
+            crate::crypto::SignatureScheme::BLS12381 => Ok(Self::Bls12381),
+            crate::crypto::SignatureScheme::MultiSig => Ok(Self::Multisig),
+            crate::crypto::SignatureScheme::ZkLoginAuthenticator => Ok(Self::ZkLogin),
+            crate::crypto::SignatureScheme::PasskeyAuthenticator => Ok(Self::Passkey),
+            crate::crypto::SignatureScheme::MLDSA65 => Ok(Self::MlDsa65),
         }
     }
 }

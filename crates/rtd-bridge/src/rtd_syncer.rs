@@ -19,8 +19,8 @@ use crate::{
     types::BridgeAction,
 };
 use linku_metrics::spawn_logged_monitored_task;
-use rtd_types::{Identifier, event::EventID};
 use std::{collections::HashMap, sync::Arc};
+use rtd_types::{Identifier, event::EventID};
 use tokio::{
     sync::Notify,
     task::JoinHandle,

@@ -4,7 +4,7 @@
 // A `&Y` from a ctx-taking call roots only in the object, so it survives later
 // TxContext uses.
 
-//# init --addresses test=0x0 --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0
 
 //# publish
 module test::m;
@@ -26,8 +26,7 @@ public fun borrow(x: &X, _ctx: &TxContext): &Y {
     &x.y
 }
 
-public fun mut_tx(_: &mut TxContext) {
-}
+public fun mut_tx(_: &mut TxContext) {}
 
 public fun check(y: &Y, expected: u64, _ctx: &TxContext) {
     assert!(y.f == expected, 0);

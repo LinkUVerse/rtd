@@ -2,7 +2,7 @@
 name = "consensus-simtests"
 version = "0.1.0"
 license = "Apache-2.0"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 edition = "2024"
 publish = false
 
@@ -16,6 +16,7 @@ arc-swap.workspace = true
 consensus-config.workspace = true
 consensus-core.workspace = true
 consensus-types.workspace = true
+linku-common.workspace = true
 linku-metrics.workspace = true
 linku-network.workspace = true
 parking_lot.workspace = true
@@ -26,7 +27,6 @@ rtd-protocol-config.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 typed-store.workspace = true
-tempfile.workspace = true
 telemetry-subscribers.workspace = true
 
 [dev-dependencies]

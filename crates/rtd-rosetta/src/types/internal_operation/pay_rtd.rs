@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
 use rtd_rpc::client::Client;
-use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
+use rtd_rpc::proto::sui::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
 use rtd_sdk_types::{Address, StructTag};
-use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress};
 use rtd_types::gas_coin::GAS;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rpc_proto_conversions::ObjectReferenceExt;
@@ -18,7 +18,7 @@ use crate::errors::Error;
 
 use super::{
     MAX_COMMAND_ARGS, MAX_GAS_COINS, TransactionObjectData, TryConstructTransaction,
-    simulate_transaction, withdraw_coin_from_address_balance,
+    path_b_error_or_larger_gas_shortfall, simulate_transaction, withdraw_coin_from_address_balance,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -70,7 +70,7 @@ impl TryConstructTransaction for PayRtd {
         let all_coins = client
             .select_up_to_n_largest_coins(
                 &Address::from(sender),
-                &StructTag::rtd().into(),
+                &StructTag::sui().into(),
                 1500,
                 &[],
             )
@@ -154,7 +154,10 @@ impl TryConstructTransaction for PayRtd {
                 )?;
                 let (budget, gas_coin_objs) =
                     simulate_transaction(client, pt_b, sender, gas_coins, gas_price, budget)
-                        .await?;
+                        .await
+                        .map_err(|path_b_error| {
+                            path_b_error_or_larger_gas_shortfall(path_b_error, sim_result.err())
+                        })?;
 
                 let gas_coins = gas_coin_objs
                     .iter()

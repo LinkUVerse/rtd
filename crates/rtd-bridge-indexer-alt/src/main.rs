@@ -3,6 +3,7 @@
 use anyhow::Context;
 use clap::Parser;
 use prometheus::Registry;
+use std::net::SocketAddr;
 use rtd_bridge_indexer_alt::handlers::error_handler::ErrorTransactionHandler;
 use rtd_bridge_indexer_alt::handlers::governance_action_handler::GovernanceActionHandler;
 use rtd_bridge_indexer_alt::handlers::token_transfer_data_handler::TokenTransferDataHandler;
@@ -16,7 +17,6 @@ use rtd_indexer_alt_framework::postgres::DbArgs;
 use rtd_indexer_alt_framework::service::Error;
 use rtd_indexer_alt_framework::{Indexer, IndexerArgs};
 use rtd_indexer_alt_metrics::{MetricsArgs, MetricsService};
-use std::net::SocketAddr;
 use url::Url;
 
 #[derive(Parser)]

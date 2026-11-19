@@ -9,7 +9,7 @@ use prost_types::FieldMask;
 use prost_types::value::Kind as ProtoValueKind;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::TryFromProtoError;
-use rtd_rpc::proto::rtd::rpc::v2::{self as proto, GetServiceInfoRequest};
+use rtd_rpc::proto::sui::rpc::v2::{self as proto, GetServiceInfoRequest};
 use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::digests::TransactionDigest;
@@ -714,7 +714,7 @@ impl ExecutedTransaction {
     }
 
     pub fn get_new_package_obj(&self) -> Option<rtd_types::base_types::ObjectRef> {
-        use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
+        use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
 
         self.changed_objects
             .iter()
@@ -728,8 +728,8 @@ impl ExecutedTransaction {
     }
 
     pub fn get_new_package_upgrade_cap(&self) -> Option<rtd_types::base_types::ObjectRef> {
-        use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
-        use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
+        use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
+        use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
 
         const UPGRADE_CAP: &str = "0x0000000000000000000000000000000000000000000000000000000000000002::package::UpgradeCap";
 

@@ -3,15 +3,15 @@
 
 use clap::Parser;
 use move_cli::base::summary;
-use move_package_alt_compilation::build_config::BuildConfig;
+use move_package_compilation::build_config::BuildConfig;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 use rtd_package_alt::RtdFlavor;
 use rtd_types::{
     base_types::ObjectID,
     move_package::{TypeOrigin, UpgradeInfo},
-};
-use std::{
-    collections::BTreeMap,
-    path::{Path, PathBuf},
 };
 
 #[derive(Parser)]

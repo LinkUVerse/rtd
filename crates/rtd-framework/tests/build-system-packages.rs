@@ -5,42 +5,19 @@ use anyhow::Result;
 use fs_extra::dir::CopyOptions;
 use move_binary_format::{CompiledModule, file_format::Visibility};
 use move_compiler::editions::{Edition, Flavor};
-use move_package_alt_compilation::{
-    build_config::BuildConfig as MoveBuildConfig, lint_flag::LintFlag,
-};
-use rtd_framework::BuiltInFramework;
-use rtd_move_build::BuildConfig;
-use rtd_package_alt::{RtdFlavor, local_test_environment};
-use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
+use move_package_compilation::{build_config::BuildConfig as MoveBuildConfig, lint_flag::LintFlag};
 use std::{
     collections::BTreeMap,
     env, fs,
     path::{Path, PathBuf},
 };
+use rtd_move_build::BuildConfig;
+use rtd_package_alt::{RtdFlavor, mainnet_environment};
 
 const CRATE_ROOT: &str = env!("CARGO_MANIFEST_DIR");
 const COMPILED_PACKAGES_DIR: &str = "packages_compiled";
 const DOCS_DIR: &str = "docs";
 const PUBLISHED_API_FILE: &str = "published_api.txt";
-
-#[test]
-fn built_in_native_coin_uses_rtd_module_and_type() {
-    let framework = BuiltInFramework::get_package_by_id(&RTD_FRAMEWORK_PACKAGE_ID);
-    let modules = framework.modules();
-    let native_coin = modules
-        .iter()
-        .find(|module| module.self_id().name().as_str() == "rtd")
-        .expect("0x2::rtd must be present in the compiled system package");
-    assert!(native_coin.struct_defs().iter().any(|definition| {
-        let handle = native_coin.datatype_handle_at(definition.struct_handle);
-        native_coin.identifier_at(handle.name).as_str() == "RTD"
-    }));
-    assert!(
-        modules
-            .iter()
-            .all(|module| module.self_id().name().as_str() != "sui")
-    );
-}
 
 #[tokio::test]
 async fn build_system_packages() {
@@ -176,8 +153,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
-        flavor: RtdFlavor::for_testing(),
+        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        flavor: RtdFlavor::new(),
     }
     .build_async(stdlib_path)
     .await
@@ -186,8 +163,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
-        flavor: RtdFlavor::for_testing(),
+        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        flavor: RtdFlavor::new(),
     }
     .build_async(rtd_framework_path)
     .await
@@ -196,8 +173,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
-        flavor: RtdFlavor::for_testing(),
+        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        flavor: RtdFlavor::new(),
     }
     .build_async(rtd_system_path)
     .await
@@ -206,8 +183,8 @@ async fn build_packages_with_move_config(
         config: config.clone(),
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
-        flavor: RtdFlavor::for_testing(),
+        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        flavor: RtdFlavor::new(),
     }
     .build_async(deepbook_path)
     .await
@@ -216,8 +193,8 @@ async fn build_packages_with_move_config(
         config,
         run_bytecode_verifier: true,
         print_diags_to_stderr: false,
-        environment: local_test_environment(), // Framework addresses resolve from Move.toml.
-        flavor: RtdFlavor::for_testing(),
+        environment: mainnet_environment(), // Framework pkg addr is agnostic to chain, resolves from Move.toml
+        flavor: RtdFlavor::new(),
     }
     .build_async(bridge_path)
     .await

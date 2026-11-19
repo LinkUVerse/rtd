@@ -5,7 +5,7 @@ use anyhow::{self, Context};
 use clap::*;
 use indoc::formatdoc;
 
-use move_package_alt::{SourcePackageLayout, schema::PackageName};
+use move_package::{SourcePackageLayout, schema::PackageName};
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -95,7 +95,7 @@ impl New {
             [dependencies]
 
             # Read more about the package management system options:
-            # docs/content/develop/manage-packages/move-package-management.mdx
+            # https://docs.rtd.io/guides/developer/packages/move-package-management
             "#
             ),
         )?;

@@ -8,11 +8,13 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
+use rtd_macros::sim_test;
 
 use consensus_core::{BlockStatus, TransactionPool as _};
 use consensus_types::block::{BlockRef, PING_TRANSACTION_INDEX};
 use fastcrypto::traits::KeyPair;
 use nonempty::NonEmpty;
+use shared_crypto::intent::{Intent, IntentScope};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::{ObjectRef, RtdAddress, random_object_ref};
 use rtd_types::crypto::{AccountKeyPair, AuthoritySignInfo, get_account_key_pair};
@@ -28,12 +30,11 @@ use rtd_types::messages_grpc::{
     RawSubmitTxRequest, SubmitTxRequest, SubmitTxResponse, SubmitTxResult, SubmitTxType,
 };
 use rtd_types::object::Object;
-use rtd_types::traffic_control::ClientIdSource;
+use rtd_types::traffic_control::{ClientIdSource, Weight};
 use rtd_types::transaction::{
     AllowedProposers, Transaction, TransactionDataAPI, TransactionExpiration, VerifiedTransaction,
 };
 use rtd_types::utils::to_sender_signed_transaction;
-use shared_crypto::intent::{Intent, IntentScope};
 
 use crate::admission_queue::AdmissionQueueMetrics;
 use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
@@ -239,7 +240,7 @@ impl ConsensusClient for BlockingConsensusClient {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_success() {
     let test_context = TestContext::new().await;
 
@@ -262,7 +263,7 @@ async fn test_submit_transaction_success() {
     };
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_duplicate_submission_suppressed_within_window() {
     // `execute = false` so the duplicate reaches the recent-submission check rather than being
     // short-circuited by the executed-effects path.
@@ -302,7 +303,7 @@ async fn test_duplicate_submission_suppressed_within_window() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_concurrent_duplicate_submission_rejected_as_inflight() {
     let consensus_client = BlockingConsensusClient::new();
     let mut first_submit_seen = consensus_client.subscribe_first_submit();
@@ -360,7 +361,7 @@ async fn test_concurrent_duplicate_submission_rejected_as_inflight() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_ping_request() {
     let test_context = TestContext::new().await;
 
@@ -415,7 +416,7 @@ async fn test_submit_ping_request() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_invalid_transaction() {
     let test_context = TestContext::new().await;
 
@@ -437,7 +438,7 @@ async fn test_submit_transaction_invalid_transaction() {
 }
 
 // test transaction submission after already executed.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_already_executed() {
     let test_context = TestContext::new().await;
 
@@ -481,7 +482,7 @@ async fn test_submit_transaction_already_executed() {
 
 // Test that the already-executed fast path refuses to report effects that contradict
 // effects the validator previously signed for the same transaction.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_refuses_contradicting_previously_signed() {
     let test_context = TestContext::new().await;
 
@@ -535,7 +536,7 @@ async fn test_submit_transaction_refuses_contradicting_previously_signed() {
 
 // Test that a transaction already processed by consensus this epoch but not yet executed
 // (e.g. deferred) is suppressed rather than resubmitted to consensus.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_consensus_message_processed() {
     let test_context = TestContext::new().await;
 
@@ -573,7 +574,7 @@ async fn test_submit_transaction_consensus_message_processed() {
 // longer live (e.g. a dropped owned-object conflict loser after the winner executed)
 // returns the concrete, non-retriable validation error instead of the generic,
 // retriable TransactionProcessing suppression.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_consensus_message_processed_with_stale_inputs() {
     let test_context = TestContext::new().await;
     let epoch_store = test_context.state.epoch_store_for_testing();
@@ -637,7 +638,7 @@ async fn test_submit_transaction_consensus_message_processed_with_stale_inputs()
 // by a different transaction (a dropped conflict loser whose winner has not executed
 // yet, so version validation alone still passes) returns the terminal
 // ObjectLockConflict instead of the retriable TransactionProcessing suppression.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_consensus_message_processed_with_lock_conflict() {
     let test_context = TestContext::new().await;
     let epoch_store = test_context.state.epoch_store_for_testing();
@@ -672,7 +673,7 @@ async fn test_submit_transaction_consensus_message_processed_with_lock_conflict(
     };
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_wrong_epoch() {
     let test_context = TestContext::new().await;
     test_context.state.reconfigure_for_testing().await;
@@ -702,7 +703,7 @@ async fn test_submit_transaction_wrong_epoch() {
 
 /// A transaction that does not name this validator among its proposers must be rejected at
 /// admission rather than submitted to consensus.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_disallowed_proposer() {
     const COMMITTEE_SIZE: u32 = 4;
     let test_context = TestContext::new_with_committee_size_and_adapter(
@@ -763,7 +764,7 @@ async fn test_submit_transaction_disallowed_proposer() {
     assert!(response.is_ok(), "{response:?}");
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_signature_verification_failure() {
     let test_context = TestContext::new().await;
 
@@ -787,7 +788,7 @@ async fn test_submit_transaction_signature_verification_failure() {
     assert!(response.is_err());
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_transaction_gas_object_validation() {
     let test_context = TestContext::new().await;
 
@@ -818,7 +819,7 @@ async fn test_submit_transaction_gas_object_validation() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_batched_transactions() {
     let test_context = TestContext::new().await;
 
@@ -876,7 +877,7 @@ async fn test_submit_batched_transactions() {
 
 // A repeated transaction in a plain batch rejects only the repeated index with
 // `RepeatedTransactions`; the first occurrence is still submitted.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_batched_transactions_with_repeated_transaction() {
     let test_context = TestContext::new().await;
 
@@ -922,7 +923,7 @@ async fn test_submit_batched_transactions_with_repeated_transaction() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_batched_transactions_with_already_executed() {
     let test_context = TestContext::new().await;
 
@@ -998,7 +999,7 @@ async fn test_submit_batched_transactions_with_already_executed() {
 // whole request. The already-processing transaction is reported per-tx as
 // `Rejected { TransactionProcessing }` (a retriable rejection), while the rest of the batch still
 // returns its consensus position.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_batched_transactions_with_already_processing() {
     let test_context = TestContext::new().await;
     let epoch_store = test_context.state.epoch_store_for_testing();
@@ -1067,7 +1068,7 @@ async fn test_submit_batched_transactions_with_already_processing() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_soft_bundle_transactions() {
     let test_context = TestContext::new().await;
 
@@ -1123,7 +1124,7 @@ async fn test_submit_soft_bundle_transactions() {
 }
 
 // A soft bundle that repeats the same transaction is rejected outright.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_soft_bundle_with_repeated_transaction() {
     let test_context = TestContext::new().await;
 
@@ -1157,7 +1158,7 @@ async fn test_submit_soft_bundle_with_repeated_transaction() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_soft_bundle_transactions_with_already_executed() {
     let test_context = TestContext::new().await;
 
@@ -1229,7 +1230,7 @@ async fn test_submit_soft_bundle_transactions_with_already_executed() {
 // Test that a transaction already processed by consensus (but not executed) is removed from a
 // soft bundle before submission, while the remaining transactions in the bundle are still
 // submitted to consensus.
-#[tokio::test]
+#[sim_test]
 async fn test_submit_soft_bundle_transactions_with_consensus_message_processed() {
     let test_context = TestContext::new().await;
 
@@ -1289,7 +1290,7 @@ async fn test_submit_soft_bundle_transactions_with_consensus_message_processed()
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_submit_oversized_transaction() {
     use rtd_types::base_types::dbg_addr;
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
@@ -1350,7 +1351,7 @@ async fn test_submit_oversized_transaction() {
 // A batch containing a transaction that was already submitted (and is now in the recent-submission
 // window) rejects only that index with `TransactionSubmitted`, while a fresh transaction in the
 // same batch is still submitted.
-#[tokio::test]
+#[sim_test]
 async fn test_batch_with_recently_processed_duplicate_rejects_only_that_index() {
     // `execute = false` so the prior submission is suppressed via the recent-submission window
     // rather than short-circuited by the executed-effects path.
@@ -1435,7 +1436,7 @@ async fn test_batch_with_recently_processed_duplicate_rejects_only_that_index() 
 // Same per-index dedup inside an atomic soft bundle: a previously-submitted member is rejected
 // with `TransactionSubmitted` while the fresh member is still submitted. Confirms the dedup is
 // req_type-agnostic (the per-tx loop sets `results[idx]` regardless of submit type).
-#[tokio::test]
+#[sim_test]
 async fn test_soft_bundle_with_recently_processed_duplicate_rejects_only_that_index() {
     let test_context = TestContext::new_with_consensus(
         false,
@@ -1518,7 +1519,7 @@ async fn test_soft_bundle_with_recently_processed_duplicate_rejects_only_that_in
 // `TransactionProcessing` error, whether it detects it when the transaction is inserted or when
 // the proposer skips it. Both must surface as a per-transaction rejection, leaving the rest of
 // the batch — and the request as a whole — unaffected.
-#[tokio::test]
+#[sim_test]
 async fn test_pool_mode_reports_processed_transactions_per_transaction() {
     telemetry_subscribers::init_for_testing();
     let (sender, keypair) = get_account_key_pair();
@@ -1538,10 +1539,14 @@ async fn test_pool_mode_reports_processed_transactions_per_transaction() {
     let metrics = Arc::new(AdmissionQueueMetrics::new_for_tests());
     let pool = Arc::new(ConsensusTransactionPool::new_for_tests(
         epoch_store.clone(),
+        state.get_cache_writer().clone(),
         10,
         metrics.clone(),
     ));
-    let context = Arc::new(TransactionPoolContext::new_for_tests(metrics));
+    let context = Arc::new(TransactionPoolContext::new_for_tests(
+        metrics,
+        state.get_cache_writer().clone(),
+    ));
     context.set_active(epoch_store.epoch(), pool.clone());
     let service = ValidatorService::new(
         state.clone(),
@@ -1623,5 +1628,206 @@ async fn test_pool_mode_reports_processed_transactions_per_transaction() {
     match result {
         SubmitTxResult::Submitted { .. } => {}
         other => panic!("expected the live transaction to be submitted, got: {other:?}"),
+    }
+}
+
+/// Admission rejects a transaction before its `min_timestamp`, or more than the grace period
+/// after its `max_timestamp`, by the local clock. A retry of an executed transaction gets its
+/// effects even after its `max_timestamp`.
+#[sim_test]
+async fn test_submit_transaction_timestamp_window() {
+    // The flag is devnet-only, and simtest-mainnet runs with the mainnet chain.
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut c| {
+        c.set_enable_timestamp_transaction_expiration_for_testing(true);
+        c
+    });
+    let test_context = TestContext::new_with_consensus(
+        false,
+        (0..4)
+            .map(|_| with_block_status(BlockStatus::Sequenced(BlockRef::MIN)))
+            .collect(),
+    )
+    .await;
+    let epoch_store = test_context.state.epoch_store_for_testing();
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let build = |min_timestamp, max_timestamp, nonce| {
+        let mut tx_data = TestTransactionBuilder::new(
+            test_context.sender,
+            test_context.gas_object_ref,
+            test_context
+                .state
+                .reference_gas_price_for_testing()
+                .unwrap(),
+        )
+        .transfer_rtd(None, test_context.sender)
+        .build();
+        *tx_data.expiration_mut_for_testing() = TransactionExpiration::ValidDuring {
+            min_epoch: Some(epoch_store.epoch()),
+            max_epoch: Some(epoch_store.epoch()),
+            min_timestamp,
+            max_timestamp,
+            chain: test_context.state.get_chain_identifier(),
+            nonce,
+        };
+        to_sender_signed_transaction(tx_data, &test_context.keypair)
+    };
+    let submit = |transaction: Transaction| {
+        let request = test_context.build_submit_request(transaction);
+        async { test_context.client.submit_transaction(request, None).await }
+    };
+
+    let rejection = |response: Result<SubmitTxResponse, RtdError>| match response {
+        Err(error) => error,
+        Ok(response) => match &response.results[0] {
+            SubmitTxResult::Rejected { error } => error.clone(),
+            other => panic!("expected a rejection, got {other:?}"),
+        },
+    };
+
+    let error = rejection(submit(build(Some(now_secs + 3_600), None, 0)).await);
+    assert!(
+        matches!(
+            error.as_inner(),
+            RtdErrorKind::TransactionNotYetValid { .. }
+        ),
+        "{error:?}"
+    );
+
+    let error = rejection(submit(build(None, Some(now_secs - 60), 1)).await);
+    assert!(
+        matches!(error.as_inner(), RtdErrorKind::TransactionExpired),
+        "{error:?}"
+    );
+
+    // Within the grace period after `max_timestamp`.
+    let response = submit(build(None, Some(now_secs - 2), 2)).await.unwrap();
+    assert!(
+        matches!(response.results[0], SubmitTxResult::Submitted { .. }),
+        "{response:?}"
+    );
+
+    let response = submit(build(Some(now_secs - 60), Some(now_secs + 3_600), 3))
+        .await
+        .unwrap();
+    assert!(
+        matches!(response.results[0], SubmitTxResult::Submitted { .. }),
+        "{response:?}"
+    );
+
+    let executed = build(None, Some(now_secs - 60), 4);
+    let verified_transaction = VerifiedExecutableTransaction::new_from_checkpoint(
+        VerifiedTransaction::new_unchecked(executed.clone()),
+        epoch_store.epoch(),
+        1,
+    );
+    test_context
+        .state
+        .try_execute_immediately(&verified_transaction, ExecutionEnv::new(), &epoch_store)
+        .unwrap();
+    let response = submit(executed).await.unwrap();
+    assert!(
+        matches!(response.results[0], SubmitTxResult::Executed { .. }),
+        "{response:?}"
+    );
+}
+
+// A transaction refused at admission because another queued transaction holds its gas object
+// is reported per transaction, like a duplicate: the request succeeds for the admitted
+// transaction and still counts as spam.
+#[sim_test]
+async fn test_pool_mode_reports_owned_object_conflict_per_transaction() {
+    telemetry_subscribers::init_for_testing();
+    let (sender, keypair) = get_account_key_pair();
+    let gas_object = Object::with_owner_for_testing(sender);
+    let gas_object_ref = gas_object.compute_object_reference();
+    let state = TestAuthorityBuilder::new()
+        .with_starting_objects(&[gas_object])
+        .build()
+        .await;
+    let epoch_store = state.epoch_store_for_testing().clone();
+
+    let metrics = Arc::new(AdmissionQueueMetrics::new_for_tests());
+    let pool = Arc::new(ConsensusTransactionPool::new_for_tests(
+        epoch_store.clone(),
+        state.get_cache_writer().clone(),
+        10,
+        metrics.clone(),
+    ));
+    let context = Arc::new(TransactionPoolContext::new_for_tests(
+        metrics.clone(),
+        state.get_cache_writer().clone(),
+    ));
+    context.set_active(epoch_store.epoch(), pool.clone());
+    let service = ValidatorService::new(
+        state.clone(),
+        make_consensus_adapter_for_test(state.clone(), HashSet::new(), false, vec![]),
+        Arc::new(ValidatorServiceMetrics::new_for_tests()),
+        Some(ClientIdSource::XForwardedFor(1)),
+        UserSubmissionPath::Pool(context),
+    );
+
+    let gas_price = state.reference_gas_price_for_testing().unwrap();
+    let transactions: Vec<Transaction> = (0..2)
+        .map(|_| {
+            let tx_data = TestTransactionBuilder::new(sender, gas_object_ref, gas_price)
+                .transfer_rtd(None, RtdAddress::random_for_testing_only())
+                .build();
+            to_sender_signed_transaction(tx_data, &keypair)
+        })
+        .collect();
+
+    let request = RawSubmitTxRequest {
+        transactions: transactions
+            .iter()
+            .map(|transaction| bcs::to_bytes(transaction).unwrap().into())
+            .collect(),
+        ..Default::default()
+    };
+    let submit = tokio::spawn({
+        let service = service.clone();
+        async move {
+            service
+                .handle_submit_transaction(rtd_network::tonic::Request::new(request))
+                .await
+        }
+    });
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while metrics.owned_object_conflicts.get() < 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the second transaction was never refused on the shared gas object");
+
+    let (taken, ack, _) = pool.take(10, usize::MAX);
+    assert_eq!(taken.len(), 1);
+    ack(BlockRef::MIN);
+
+    let (response, weight) = submit
+        .await
+        .unwrap()
+        .expect("an owned-object conflict must not fail the request");
+    assert_eq!(weight, Weight::one());
+    let results = response.into_inner().results;
+    assert_eq!(results.len(), 2);
+    let first: SubmitTxResult = results[0].clone().try_into().unwrap();
+    assert!(
+        matches!(first, SubmitTxResult::Submitted { .. }),
+        "expected the first transaction to be submitted, got: {first:?}"
+    );
+    let second: SubmitTxResult = results[1].clone().try_into().unwrap();
+    match second {
+        SubmitTxResult::Rejected { error } => assert!(
+            matches!(
+                error.as_inner(),
+                RtdErrorKind::OwnedObjectConflict { object_id }
+                    if *object_id == gas_object_ref.0
+            ),
+            "expected an owned-object conflict, got: {error}"
+        ),
+        other => panic!("expected the second transaction to be rejected, got: {other:?}"),
     }
 }

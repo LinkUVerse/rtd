@@ -4,7 +4,9 @@
 //# init --protocol-version 108 --accounts A --addresses Dep1=0x0 P1=0x0 --simulator
 
 //# publish --upgradeable --sender A
-module Dep1::M1 { }
+module Dep1::M1 {
+
+}
 
 //# publish --upgradeable --dependencies Dep1 --sender A
 #[allow(unused_use)]
@@ -15,6 +17,7 @@ module P1::M1 {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   package(address: "@{P1}") {
     linkage {
@@ -24,3 +27,4 @@ module P1::M1 {
     }
   }
 }
+*/

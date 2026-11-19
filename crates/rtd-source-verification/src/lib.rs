@@ -4,11 +4,11 @@
 use std::path::{Path, PathBuf};
 
 use colored::Colorize;
-use move_package_alt::schema::{Environment, Publication};
+use move_package::schema::{Environment, Publication};
+use serde::Serialize;
 use rtd_package_alt::RtdFlavor;
 use rtd_rpc_api::Client;
 use rtd_types::base_types::ObjectID;
-use serde::Serialize;
 
 pub mod error;
 
@@ -41,9 +41,8 @@ pub struct VerifiedMetadata {
 
 /// How to obtain the `rtd` toolchain that rebuilds a package.
 pub enum ToolchainSource {
-    /// Download and cache a release from the explicitly configured
-    /// `RTD_COMPILER_RELEASE_URL_TEMPLATE`: the publication's recorded version, or
-    /// `Some(version)` to override it. No public RTD release endpoint is assumed.
+    /// Download and cache a release: the publication's recorded version, or `Some(version)` to
+    /// override it.
     Version(Option<String>),
     /// Use the `rtd` binary already at this path, skipping version resolution and download.
     Binary(PathBuf),

@@ -9,6 +9,13 @@ use 0x0::{
     Account::{Self, Account},
     Something
 };
+use std::{
+    ascii::String as ASCII,
+    option::{Self as opt, Option},
+    string::String as UTF8,
+    type_name::get as type_name_get,
+    vector::{Self as vec, Self as haha}
+};
 use rtd::{
     clock::Clock,
     coin::Coin,
@@ -17,11 +24,4 @@ use rtd::{
     rtd::RTD,
     table::{Self, Table},
     table_vec::{Self, TableVec as TV}
-};
-use std::{
-    ascii::String as ASCII,
-    option::{Self as opt, Option},
-    string::String as UTF8,
-    type_name::get as type_name_get,
-    vector::{Self as vec, Self as haha}
 };

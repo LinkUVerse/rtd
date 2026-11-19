@@ -1,6 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
 use rtd_config::genesis;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::error::UserInputError;
@@ -9,7 +10,7 @@ use rtd_types::transaction::ObjectReadResult;
 use rtd_types::transaction::ReceivingObjectReadResult;
 use rtd_types::transaction::ReceivingObjects;
 use rtd_types::{
-    base_types::{ObjectID, RtdAddress, SequenceNumber},
+    base_types::{ObjectID, SequenceNumber, RtdAddress},
     committee::{Committee, EpochId},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
@@ -22,7 +23,6 @@ use rtd_types::{
     storage::BackingStore,
     transaction::{InputObjectKind, VerifiedTransaction},
 };
-use std::collections::BTreeMap;
 pub mod in_mem_store;
 
 pub trait SimulatorStore: BackingStore {

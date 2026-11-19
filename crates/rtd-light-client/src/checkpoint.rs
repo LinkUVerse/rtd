@@ -6,6 +6,10 @@ use crate::config::Config;
 use crate::graphql::query_last_checkpoint_of_epoch;
 use crate::object_store::RtdObjectStore;
 use anyhow::{Result, anyhow};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::io::Read;
+use std::{fs, io::Write};
 use rtd_config::genesis::Genesis;
 use rtd_rpc_api::Client;
 use rtd_storage::object_store::util::end_of_epoch_data;
@@ -13,10 +17,6 @@ use rtd_types::{
     crypto::AuthorityQuorumSignInfo, message_envelope::Envelope,
     messages_checkpoint::CheckpointSummary,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
-use std::io::Read;
-use std::{fs, io::Write};
 use tracing::info;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

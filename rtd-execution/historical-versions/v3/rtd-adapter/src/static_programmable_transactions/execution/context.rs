@@ -38,6 +38,12 @@ use move_vm_types::{
     gas::{GasMeter, SimpleInstruction},
     values::{VMValueCast, Value as VMValue},
 };
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    rc::Rc,
+    sync::Arc,
+};
 use rtd_move_natives::object_runtime::{
     self, LoadedRuntimeObject, ObjectRuntime, RuntimeResults, get_all_uids, max_event_error,
 };
@@ -52,12 +58,6 @@ use rtd_types::{
     object::{MoveObject, Object, Owner},
 };
 use rtd_verifier::INIT_FN_NAME;
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    rc::Rc,
-    sync::Arc,
-};
 use tracing::instrument;
 
 macro_rules! unwrap {
@@ -823,7 +823,7 @@ impl<'env, 'pc, 'vm, 'state, 'linkage, 'gas> Context<'env, 'pc, 'vm, 'state, 'li
         modules: &[CompiledModule],
         linkage: &RootedLinkage,
     ) -> Result<(), ExecutionError> {
-        // TODO: avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
+        // TODO(https://github.com/LinkUVerse/rtd/issues/69): avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
         let binary_version = self.env.protocol_config.move_binary_format_version();
         let new_module_bytes: Vec<_> = modules
             .iter()

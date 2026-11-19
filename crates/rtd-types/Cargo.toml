@@ -1,7 +1,7 @@
 [package]
 name = "rtd-types"
 version = "0.1.0"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -65,7 +65,8 @@ rtd-macros.workspace = true
 rtd-enum-compat-util.workspace = true
 
 fastcrypto = { workspace = true, features = ["copy_key"] }
-fastcrypto-tbls.workspace = true
+fastcrypto-pq = { workspace = true, features = ["native"] }
+fastcrypto-threshold.workspace = true
 fastcrypto-zkp.workspace = true
 passkey-types.workspace = true
 
@@ -85,6 +86,7 @@ rtd-sdk-types.workspace = true
 rtd-rpc.workspace = true
 
 ciborium.workspace = true
+ciborium-ll.workspace = true
 x509-parser.workspace = true
 p384.workspace = true
 rustls-pki-types.workspace = true

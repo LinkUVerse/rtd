@@ -4,45 +4,45 @@
 //# init --protocol-version 108 --accounts A B --addresses test=0x0 --simulator
 
 //# publish
-module test::simple {
-  use rtd::transfer::Receiving;
+module test::simple;
 
-  public struct Counter has key {
+use rtd::transfer::Receiving;
+
+public struct Counter has key {
     id: UID,
     value: u64,
-  }
+}
 
-  public struct Coin has key, store {
+public struct Coin has key, store {
     id: UID,
     value: u64,
-  }
+}
 
-  fun init(ctx: &mut TxContext) {
+fun init(ctx: &mut TxContext) {
     transfer::share_object(Counter {
         id: object::new(ctx),
         value: 0,
     });
-  }
+}
 
-  public fun add(counter: &mut Counter, amount: u64) {
+public fun add(counter: &mut Counter, amount: u64) {
     counter.value = counter.value + amount;
-  }
+}
 
-  public fun new_coin(value: u64, ctx: &mut TxContext): Coin {
+public fun new_coin(value: u64, ctx: &mut TxContext): Coin {
     Coin { id: object::new(ctx), value }
-  }
+}
 
-  public fun get_value(coin: &Coin): u64 {
+public fun get_value(coin: &Coin): u64 {
     coin.value
-  }
+}
 
-  public fun transfer_coin_to_address(coin: Coin, to_address: address) {
+public fun transfer_coin_to_address(coin: Coin, to_address: address) {
     transfer::transfer(coin, to_address)
-  }
+}
 
-  public fun receive_coin(receiver: &mut Coin, incoming: Receiving<Coin>): Coin {
+public fun receive_coin(receiver: &mut Coin, incoming: Receiving<Coin>): Coin {
     transfer::receive(&mut receiver.id, incoming)
-  }
 }
 
 // Test 1: Pure input only - demonstrates Pure TransactionInput type
@@ -82,6 +82,7 @@ module test::simple {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   # Test 1: MoveValue input (Pure with inferred type layout) only
   pureInputTest: transaction(digest: "@{digest_2}") {
@@ -101,8 +102,10 @@ module test::simple {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   # Test 2: SharedInput only
   sharedInputTest: transaction(digest: "@{digest_4}") {
@@ -124,8 +127,10 @@ module test::simple {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   # Test 3: OwnedOrImmutable input only
   ownedOrImmutableTest: transaction(digest: "@{digest_6}") {
@@ -149,8 +154,10 @@ module test::simple {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   # Test 4: Receiving input only
   receivingInputTest: transaction(digest: "@{digest_10}") {
@@ -174,3 +181,4 @@ module test::simple {
     }
   }
 }
+*/

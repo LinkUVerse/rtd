@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
-use rtd_types::base_types::ObjectType;
-use rtd_types::parse_rtd_struct_tag;
-use rtd_types::rtd_serde::RtdStructTag;
 use serde::Serialize;
 use serde_json::Value;
 use serde_with::serde_as;
 use std::str::FromStr;
+use rtd_types::base_types::ObjectType;
+use rtd_types::parse_rtd_struct_tag;
+use rtd_types::rtd_serde::RtdStructTag;
 
 #[test]
 fn test_struct_tag_serde() {
-    let tag = parse_rtd_struct_tag("0x7f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::rtdfrens::RtdFren<0x7f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::capy::Capy>").unwrap();
+    let tag = parse_rtd_struct_tag("0x7f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::suifrens::RtdFren<0x7f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::capy::Capy>").unwrap();
     #[serde_as]
     #[derive(Serialize)]
     struct TestStructTag(#[serde_as(as = "RtdStructTag")] StructTag);
@@ -23,7 +23,7 @@ fn test_struct_tag_serde() {
     };
     assert_eq!(
         json,
-        "0x07f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::rtdfrens::RtdFren<0x07f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::capy::Capy>"
+        "0x07f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::suifrens::RtdFren<0x07f89cdffd8968affa0b47bef91adc5314e19509080470c45bfd434cd83a766b::capy::Capy>"
     );
 
     let tag2 = parse_rtd_struct_tag(&json).unwrap();

@@ -7,13 +7,13 @@ use crate::checkpoints::CheckpointStore;
 use crate::execution_cache::TransactionCacheRead;
 use futures::{Stream, future::Either};
 use linku_common::fatal;
+use std::time::Duration;
+use strum::VariantNames;
 use rtd_types::{
     base_types::{TransactionDigest, TransactionEffectsDigest},
     message_envelope::Message,
     messages_checkpoint::{CheckpointSequenceNumber, CheckpointSummary, VerifiedCheckpoint},
 };
-use std::time::Duration;
-use strum::VariantNames;
 use tokio::sync::watch;
 use tracing::{debug, error, instrument, warn};
 
@@ -490,8 +490,8 @@ impl TPSEstimator {
 #[cfg(test)]
 mod test {
     use rand::{Rng, thread_rng};
-    use rtd_macros::sim_test;
     use std::collections::HashMap;
+    use rtd_macros::sim_test;
 
     use super::*;
     use futures::future::join_all;
@@ -574,7 +574,7 @@ mod test {
         let output_by_stage = output_by_stage.lock();
         let output_by_order = output_by_order.lock();
         // for each stage, assert that the sequences were done in order
-        for (_, seqs) in output_by_stage.iter() {
+        for seqs in output_by_stage.values() {
             assert_eq!(seqs, &((0..30).collect::<Vec<_>>()));
         }
 

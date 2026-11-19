@@ -23,9 +23,13 @@ use move_vm_types::{
     values::{GlobalValue, Value},
 };
 use object_store::ChildObjectStore;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use rtd_protocol_config::{check_limit_by_meter, LimitThresholdCrossed, ProtocolConfig};
 use rtd_types::{
-    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
+    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
     committee::EpochId,
     error::{ExecutionError, VMMemoryLimitExceededSubStatusCode},
     execution::DynamicallyLoadedObjectMetadata,
@@ -36,10 +40,6 @@ use rtd_types::{
     storage::RuntimeObjectResolver,
     RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_CLOCK_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
     RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
 };
 
 pub enum ObjectEvent {

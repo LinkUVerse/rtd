@@ -11,8 +11,8 @@ use object_store::ObjectStoreExt;
 use object_store::RetryConfig;
 use object_store::path::Path as ObjectPath;
 use prometheus::IntCounter;
-use rtd_types::digests::ChainIdentifier;
 use serde::de::DeserializeOwned;
+use rtd_types::digests::ChainIdentifier;
 
 use crate::ingestion::decode;
 use crate::ingestion::ingestion_client::CheckpointError;
@@ -20,12 +20,13 @@ use crate::ingestion::ingestion_client::CheckpointResult;
 use crate::ingestion::ingestion_client::IngestionClientTrait;
 use crate::types::full_checkpoint_content::Checkpoint;
 
-// from rtd-indexer-alt-object-store
-pub(crate) const WATERMARK_PATH: &str = "_metadata/watermark/checkpoint_blob.json";
+/// Watermark of the `checkpoint_blob` pipeline (`rtd-checkpoint-blob-indexer`), which writes the
+/// `{checkpoint}.binpb.zst` files this client reads, at the path `rtd-indexer-alt-object-store`
+/// stores it.
+pub(crate) const WATERMARK_PATH: &str = "_metadata/watermarks/checkpoint_blob.json";
 
 pub struct StoreIngestionClient {
     store: Arc<dyn ObjectStore>,
-    require_published_watermark: bool,
     /// Counter incremented (in the [`IngestionClientTrait`] impl) by the size in bytes of each
     /// fetched checkpoint payload. `None` for callers that only use this client for one-shot
     /// metadata fetches (e.g. `end_of_epoch_checkpoints`) and don't need a metric.
@@ -34,25 +35,14 @@ pub struct StoreIngestionClient {
 
 #[derive(serde::Deserialize, serde::Serialize)]
 pub(crate) struct ObjectStoreWatermark {
-    pub checkpoint_hi_inclusive: u64,
+    /// `None` until the writer commits its first checkpoint.
+    pub checkpoint_hi_inclusive: Option<u64>,
 }
 
 impl StoreIngestionClient {
     pub fn new(store: Arc<dyn ObjectStore>, total_ingested_bytes: Option<IntCounter>) -> Self {
         Self {
             store,
-            require_published_watermark: false,
-            total_ingested_bytes,
-        }
-    }
-
-    pub fn new_guarded(
-        store: Arc<dyn ObjectStore>,
-        total_ingested_bytes: Option<IntCounter>,
-    ) -> Self {
-        Self {
-            store,
-            require_published_watermark: true,
             total_ingested_bytes,
         }
     }
@@ -75,25 +65,9 @@ impl StoreIngestionClient {
         Ok(decoded)
     }
 
-    async fn checkpoint_bytes(&self, checkpoint: u64) -> Result<Bytes, CheckpointError> {
-        if self.require_published_watermark {
-            // The publisher writes the committed marker only after the ledger
-            // transaction. Read it for every fetch so an earlier advisory
-            // watermark or a stale cached tip cannot grant access.
-            let published_hi = self
-                .watermark_checkpoint_hi_inclusive()
-                .await
-                .map_err(CheckpointError::Fetch)?;
-            if published_hi.is_none_or(|hi| checkpoint > hi) {
-                return Err(CheckpointError::NotFound);
-            }
-        }
+    async fn checkpoint_bytes(&self, checkpoint: u64) -> object_store::Result<Bytes> {
         self.bytes(ObjectPath::from(format!("{checkpoint}.binpb.zst")))
             .await
-            .map_err(|e| match e {
-                Error::NotFound { .. } => CheckpointError::NotFound,
-                e => CheckpointError::Fetch(e.into()),
-            })
     }
 
     async fn bytes(&self, path: ObjectPath) -> object_store::Result<Bytes> {
@@ -102,17 +76,16 @@ impl StoreIngestionClient {
     }
 
     async fn watermark_checkpoint_hi_inclusive(&self) -> anyhow::Result<Option<u64>> {
-        let path = WATERMARK_PATH;
-        let bytes = match self.bytes(ObjectPath::from(path)).await {
+        let bytes = match self.bytes(ObjectPath::from(WATERMARK_PATH)).await {
             Ok(bytes) => bytes,
             Err(Error::NotFound { .. }) => return Ok(None),
-            Err(e) => return Err(e).context(format!("error reading {path}")),
+            Err(e) => return Err(e).context(format!("error reading {WATERMARK_PATH}")),
         };
 
         let watermark: ObjectStoreWatermark =
-            serde_json::from_slice(&bytes).context(format!("error parsing {path}"))?;
+            serde_json::from_slice(&bytes).context(format!("error parsing {WATERMARK_PATH}"))?;
 
-        Ok(Some(watermark.checkpoint_hi_inclusive))
+        Ok(watermark.checkpoint_hi_inclusive)
     }
 }
 
@@ -133,7 +106,13 @@ impl IngestionClientTrait for StoreIngestionClient {
     /// - server errors (5xx),
     /// - issues getting a full response.
     async fn checkpoint(&self, checkpoint: u64) -> CheckpointResult {
-        let bytes = self.checkpoint_bytes(checkpoint).await?;
+        let bytes = self
+            .checkpoint_bytes(checkpoint)
+            .await
+            .map_err(|e| match e {
+                Error::NotFound { .. } => CheckpointError::NotFound,
+                e => CheckpointError::Fetch(e.into()),
+            })?;
 
         if let Some(counter) = &self.total_ingested_bytes {
             counter.inc_by(bytes.len() as u64);
@@ -277,35 +256,20 @@ pub(crate) mod tests {
         )
     }
 
+    /// The watermark this client reads is the one `rtd-indexer-alt-object-store` writes for the
+    /// pipeline that produces checkpoint files.
     #[tokio::test]
-    async fn guarded_checkpoint_waits_for_standard_watermark() {
-        let server = MockServer::start().await;
-        Mock::given(method("GET"))
-            .and(path("/1.binpb.zst"))
-            .respond_with(status(StatusCode::OK).set_body_bytes(test_checkpoint_data(1)))
-            .mount(&server)
-            .await;
+    async fn test_latest_checkpoint_from_object_store_indexer_watermark() {
+        use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
+        use rtd_indexer_alt_framework_store_traits::Connection;
+        use rtd_indexer_alt_framework_store_traits::Store;
 
-        let store = HttpBuilder::new()
-            .with_url(server.uri())
-            .with_client_options(ClientOptions::default().with_allow_http(true))
-            .build()
-            .map(Arc::new)
-            .unwrap();
-        let client = StoreIngestionClient::new_guarded(store, None);
+        let memory: Arc<dyn ObjectStore> = Arc::new(object_store::memory::InMemory::new());
+        let indexer_store = rtd_indexer_alt_object_store::ObjectStore::new(memory.clone());
+        let mut conn = indexer_store.connect().await.unwrap();
+        let client = StoreIngestionClient::new(memory, None);
 
-        Mock::given(method("GET"))
-            .and(path(WATERMARK_PATH))
-            .respond_with(
-                status(StatusCode::OK)
-                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 0}).to_string()),
-            )
-            .mount(&server)
-            .await;
-        assert!(matches!(
-            IngestionClientTrait::checkpoint(&client, 1).await,
-            Err(CheckpointError::NotFound)
-        ));
+        conn.init_watermark("checkpoint_blob", None).await.unwrap();
         assert_eq!(
             IngestionClientTrait::latest_checkpoint_number(&client)
                 .await
@@ -313,22 +277,22 @@ pub(crate) mod tests {
             0
         );
 
-        Mock::given(method("GET"))
-            .and(path(WATERMARK_PATH))
-            .respond_with(
-                status(StatusCode::OK)
-                    .set_body_string(serde_json::json!({"checkpoint_hi_inclusive": 1}).to_string()),
-            )
-            .with_priority(1)
-            .mount(&server)
-            .await;
-        let checkpoint = IngestionClientTrait::checkpoint(&client, 1).await.unwrap();
-        assert_eq!(checkpoint.summary.sequence_number(), &1);
+        conn.set_committer_watermark(
+            "checkpoint_blob",
+            CommitterWatermark {
+                epoch_hi_inclusive: 3,
+                checkpoint_hi_inclusive: 1234,
+                tx_hi: 5678,
+                timestamp_ms_hi_inclusive: 9,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(
             IngestionClientTrait::latest_checkpoint_number(&client)
                 .await
                 .unwrap(),
-            1
+            1234
         );
     }
 

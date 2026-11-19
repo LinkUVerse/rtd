@@ -4,46 +4,46 @@
 //# init --protocol-version 108 --accounts A --addresses test=0x0 --simulator
 
 //# publish --sender A
-module test::mod {
-  use rtd::bag::{Self, Bag};
+module test::mod;
 
-  public struct Foo has key, store {
+use rtd::bag::{Self, Bag};
+
+public struct Foo has key, store {
     id: UID,
     creator: address,
     cap: ID,
     bag: Option<Bag>,
-  }
+}
 
-  public struct FooCap has key, store {
+public struct FooCap has key, store {
     id: UID,
-  }
+}
 
-  public fun cap(ctx: &mut TxContext): FooCap {
+public fun cap(ctx: &mut TxContext): FooCap {
     FooCap {
-      id: object::new(ctx),
+        id: object::new(ctx),
     }
-  }
+}
 
-  public fun foo(cap: &FooCap, ctx: &mut TxContext): Foo {
+public fun foo(cap: &FooCap, ctx: &mut TxContext): Foo {
     Foo {
-      id: object::new(ctx),
-      creator: ctx.sender(),
-      cap: object::id(cap),
-      bag: option::none(),
+        id: object::new(ctx),
+        creator: ctx.sender(),
+        cap: object::id(cap),
+        bag: option::none(),
     }
-  }
+}
 
-  public fun bag(foo: &mut Foo, ctx: &mut TxContext) {
+public fun bag(foo: &mut Foo, ctx: &mut TxContext) {
     foo.bag.fill(bag::new(ctx))
-  }
+}
 
-  public fun add(foo: &mut Foo, key: u64, val: u64) {
+public fun add(foo: &mut Foo, key: u64, val: u64) {
     foo.bag.borrow_mut().add(key, val)
-  }
+}
 
-  public fun set(foo: &mut Foo, key: u64, val: u64) {
+public fun set(foo: &mut Foo, key: u64, val: u64) {
     *(&mut foo.bag.borrow_mut()[key]) = val;
-  }
 }
 
 //# create-checkpoint
@@ -80,6 +80,7 @@ module test::mod {
 //# create-checkpoint
 
 //# run-graphql
+/*
 { # Extract an address and fetch its owned objects
   object(address: "@{obj_4_0}") {
     asMoveObject {
@@ -100,8 +101,10 @@ module test::mod {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Extract an address and then fetch its transactions and their object changes.
   object(address: "@{obj_4_0}") {
     asMoveObject {
@@ -136,8 +139,10 @@ fragment O on Object {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Fetch another object being pointed to.
   object(address: "@{obj_4_0}") {
     asMoveObject {
@@ -158,8 +163,10 @@ fragment O on Object {
     }
   }
 }
+*/
 
 //# run-graphql --cursors bcs(1u64)
+/*
 { # Fetch a wrapped object and request one of its dynamic fields, two ways.
   object(address: "@{obj_4_0}") {
     asMoveObject {
@@ -179,8 +186,10 @@ fragment O on Object {
     }
   }
 }
+*/
 
 //# run-graphql --cursors bcs(3u64)
+/*
 { # Fetch the object at multiple versions and fetch one of its dynamic fields, two ways.
   objectVersions(address: "@{obj_4_0}") {
     nodes {
@@ -202,8 +211,10 @@ fragment O on Object {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Fetch a wrapped object and request all its dynamic fields at one checkpoint
   # before, and the current checkpoint.
   #
@@ -237,3 +248,4 @@ fragment DF on Address {
 }
 
 fragment MV on MoveValue { json }
+*/

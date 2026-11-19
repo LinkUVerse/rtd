@@ -1,6 +1,6 @@
 [package]
 name = "service-boilerplate"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 version = "0.0.1"
 edition = "2021"
 publish = false

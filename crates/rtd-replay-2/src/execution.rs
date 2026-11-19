@@ -12,30 +12,39 @@
 //! the store (BackingPackageStore, ObjectStore, RuntimeObjectResolver)
 
 use crate::replay_txn::ReplayTransaction;
-use anyhow::{Context, Error, anyhow};
+use anyhow::{Context, Error, anyhow, bail};
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
 use move_trace_format::format::MoveTraceBuilder;
-use rtd_data_store::{EpochStore, ObjectKey, ObjectStore, VersionQuery};
-use rtd_execution::Executor;
-use rtd_types::{
-    base_types::{ObjectID, ObjectRef, SequenceNumber, SystemObjectVersions, VersionNumber},
-    committee::EpochId,
-    digests::TransactionDigest,
-    effects::{TransactionEffects, TransactionEffectsAPI},
-    error::{ExecutionError, RtdErrorKind, RtdResult},
-    execution_params::{ExecutionOrEarlyError, FundsWithdrawStatus, get_early_execution_error},
-    gas::RtdGasStatus,
-    inner_temporary_store::InnerTemporaryStore,
-    metrics::ExecutionMetrics,
-    object::Object,
-    storage::{BackingPackageStore, PackageObject, ParentSync, RuntimeObjectResolver},
-    supported_protocol_versions::ProtocolConfig,
-    transaction::{CheckedInputObjects, TransactionData, TransactionDataAPI},
-};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, HashSet},
     sync::Arc,
+};
+use rtd_data_store::{EpochStore, ObjectKey, ObjectStore, VersionQuery};
+use rtd_execution::Executor;
+use rtd_types::{
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID,
+    base_types::{
+        ObjectID, ObjectRef, SequenceNumber, RtdAddress, SystemObjectVersions, VersionNumber,
+    },
+    coin_reservation::{
+        BorrowedCoinReservationResolver, CoinReservationResolverTrait, ParsedObjectRefWithdrawal,
+    },
+    committee::EpochId,
+    digests::{TransactionDigest, get_mainnet_chain_identifier, get_testnet_chain_identifier},
+    effects::{TransactionEffects, TransactionEffectsAPI},
+    error::{ExecutionError, RtdErrorKind, RtdResult},
+    execution_params::{ExecutionOrEarlyError, FundsWithdrawStatus, get_early_execution_error},
+    gas::GasUsageReport,
+    inner_temporary_store::InnerTemporaryStore,
+    metrics::ExecutionMetrics,
+    object::Object,
+    storage::{BackingPackageStore, PackageObject, ParentSync, RuntimeObjectResolver},
+    supported_protocol_versions::{Chain, ProtocolConfig},
+    transaction::{
+        CallArg, CheckedInputObjects, ObjectArg, TransactionData, TransactionDataAPI,
+        TransactionKind,
+    },
 };
 use tracing::{debug, debug_span, trace};
 
@@ -54,7 +63,7 @@ pub struct TxnContextAndEffects {
     pub txn_data: TransactionData,             // original transaction data
     pub execution_effects: TransactionEffects, // effects of the replay execution
     pub expected_effects: TransactionEffects,  // expected effects as found in the transaction data
-    pub gas_status: RtdGasStatus,              // gas status of the replay execution
+    pub gas_report: GasUsageReport,            // gas usage of the replay execution
     pub object_cache: BTreeMap<ObjectID, BTreeMap<u64, Object>>, // object cache
     pub inner_store: InnerTemporaryStore,      // temporary store used during execution
     pub checkpoint: u64,                       // checkpoint where the transaction was included
@@ -100,17 +109,6 @@ pub fn execute_transaction_to_effects(
         .epoch_info(epoch)?
         .ok_or_else(|| anyhow!(format!("Epoch {} not found", epoch)))?;
     let epoch_start_timestamp = epoch_data.start_timestamp;
-    let gas_status = if txn_data.kind().is_system_tx() {
-        RtdGasStatus::new_unmetered(protocol_config)
-    } else {
-        RtdGasStatus::new(
-            txn_data.gas_data().budget,
-            txn_data.gas_data().price,
-            epoch_data.rgp,
-            protocol_config,
-        )
-        .expect("Failed to create gas status")
-    };
     let store: ReplayStore<'_> = ReplayStore {
         checkpoint,
         store: object_store,
@@ -124,13 +122,33 @@ pub fn execute_transaction_to_effects(
         &config_certificate_deny_set,
         // TODO(address-balances): Support balance withdraw status for replay
         &FundsWithdrawStatus::MaybeSufficient,
+        txn_data.expiration(),
+        // Replay skips transactions with an early error, including expired ones.
+        None,
     );
+    let system_object_versions = SystemObjectVersions::from_effects(&expected_effects, &store);
+    let mut kind = txn_data.kind().clone();
+    // As in rtd-core, skip the rewrite on an early error: the transaction fails before reading
+    // its inputs, and the accumulator behind a reservation may no longer exist.
+    let rewritten_inputs = if early_execution_error.is_none() {
+        rewrite_coin_reservation_inputs(
+            protocol_config.chain(),
+            &store,
+            txn_data.sender(),
+            &mut kind,
+            system_object_versions
+                .get(&RTD_ACCUMULATOR_ROOT_OBJECT_ID)
+                .map(|v| v.version),
+        )
+        .with_context(|| format!("Failed to resolve coin reservation inputs of {digest}"))?
+    } else {
+        None
+    };
     let execution_params = match early_execution_error {
         None => ExecutionOrEarlyError::ok(None),
         Some(errors) => ExecutionOrEarlyError::failed(errors, None),
     };
-    let system_object_versions = SystemObjectVersions::from_effects(&expected_effects, &store);
-    let (inner_store, gas_status, effects, _execution_timing, result) = executor
+    let (inner_store, gas_report, effects, _execution_timing, result) = executor
         .executor
         .execute_transaction_to_effects_and_execution_error(
             &store,
@@ -149,9 +167,9 @@ pub fn execute_transaction_to_effects(
             // accumulator version, then pass that here instead of the empty reader.
             &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
             txn_data.gas_data().clone(),
-            gas_status,
-            txn_data.kind().clone(),
-            None, // compat_args
+            epoch_data.rgp,
+            kind,
+            rewritten_inputs,
             txn_data.sender(),
             digest,
             trace_builder_opt,
@@ -188,13 +206,51 @@ pub fn execute_transaction_to_effects(
             txn_data,
             execution_effects: effects,
             expected_effects,
-            gas_status,
+            gas_report,
             object_cache,
             inner_store,
             checkpoint,
             protocol_version: protocol_config.version.as_u64(),
         },
     ))
+}
+
+// Mirrors rtd-core's `rewrite_transaction_for_coin_reservations`. A coin reservation passed as a
+// PTB input is a masked object ref with no object behind it: it becomes a FundsWithdrawal arg,
+// and the returned mask tells the executor to present that withdrawal as a coin.
+fn rewrite_coin_reservation_inputs(
+    chain: Chain,
+    store: &ReplayStore<'_>,
+    sender: RtdAddress,
+    kind: &mut TransactionKind,
+    accumulator_version: Option<SequenceNumber>,
+) -> Result<Option<Vec<bool>>, Error> {
+    let TransactionKind::ProgrammableTransaction(pt) = kind else {
+        return Ok(None);
+    };
+    if pt.coin_reservation_obj_refs().next().is_none() {
+        return Ok(None);
+    }
+    let chain_identifier = match chain {
+        Chain::Mainnet => get_mainnet_chain_identifier(),
+        Chain::Testnet => get_testnet_chain_identifier(),
+        Chain::Unknown => bail!("coin reservation inputs need a mainnet or testnet chain id"),
+    };
+    let resolver = BorrowedCoinReservationResolver::new(store);
+    let mut rewritten_inputs = Vec::with_capacity(pt.inputs.len());
+    for input in pt.inputs.iter_mut() {
+        if let CallArg::Object(ObjectArg::ImmOrOwnedObject(object_ref)) = input
+            && let Some(parsed) = ParsedObjectRefWithdrawal::parse(object_ref, chain_identifier)
+        {
+            let withdrawal =
+                resolver.resolve_funds_withdrawal(sender, parsed, accumulator_version)?;
+            *input = CallArg::FundsWithdrawal(withdrawal);
+            rewritten_inputs.push(true);
+        } else {
+            rewritten_inputs.push(false);
+        }
+    }
+    Ok(Some(rewritten_inputs))
 }
 
 impl ReplayExecutor {

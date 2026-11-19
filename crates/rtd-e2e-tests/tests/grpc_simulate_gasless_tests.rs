@@ -10,9 +10,9 @@
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::TypeTag;
 use rtd_macros::sim_test;
-use rtd_rpc::proto::rtd::rpc::v2::SimulateTransactionRequest;
-use rtd_rpc::proto::rtd::rpc::v2::Transaction;
-use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::SimulateTransactionRequest;
+use rtd_rpc::proto::sui::rpc::v2::Transaction;
+use rtd_rpc::proto::sui::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
 use rtd_types::RTD_FRAMEWORK_PACKAGE_ID;
 use rtd_types::base_types::{ObjectRef, RtdAddress};
 use rtd_types::gas_coin::GAS;

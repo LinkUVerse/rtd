@@ -1,6 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use fastcrypto::traits::ToFromBytes;
 use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
 use fastcrypto_zkp::zk_login_utils::Bn254FrElement;
 use move_core_types::account_address::AccountAddress;
@@ -9,6 +10,9 @@ use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use roaring::RoaringBitmap;
+use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
+use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
+use std::str::FromStr;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{
     AggregateAuthoritySignature, AuthorityQuorumSignInfo, AuthorityStrongQuorumSignInfo,
@@ -46,7 +50,7 @@ use rtd_types::{
     },
     crypto::{
         AccountKeyPair, AuthorityKeyPair, AuthorityPublicKeyBytes, AuthoritySignature,
-        KeypairTraits, RtdKeyPair, Signature, get_key_pair, get_key_pair_from_rng,
+        KeypairTraits, Signature, RtdKeyPair, get_key_pair, get_key_pair_from_rng,
     },
     multisig::{MultiSig, MultiSigPublicKey},
     object::{Data, Owner},
@@ -61,9 +65,6 @@ use rtd_types::{
     effects::{IDOperation, ObjectIn, ObjectOut, TransactionEffects, UnchangedConsensusKind},
     utils::DEFAULT_ADDRESS_SEED,
 };
-use serde_reflection::{Registry, Result, Samples, Tracer, TracerConfig};
-use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
-use std::str::FromStr;
 
 fn get_registry() -> Result<Registry> {
     let config = TracerConfig::default()
@@ -146,6 +147,17 @@ fn get_registry() -> Result<Registry> {
     tracer
         .trace_value(&mut samples, &generic_sig_multi)
         .unwrap();
+
+    // A hybrid ML-DSA + Ed25519 committee pins the BCS variant index of the
+    // MLDSA65 arms of both PublicKey and CompressedSignature.
+    let kp_mldsa = RtdKeyPair::MLDSA65(
+        fastcrypto_pq::mldsa65::MLDSA65KeyPair::from_bytes(&[2u8; 32]).unwrap(),
+    );
+    let hybrid_pk =
+        MultiSigPublicKey::new(vec![kp_mldsa.public(), kp1.public()], vec![1, 1], 2).unwrap();
+    let sig_mldsa: GenericSignature = Signature::new_secure(&msg, &kp_mldsa).into();
+    let hybrid_multisig = MultiSig::combine(vec![sig_mldsa, sig1.clone()], hybrid_pk).unwrap();
+    tracer.trace_value(&mut samples, &hybrid_multisig).unwrap();
 
     tracer.trace_value(&mut samples, &sig1).unwrap();
     tracer.trace_value(&mut samples, &sig2).unwrap();

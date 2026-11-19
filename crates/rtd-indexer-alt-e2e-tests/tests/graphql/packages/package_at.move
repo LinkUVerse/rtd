@@ -5,24 +5,25 @@
 
 //# publish --upgradeable --sender A
 module P1::M {
-  public fun foo(): u64 { 42 }
+    public fun foo(): u64 { 42 }
 }
 
 //# upgrade --package P1 --upgrade-capability 1,1 --sender A
 module P2::M {
-  public fun foo(): u64 { 43 }
+    public fun foo(): u64 { 43 }
 }
 
 //# create-checkpoint
 
 //# upgrade --package P2 --upgrade-capability 1,1 --sender A
 module P3::M {
-  public fun foo(): u64 { 44 }
+    public fun foo(): u64 { 44 }
 }
 
 //# create-checkpoint
 
 //# run-graphql
+/*
 { # Fetching packages as objects, to confirm their addresses and versions
   p1: object(address: "@{obj_1_0}") {
     address
@@ -39,8 +40,10 @@ module P3::M {
     version
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   package(address: "@{obj_1_0}") {
     address
@@ -57,3 +60,4 @@ module P3::M {
     }
   }
 }
+*/

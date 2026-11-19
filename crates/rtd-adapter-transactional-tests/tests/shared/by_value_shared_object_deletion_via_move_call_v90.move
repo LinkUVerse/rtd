@@ -5,33 +5,33 @@
 
 //# publish
 
-module t2::o2 {
-    use rtd::rtd::RTD;
-    use rtd::coin::{Self, Coin};
+module t2::o2;
 
-    public struct Obj2 has key, store {
-        id: UID,
-    }
+use rtd::coin::{Self, Coin};
+use rtd::rtd::RTD;
 
-    public fun mint_shared_coin(ctx: &mut TxContext) {
-        transfer::public_share_object(coin::zero<RTD>(ctx))
-    }
+public struct Obj2 has key, store {
+    id: UID,
+}
 
-    public fun create(ctx: &mut TxContext) {
-        let o = Obj2 { id: object::new(ctx) };
-        transfer::public_share_object(o)
-    }
+public fun mint_shared_coin(ctx: &mut TxContext) {
+    transfer::public_share_object(coin::zero<RTD>(ctx))
+}
 
-    public fun deleter(o2: Obj2) {
-        let Obj2 { id } = o2;
-        object::delete(id);
-    }
+public fun create(ctx: &mut TxContext) {
+    let o = Obj2 { id: object::new(ctx) };
+    transfer::public_share_object(o)
+}
 
-    public fun id<T>(i: T): T { i }
+public fun deleter(o2: Obj2) {
+    let Obj2 { id } = o2;
+    object::delete(id);
+}
 
-    public fun share_coin(o2: Coin<RTD>) {
-        transfer::public_share_object(o2);
-    }
+public fun id<T>(i: T): T { i }
+
+public fun share_coin(o2: Coin<RTD>) {
+    transfer::public_share_object(o2);
 }
 
 //# run t2::o2::create

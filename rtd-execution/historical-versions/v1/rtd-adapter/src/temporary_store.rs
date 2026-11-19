@@ -3,6 +3,7 @@
 
 use crate::gas_charger::GasCharger;
 use parking_lot::RwLock;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::VersionDigest;
 use rtd_types::committee::EpochId;
@@ -14,10 +15,10 @@ use rtd_types::execution::{
 use rtd_types::execution_status::ExecutionStatus;
 use rtd_types::inner_temporary_store::InnerTemporaryStore;
 use rtd_types::layout_resolver::LayoutResolver;
-use rtd_types::rtd_system_state::{get_rtd_system_state_wrapper, AdvanceEpochParams};
 use rtd_types::storage::{BackingStore, DenyListResult, PackageObject};
+use rtd_types::rtd_system_state::{get_rtd_system_state_wrapper, AdvanceEpochParams};
 use rtd_types::{
-    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest},
+    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest},
     effects::EffectsObjectChange,
     error::{ExecutionError, RtdResult},
     gas::GasCostSummary,
@@ -28,7 +29,6 @@ use rtd_types::{
     TypeTag,
 };
 use rtd_types::{is_system_package, RTD_SYSTEM_STATE_OBJECT_ID};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub struct TemporaryStore<'backing> {
     // The backing store for retrieving Move packages onchain.
@@ -522,6 +522,10 @@ impl<'backing> TemporaryStore<'backing> {
                 self.execution_results.written_objects.len(),
                 self.execution_results.modified_objects.len(),
                 self.input_objects.len(),
+                0,
+                0,
+                &[],
+                false,
             )
         } else {
             let num_deletes = self.execution_results.deleted_object_ids.len()

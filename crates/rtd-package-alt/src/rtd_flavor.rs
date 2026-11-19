@@ -7,7 +7,7 @@ use anyhow::Context;
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use move_compiler::editions::Edition;
-use move_package_alt::{
+use move_package::{
     MoveFlavor,
     schema::{
         EnvironmentID, EnvironmentName, GitSha, LockfileDependencyInfo, LockfileGitDepInfo,
@@ -15,6 +15,7 @@ use move_package_alt::{
     },
 };
 
+use serde::{Deserialize, Serialize};
 use rtd_package_management::system_package_versions::{
     SYSTEM_GIT_REPO, latest_system_packages, system_packages_for_protocol,
 };
@@ -22,13 +23,12 @@ use rtd_protocol_config::ProtocolVersion;
 use rtd_rpc_api::Client as RpcClient;
 use rtd_sdk::types::{base_types::ObjectID, is_system_package};
 use rtd_sdk::wallet_context::WalletContext;
-use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use tracing::warn;
 
 use rtd_sdk::digests::chain_ids_match;
 
-use crate::{local_test_environment, mainnet_environment, testnet_environment};
+use crate::{mainnet_environment, testnet_environment};
 
 const EDITION: &str = "2024";
 const FLAVOR: &str = "rtd";
@@ -44,8 +44,6 @@ pub struct RtdFlavor {
     client: Option<RpcClient>,
     /// Lazily populated from gRPC when needed.
     protocol_version: OnceCell<ProtocolVersion>,
-    /// Enables the opaque build-only environment used by package tests.
-    testing_environment: bool,
 }
 
 impl std::fmt::Debug for RtdFlavor {
@@ -53,7 +51,6 @@ impl std::fmt::Debug for RtdFlavor {
         f.debug_struct("RtdFlavor")
             .field("connected", &self.client.is_some())
             .field("protocol_version", &self.protocol_version)
-            .field("testing_environment", &self.testing_environment)
             .finish()
     }
 }
@@ -62,15 +59,6 @@ impl RtdFlavor {
     /// Create a `RtdFlavor` in offline mode. Uses the latest known system packages.
     pub fn new() -> Self {
         Self::default()
-    }
-
-    /// A flavor for local package tests. Production flavors have no guessed
-    /// default network while RTD genesis identifiers remain unconfigured.
-    pub fn for_testing() -> Self {
-        Self {
-            testing_environment: true,
-            ..Self::new()
-        }
     }
 
     /// Create a `RtdFlavor` connected to the network via the gRPC client from `wallet`. Falls back
@@ -163,16 +151,9 @@ impl MoveFlavor for RtdFlavor {
     type PackageMetadata = (); // TODO
 
     fn default_environments(&self) -> IndexMap<EnvironmentName, EnvironmentID> {
-        let mut environments: IndexMap<_, _> = [testnet_environment(), mainnet_environment()]
-            .into_iter()
-            .flatten()
-            .map(|environment| (environment.name, environment.id))
-            .collect();
-        if self.testing_environment {
-            let test_environment = local_test_environment();
-            environments.insert(test_environment.name, test_environment.id);
-        }
-        environments
+        let testnet = testnet_environment();
+        let mainnet = mainnet_environment();
+        IndexMap::from([(testnet.name, testnet.id), (mainnet.name, mainnet.id)])
     }
 
     fn environment_ids_match(&self, a: &EnvironmentID, b: &EnvironmentID) -> bool {
@@ -252,7 +233,7 @@ impl MoveFlavor for RtdFlavor {
         }
     }
 
-    fn is_system_address(&self, address: &move_package_alt::schema::OriginalID) -> bool {
+    fn is_system_address(&self, address: &move_package::schema::OriginalID) -> bool {
         is_system_package(address.0)
     }
 }
@@ -288,7 +269,7 @@ fn validate_modern_manifest_does_not_use_legacy_system_names(
     for name in dep_names {
         if legacy_names.contains_key(&name) {
             return Err(format!(
-                "Dependency `{name}` is a legacy system name and cannot be used. Use the current system dependency name instead."
+                "Dependency `{name}` is a legacy system name and cannot be used. See https://docs.rtd.io/guides/developer/packages/move-package-management#system-dependencies"
             ));
         }
     }

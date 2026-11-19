@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_trace_format::format::MoveTraceBuilder;
+use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::execution::ExecutionTiming;
 use rtd_types::execution_params::ExecutionOrEarlyError;
@@ -14,15 +15,13 @@ use rtd_types::{
     digests::TransactionDigest,
     effects::TransactionEffects,
     error::ExecutionError,
-    execution::{ExecutionResult, TypeLayoutStore},
+    execution::ExecutionResult,
     execution_status::ExecutionFailure,
-    gas::RtdGasStatus,
+    gas::GasUsageReport,
     inner_temporary_store::InnerTemporaryStore,
-    layout_resolver::LayoutResolver,
     metrics::ExecutionMetrics,
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
-use std::sync::Arc;
 
 /// Abstracts over access to the VM across versions of the execution layer.
 pub trait Executor {
@@ -44,7 +43,7 @@ pub trait Executor {
         unsettled_object_funds: &dyn UnsettledObjectFundsRead,
         // Gas related
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         // Transaction
         transaction_kind: TransactionKind,
         rewritten_inputs: Option<Vec<bool>>,
@@ -53,7 +52,7 @@ pub trait Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionFailure>,
@@ -74,7 +73,7 @@ pub trait Executor {
         system_object_versions: SystemObjectVersions,
         unsettled_object_funds: &dyn UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -82,7 +81,7 @@ pub trait Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionError>,
@@ -104,7 +103,7 @@ pub trait Executor {
         system_object_versions: SystemObjectVersions,
         // Gas related
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         // Transaction
         transaction_kind: TransactionKind,
         rewritten_inputs: Option<Vec<bool>>,
@@ -113,7 +112,7 @@ pub trait Executor {
         skip_all_checks: bool,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Result<Vec<ExecutionResult>, ExecutionError>,
     );
@@ -133,10 +132,4 @@ pub trait Executor {
         input_objects: CheckedInputObjects,
         pt: ProgrammableTransaction,
     ) -> Result<InnerTemporaryStore, ExecutionError>;
-
-    fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
-        &'vm self,
-        protocol_config: &'vm ProtocolConfig,
-        store: Box<dyn TypeLayoutStore + 'store>,
-    ) -> Box<dyn LayoutResolver + 'r>;
 }

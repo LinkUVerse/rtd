@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_trait::async_trait;
-use rtd_rpc::client::Client;
-use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
-use rtd_sdk_types::{Address, StructTag};
-use rtd_types::gas_coin::GAS;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use rtd_rpc::client::Client;
+use rtd_rpc::proto::sui::rpc::v2::{GetBalanceRequest, Object, owner::OwnerKind};
+use rtd_sdk_types::{Address, StructTag};
+use rtd_types::gas_coin::GAS;
 
 use rtd_types::RTD_SYSTEM_PACKAGE_ID;
 use rtd_types::base_types::{ObjectID, ObjectRef, SequenceNumber};
@@ -23,8 +23,8 @@ use crate::errors::Error;
 use crate::types::internal_operation::MAX_GAS_COINS;
 
 use super::{
-    MAX_COMMAND_ARGS, TransactionObjectData, TryConstructTransaction, simulate_transaction,
-    withdraw_coin_from_address_balance,
+    MAX_COMMAND_ARGS, TransactionObjectData, TryConstructTransaction,
+    path_b_error_or_larger_gas_shortfall, simulate_transaction, withdraw_coin_from_address_balance,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -76,7 +76,7 @@ impl TryConstructTransaction for Stake {
         let all_coins = client
             .select_up_to_n_largest_coins(
                 &Address::from(sender),
-                &StructTag::rtd().into(),
+                &StructTag::sui().into(),
                 1500,
                 &[],
             )
@@ -176,7 +176,10 @@ impl TryConstructTransaction for Stake {
                 )?;
                 let (budget, gas_coin_objs) =
                     simulate_transaction(client, pt_b, sender, gas_coins, gas_price, budget)
-                        .await?;
+                        .await
+                        .map_err(|path_b_error| {
+                            path_b_error_or_larger_gas_shortfall(path_b_error, sim_result.err())
+                        })?;
 
                 let gas_coins = gas_coin_objs
                     .iter()

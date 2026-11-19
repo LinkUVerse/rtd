@@ -152,38 +152,6 @@ impl RocksDBStore {
             configs.into_iter().collect(),
         )
     }
-
-    /// Read the persisted consensus head before starting Core, without replaying commits.
-    pub fn read_last_commit_index_for_recovery(path: &str) -> ConsensusResult<CommitIndex> {
-        let has_entries = match std::fs::read_dir(path) {
-            Ok(mut entries) => entries.next().is_some(),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-            Err(error) => panic!("cannot inspect consensus DB path {path}: {error}"),
-        };
-        if !has_entries {
-            return Ok(0);
-        }
-
-        #[cfg(not(tidehunter))]
-        let store = Self::get_read_only_handle(
-            path.into(),
-            None,
-            None,
-            MetricConf::new("consensus_head_readonly"),
-        );
-        #[cfg(tidehunter)]
-        let store = Self::new(path);
-
-        let Some(result) = store
-            .commits
-            .reversed_safe_iter_with_bounds(None, None)?
-            .next()
-        else {
-            return Ok(0);
-        };
-        let ((commit_index, _digest), _serialized) = result?;
-        Ok(commit_index)
-    }
 }
 
 impl Store for RocksDBStore {

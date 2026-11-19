@@ -7,8 +7,9 @@ NETWORK="$1"
 git fetch -q || exit 1
 
 if [ -z "$RELEASED_COMMIT" ]; then
-  if [ -z "$RTD_PROMETHEUS_URL" ]; then
-    echo "Error: set RTD_PROMETHEUS_URL to the verified RTD Prometheus query endpoint"
+  # check if API_USER and API_KEY env vars are set
+  if [ -z "$API_USER" ] || [ -z "$API_KEY" ]; then
+    echo "Error: API_USER and API_KEY environment variables must be set"
     exit 1
   fi
 
@@ -21,7 +22,19 @@ if [ -z "$RELEASED_COMMIT" ]; then
     exit 1
   fi
 
-  VERSIONS=$(curl -fsS -G "$RTD_PROMETHEUS_URL" --data-urlencode "query=uptime{network=\"$NETWORK\"}" | jq -r '.data.result[].metric.version' | sort | uniq -c | sort -rn)
+  case "$NETWORK" in
+    devnet)
+      URL="https://$API_USER:$API_KEY@gateway.mimir.rtd.io/prometheus/api/v1/query"
+      ;;
+    testnet)
+      URL="http://$API_USER:$API_KEY@metrics-gw-2.testnet.rtd.io/prometheus/api/v1/query"
+      ;;
+    mainnet)
+      URL="https://$API_USER:$API_KEY@metrics-gw-2.mainnet.rtd.io/prometheus/api/v1/query"
+      ;;
+  esac
+
+  VERSIONS=$(curl -s -G -k "$URL" --data-urlencode "query=uptime{network=\"$NETWORK\"}" | jq -r '.data.result[].metric.version' | sort | uniq -c | sort -rn)
   TOP_VERSION=$(echo "$VERSIONS" | head -n 1 | awk '{print $2}')
 
   echo "Found following versions on $NETWORK:"
@@ -102,7 +115,7 @@ echo "Checking for changes to snapshot files matching $NETWORK_PATTERN"
 check_git_clean "Detected changes to snapshot files since $RELEASED_COMMIT - not safe to release" "$NETWORK_PATTERN"
 
 # remove any snapshot file changes that were ignored
-git restore --source=HEAD --staged --worktree -- crates/rtd-protocol-config/src/snapshots
+git reset --hard HEAD
 
 echo "Running snapshot tests..."
 cargo test --package rtd-protocol-config snapshot_tests || exit 1

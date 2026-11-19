@@ -10,7 +10,7 @@ prost-types = "0.14.1"
 protox = "0.9"
 tonic-prost-build = { version = "0.14.2", features = ["cleanup-markdown"] }
 walkdir = "2.5.0"
-proto-build = { git = "https://github.com/LinkUVerse/rtd-rust-sdk", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700" }
+proto-build = { git = "https://github.com/LinkUVerse/rtd-rust-sdk", branch = "master" }
 ---
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0

@@ -18,12 +18,22 @@ use crate::api::types::user_signature::zklogin::ZkLoginSignature;
 /// The structured details of a signature, varying by scheme.
 #[derive(Union, Clone)]
 pub(crate) enum SignatureScheme {
+    MlDsa65(MlDsa65Signature),
     Ed25519(Ed25519Signature),
     Secp256k1(Secp256k1Signature),
     Secp256r1(Secp256r1Signature),
     Multisig(MultisigSignature),
     ZkLogin(ZkLoginSignature),
     Passkey(PasskeySignature),
+}
+
+/// An ML-DSA-65 signature.
+#[derive(SimpleObject, Clone)]
+pub(crate) struct MlDsa65Signature {
+    /// The raw signature bytes.
+    signature: Option<Base64>,
+    /// The raw public key bytes, if present.
+    public_key: Option<Base64>,
 }
 
 /// A user signature for a transaction.

@@ -7,6 +7,8 @@
 //! - `eval_bitmap_query_stream` composes DNF terms and signed literals correctly
 //! - `checkpoint_to_tx_range` resolves bounds
 //! - `resolve_tx_digests` resolves sequence numbers to digests via tx_seq_digest
+//! - `resolve_tx_checkpoint_position` resolves a sequence number to its
+//!   checkpoint and offset via tx_seq_digest
 
 use std::ops::Range;
 
@@ -16,6 +18,7 @@ use bytes::Bytes;
 use futures::TryStreamExt;
 use roaring::RoaringBitmap;
 use rtd_inverted_index::IndexDimension;
+use rtd_inverted_index::WatermarkPacing;
 use rtd_inverted_index::Watermarked;
 use rtd_inverted_index::encode_dimension_key;
 use rtd_inverted_index::eval_bitmap_query_stream;
@@ -27,8 +30,10 @@ use rtd_kvstore::BitmapQuery;
 use rtd_kvstore::BitmapTerm;
 use rtd_kvstore::CheckpointSpan;
 use rtd_kvstore::ScanDirection;
+use rtd_kvstore::TxCheckpointPosition;
 use rtd_kvstore::TxSeqDigestData;
 use rtd_kvstore::tables;
+use rtd_kvstore::tables::BitmapSchema;
 use rtd_kvstore::tables::transaction_bitmap_index;
 use rtd_kvstore::testing::BigTableEmulator;
 use rtd_kvstore::testing::INSTANCE_ID;
@@ -38,6 +43,9 @@ use rtd_types::digests::CheckpointContentsDigest;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_checkpoint::CheckpointSummary;
+
+/// The bitmap tables these tests write and query.
+const SCHEMA: BitmapSchema = BitmapSchema::V2;
 
 /// Create a BigTable client connected to a fresh emulator with all tables created.
 async fn setup_emulator() -> Result<(BigTableClient, BigTableEmulator)> {
@@ -51,6 +59,12 @@ async fn setup_emulator() -> Result<(BigTableClient, BigTableEmulator)> {
         .context("Failed to create BigTable client")?;
     Ok((client, emulator))
 }
+
+/// These tests read only items, so they ask for as few watermarks as possible.
+const ITEMS_ONLY_PACING: WatermarkPacing = WatermarkPacing {
+    min_buckets: u64::MAX,
+    emit_held_at_end: false,
+};
 
 fn bitmap_query_stream(
     client: &BigTableClient,
@@ -68,6 +82,7 @@ fn bitmap_query_stream(
         direction,
         u64::MAX,
         rtd_inverted_index::SkipPolicy::DRAIN_ONLY,
+        ITEMS_ONLY_PACING,
         |_| {},
     );
     use futures::TryStreamExt;
@@ -96,11 +111,7 @@ async fn write_bitmap(
     let mut buf = Vec::new();
     bm.serialize_into(&mut buf)?;
 
-    let row_key = transaction_bitmap_index::encode_row_key(
-        transaction_bitmap_index::SCHEMA_VERSION,
-        dimension_key,
-        bucket_id,
-    );
+    let row_key = transaction_bitmap_index::encode_row_key(SCHEMA, dimension_key, bucket_id);
     let entry = tables::make_entry(
         row_key,
         vec![(transaction_bitmap_index::col::BITMAP, Bytes::from(buf))],
@@ -108,7 +119,7 @@ async fn write_bitmap(
     );
     client
         .write_entries(
-            transaction_bitmap_index::NAME,
+            transaction_bitmap_index::NAME_V2,
             vec![entry],
             CheckpointSpan::single(0),
         )
@@ -254,7 +265,7 @@ async fn test_eval_bitmap_query_and() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -287,7 +298,7 @@ async fn test_zero_address_sender_key_isolation() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -309,7 +320,7 @@ async fn test_zero_address_sender_key_isolation() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -329,7 +340,7 @@ async fn test_zero_address_sender_key_isolation() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -348,7 +359,7 @@ async fn filters_seek_past_skewed_gap_against_emulator() -> Result<()> {
     let (mut client, _emulator) = setup_emulator().await?;
     let dimension_x = encode_dimension_key(IndexDimension::Sender, &[0x11; 32]);
     let dimension_y = encode_dimension_key(IndexDimension::MoveCall, &[0x22; 32]);
-    let spec = BitmapIndexSpec::tx();
+    let spec = BitmapIndexSpec::tx(SCHEMA);
     let bucket_size = spec.bucket_size;
 
     for bucket in [0, 40] {
@@ -374,6 +385,7 @@ async fn filters_seek_past_skewed_gap_against_emulator() -> Result<()> {
         rtd_inverted_index::SkipPolicy {
             drain_probe_rows: std::num::NonZeroU32::new(2),
         },
+        ITEMS_ONLY_PACING,
         move |metrics| metrics_tx.send(metrics).unwrap(),
     )
     .map_err(anyhow::Error::new)
@@ -412,7 +424,7 @@ async fn test_eval_bitmap_query_or() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -443,7 +455,7 @@ async fn test_eval_bitmap_query_not() -> Result<()> {
         &client,
         query,
         0..100_000,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -517,7 +529,11 @@ async fn test_resolve_tx_digests() -> Result<()> {
     assert_eq!(result[0], Some(tx_seq_digest_data(1, d1, 0)));
     assert_eq!(result[1], Some(tx_seq_digest_data(4, d4, 1)));
 
-    let mut checkpoints = client.resolve_tx_checkpoints(&[4, 0, 99]).await?;
+    let mut checkpoints: Vec<(u64, CheckpointSequenceNumber)> = client
+        .resolve_tx_checkpoints_stream(vec![4, 0, 99])
+        .await?
+        .try_collect()
+        .await?;
     checkpoints.sort_by_key(|(tx_seq, _)| *tx_seq);
     assert_eq!(checkpoints, vec![(0, 0), (4, 1)]);
 
@@ -528,6 +544,45 @@ async fn test_resolve_tx_digests() -> Result<()> {
     // Empty input
     let result = client.resolve_tx_digests(&[]).await?;
     assert!(result.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_resolve_tx_checkpoint_position() -> Result<()> {
+    let (mut client, _emulator) = setup_emulator().await?;
+
+    // Checkpoint 0 holds tx 0; checkpoint 1 holds txs 1..=3, tx 3 at offset 2.
+    write_tx_seq_digest(&mut client, 0, &TransactionDigest::random(), 0).await?;
+    let entry = tables::make_entry(
+        tables::tx_seq_digest::encode_key(3),
+        tables::tx_seq_digest::encode(&TransactionDigest::random(), 4, 2, 1),
+        None,
+    );
+    client
+        .write_entries(
+            tables::tx_seq_digest::NAME,
+            vec![entry],
+            CheckpointSpan::single(1),
+        )
+        .await?;
+
+    assert_eq!(
+        client.resolve_tx_checkpoint_position(0).await?,
+        Some(TxCheckpointPosition {
+            checkpoint_number: 0,
+            tx_offset: 0,
+        })
+    );
+    assert_eq!(
+        client.resolve_tx_checkpoint_position(3).await?,
+        Some(TxCheckpointPosition {
+            checkpoint_number: 1,
+            tx_offset: 2,
+        })
+    );
+    // Unknown tx_seq → None
+    assert_eq!(client.resolve_tx_checkpoint_position(99).await?, None);
 
     Ok(())
 }
@@ -575,7 +630,7 @@ async fn test_full_pipeline() -> Result<()> {
         &client,
         query,
         tx_range.clone(),
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -601,7 +656,7 @@ async fn test_full_pipeline() -> Result<()> {
         &client,
         query,
         tx_range.clone(),
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()
@@ -617,7 +672,7 @@ async fn test_full_pipeline() -> Result<()> {
         &client,
         query,
         tx_range,
-        BitmapIndexSpec::tx(),
+        BitmapIndexSpec::tx(SCHEMA),
         ScanDirection::Ascending,
     )
     .try_collect()

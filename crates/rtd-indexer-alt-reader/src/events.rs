@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::digests::TransactionDigest;
 
 use crate::error::Error;

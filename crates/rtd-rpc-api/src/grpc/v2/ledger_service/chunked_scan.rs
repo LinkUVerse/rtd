@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_cursor::Position;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -228,7 +228,7 @@ mod tests {
     use std::time::Instant;
 
     use prometheus::Registry;
-    use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
+    use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
 
     use crate::metrics::{ListApiMetrics, ListRequestMetrics};
 

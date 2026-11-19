@@ -178,8 +178,8 @@ impl RpcService {
         let built_in_file_descriptor_sets: [&[u8]; 5] = [
             rtd_rpc::proto::google::protobuf::FILE_DESCRIPTOR_SET,
             rtd_rpc::proto::google::rpc::FILE_DESCRIPTOR_SET,
-            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
-            rtd_rpc::proto::rtd::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::sui::rpc::v2alpha::FILE_DESCRIPTOR_SET,
             tonic_health::pb::FILE_DESCRIPTOR_SET,
         ];
         let file_descriptor_sets: Vec<&[u8]> = built_in_file_descriptor_sets
@@ -213,34 +213,34 @@ impl RpcService {
 
         let router = {
             let ledger_service =
-                rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerServiceServer::new(
+                rtd_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerServiceServer::new(
                     self.clone(),
                 )
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let proof_service_v2alpha =
-                rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_server::ProofServiceServer::new(
+                rtd_rpc::proto::sui::rpc::v2alpha::proof_service_server::ProofServiceServer::new(
                     self.clone(),
                 )
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
-            let transaction_execution_service = rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone())
+            let transaction_execution_service = rtd_rpc::proto::sui::rpc::v2::transaction_execution_service_server::TransactionExecutionServiceServer::new(self.clone())
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let state_service =
-                rtd_rpc::proto::rtd::rpc::v2::state_service_server::StateServiceServer::new(
+                rtd_rpc::proto::sui::rpc::v2::state_service_server::StateServiceServer::new(
                     self.clone(),
                 )
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
-            let signature_verification_service = rtd_rpc::proto::rtd::rpc::v2::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone())
+            let signature_verification_service = rtd_rpc::proto::sui::rpc::v2::signature_verification_service_server::SignatureVerificationServiceServer::new(self.clone())
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
-            let move_package_service = rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageServiceServer::new(self.clone())
+            let move_package_service = rtd_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageServiceServer::new(self.clone())
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
                 .send_compressed(tonic::codec::CompressionEncoding::Zstd);
             let name_service =
-                rtd_rpc::proto::rtd::rpc::v2::name_service_server::NameServiceServer::new(
+                rtd_rpc::proto::sui::rpc::v2::name_service_server::NameServiceServer::new(
                     self.clone(),
                 )
                 .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE)
@@ -293,7 +293,7 @@ impl RpcService {
 
             if self.subscription_service_handle.is_some() {
                 let subscription_service =
-rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone())
+rtd_rpc::proto::sui::rpc::v2::subscription_service_server::SubscriptionServiceServer::new(self.clone())
                     .max_encoding_message_size(MAX_ENCODED_RESPONSE_MESSAGE_SIZE);
                 health_service_names.push(service_name(&subscription_service));
 
@@ -393,8 +393,8 @@ mod tests {
         linku_network::request_log::GrpcRequestLogLayer::from_encoded_file_descriptor_sets([
             rtd_rpc::proto::google::protobuf::FILE_DESCRIPTOR_SET,
             rtd_rpc::proto::google::rpc::FILE_DESCRIPTOR_SET,
-            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
-            rtd_rpc::proto::rtd::rpc::v2alpha::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::sui::rpc::v2alpha::FILE_DESCRIPTOR_SET,
             tonic_health::pb::FILE_DESCRIPTOR_SET,
         ])
         .unwrap();

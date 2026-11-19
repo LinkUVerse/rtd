@@ -4,29 +4,29 @@
 use std::fmt::{self, Display, Formatter, Write};
 
 use enum_dispatch::enum_dispatch;
-use rtd_package_resolver::{PackageStore, Resolver};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use rtd_package_resolver::{PackageStore, Resolver};
 use tabled::{
     builder::Builder as TableBuilder,
     settings::{Panel as TablePanel, Style as TableStyle, style::HorizontalLine},
 };
 
 use fastcrypto::encoding::Base64;
-use linku_common::ZipDebugEqIteratorExt;
-use linku_metrics::monitored_scope;
 use move_binary_format::CompiledModule;
 use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::identifier::{IdentStr, Identifier};
 use move_core_types::language_storage::{ModuleId, StructTag, TypeTag};
+use linku_common::ZipDebugEqIteratorExt;
+use linku_metrics::monitored_scope;
 use nonempty::NonEmpty;
 use rtd_json::{RtdJsonValue, primitive_type};
 use rtd_types::RTD_FRAMEWORK_ADDRESS;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::base_types::{
-    EpochId, ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest,
+    EpochId, ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest,
 };
 use rtd_types::crypto::RtdSignature;
 use rtd_types::digests::Digest;
@@ -46,12 +46,12 @@ use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_consensus::ConsensusDeterminedVersionAssignments;
 use rtd_types::object::Owner;
 use rtd_types::parse_rtd_type_tag;
-use rtd_types::rtd_serde::Readable;
-use rtd_types::rtd_serde::{
-    BigInt, RtdTypeTag as AsRtdTypeTag, SequenceNumber as AsSequenceNumber,
-};
 use rtd_types::signature::GenericSignature;
 use rtd_types::storage::{DeleteKind, WriteKind};
+use rtd_types::rtd_serde::Readable;
+use rtd_types::rtd_serde::{
+    BigInt, SequenceNumber as AsSequenceNumber, RtdTypeTag as AsRtdTypeTag,
+};
 use rtd_types::transaction::{
     Argument, CallArg, ChangeEpoch, Command, EndOfEpochTransactionKind, GenesisObject,
     InputObjectKind, ObjectArg, ProgrammableMoveCall, ProgrammableTransaction, Reservation,
@@ -308,7 +308,7 @@ impl PartialEq for RtdTransactionBlockResponse {
 
 impl Display for RtdTransactionBlockResponse {
     fn fmt(&self, writer: &mut Formatter<'_>) -> fmt::Result {
-        writeln!(writer, "Transaction Digest: {}", &self.digest)?;
+        writeln!(writer, "Transaction Digest: {}", self.digest)?;
 
         if let Some(t) = &self.transaction {
             writeln!(writer, "{}", t)?;
@@ -1133,7 +1133,7 @@ impl Display for RtdTransactionBlockEffects {
         builder.push_record(vec![format!("Executed Epoch: {}", self.executed_epoch())]);
 
         if !self.created().is_empty() {
-            builder.push_record(vec![format!("\nCreated Objects: ")]);
+            builder.push_record(vec!["\nCreated Objects: ".to_string()]);
 
             for oref in self.created() {
                 builder.push_record(vec![owned_objref_string(oref)]);
@@ -1141,21 +1141,21 @@ impl Display for RtdTransactionBlockEffects {
         }
 
         if !self.mutated().is_empty() {
-            builder.push_record(vec![format!("Mutated Objects: ")]);
+            builder.push_record(vec!["Mutated Objects: ".to_string()]);
             for oref in self.mutated() {
                 builder.push_record(vec![owned_objref_string(oref)]);
             }
         }
 
         if !self.shared_objects().is_empty() {
-            builder.push_record(vec![format!("Shared Objects: ")]);
+            builder.push_record(vec!["Shared Objects: ".to_string()]);
             for oref in self.shared_objects() {
                 builder.push_record(vec![objref_string(oref)]);
             }
         }
 
         if !self.deleted().is_empty() {
-            builder.push_record(vec![format!("Deleted Objects: ")]);
+            builder.push_record(vec!["Deleted Objects: ".to_string()]);
 
             for oref in self.deleted() {
                 builder.push_record(vec![objref_string(oref)]);
@@ -1163,7 +1163,7 @@ impl Display for RtdTransactionBlockEffects {
         }
 
         if !self.wrapped().is_empty() {
-            builder.push_record(vec![format!("Wrapped Objects: ")]);
+            builder.push_record(vec!["Wrapped Objects: ".to_string()]);
 
             for oref in self.wrapped() {
                 builder.push_record(vec![objref_string(oref)]);
@@ -1171,7 +1171,7 @@ impl Display for RtdTransactionBlockEffects {
         }
 
         if !self.unwrapped().is_empty() {
-            builder.push_record(vec![format!("Unwrapped Objects: ")]);
+            builder.push_record(vec!["Unwrapped Objects: ".to_string()]);
             for oref in self.unwrapped() {
                 builder.push_record(vec![owned_objref_string(oref)]);
             }
@@ -1197,7 +1197,7 @@ impl Display for RtdTransactionBlockEffects {
 
         let dependencies = self.dependencies();
         if !dependencies.is_empty() {
-            builder.push_record(vec![format!("\nTransaction Dependencies:")]);
+            builder.push_record(vec!["\nTransaction Dependencies:".to_string()]);
             for dependency in dependencies {
                 builder.push_record(vec![format!("   {}", dependency)]);
             }
@@ -1667,7 +1667,7 @@ impl Display for RtdTransactionBlock {
         let mut builder = TableBuilder::default();
 
         builder.push_record(vec![format!("{}", self.data)]);
-        builder.push_record(vec![format!("Signatures:")]);
+        builder.push_record(vec!["Signatures:".to_string()]);
         for tx_sig in &self.tx_signatures {
             builder.push_record(vec![format!(
                 "   {}\n",

@@ -3,7 +3,7 @@
 
 use anyhow::Context;
 use async_graphql::SimpleObject;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::transaction::TransactionData;
 
 use crate::api::types::command_result::CommandResult;

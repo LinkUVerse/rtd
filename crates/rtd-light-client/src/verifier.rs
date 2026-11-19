@@ -220,3 +220,153 @@ pub async fn get_verified_checkpoint(
         Err(anyhow!("Transaction not found in checkpoint"))
     }
 }
+
+// Make a test namespace
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::io::{Read, Write};
+    use rtd_types::messages_checkpoint::{CheckpointSummary, FullCheckpointContents};
+
+    use super::*;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+    use rtd_types::crypto::AuthorityQuorumSignInfo;
+    use rtd_types::message_envelope::Envelope;
+
+    async fn read_full_checkpoint(checkpoint_path: &PathBuf) -> anyhow::Result<CheckpointData> {
+        let mut reader = fs::File::open(checkpoint_path.clone())?;
+        let metadata = fs::metadata(checkpoint_path)?;
+        let mut buffer = vec![0; metadata.len() as usize];
+        reader.read_exact(&mut buffer)?;
+        bcs::from_bytes(&buffer).map_err(|_| anyhow!("Unable to parse checkpoint file"))
+    }
+
+    // clippy ignore dead-code
+    #[allow(dead_code)]
+    async fn write_full_checkpoint(
+        checkpoint_path: &Path,
+        checkpoint: &CheckpointData,
+    ) -> anyhow::Result<()> {
+        let mut writer = fs::File::create(checkpoint_path)?;
+        let bytes = bcs::to_bytes(&checkpoint)
+            .map_err(|_| anyhow!("Unable to serialize checkpoint summary"))?;
+        writer.write_all(&bytes)?;
+        Ok(())
+    }
+
+    async fn read_data() -> (Committee, CheckpointData) {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_files/20873329.yaml");
+
+        let mut reader = fs::File::open(d.clone()).unwrap();
+        let metadata = fs::metadata(&d).unwrap();
+        let mut buffer = vec![0; metadata.len() as usize];
+        reader.read_exact(&mut buffer).unwrap();
+        let checkpoint: Envelope<CheckpointSummary, AuthorityQuorumSignInfo<true>> =
+            bcs::from_bytes(&buffer)
+                .map_err(|_| anyhow!("Unable to parse checkpoint file"))
+                .unwrap();
+
+        let committee = extract_new_committee_info(&checkpoint).unwrap();
+
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_files/20958462.bcs");
+
+        let full_checkpoint = read_full_checkpoint(&d).await.unwrap();
+
+        (committee, full_checkpoint)
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_all_good() {
+        let (committee, full_checkpoint) = read_data().await;
+
+        extract_verified_effects_and_events(
+            &full_checkpoint,
+            &committee,
+            TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zi6cMVA9t4WhWk").unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_bad_committee() {
+        let (mut committee, full_checkpoint) = read_data().await;
+
+        // Change committee
+        committee.epoch += 10;
+
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zi6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_no_transaction() {
+        let (committee, full_checkpoint) = read_data().await;
+
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_bad_contents() {
+        let (committee, mut full_checkpoint) = read_data().await;
+
+        // Change contents
+        let random_contents = FullCheckpointContents::random_for_testing();
+        full_checkpoint.checkpoint_contents = random_contents.checkpoint_contents();
+
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_bad_events() {
+        let (committee, mut full_checkpoint) = read_data().await;
+
+        let event = full_checkpoint.transactions[4]
+            .events
+            .as_ref()
+            .unwrap()
+            .data[0]
+            .clone();
+
+        for t in &mut full_checkpoint.transactions {
+            if let Some(events) = &mut t.events {
+                events.data.push(event.clone());
+            }
+        }
+
+        assert!(
+            extract_verified_effects_and_events(
+                &full_checkpoint,
+                &committee,
+                TransactionDigest::from_str("8RiKBwuAbtu8zNCtz8SrcfHyEUzto6zj6cMVA9t4WhWk")
+                    .unwrap(),
+            )
+            .is_err()
+        );
+    }
+}

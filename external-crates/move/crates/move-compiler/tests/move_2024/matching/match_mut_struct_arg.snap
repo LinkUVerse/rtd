@@ -1,0 +1,13 @@
+---
+source: crates/move-compiler/tests/move_check_testsuite.rs
+info:
+<<<<<<<< HEAD:external-crates/move/crates/move-compiler/tests/rtd_mode/id_leak/infinite_loop.snap
+  flavor: rtd
+  edition: legacy
+========
+  flavor: core
+  edition: 2024.alpha
+>>>>>>>> 56d510b2a7f11280ad8d02828ccf5d742a6dcd42:external-crates/move/crates/move-compiler/tests/move_2024/matching/match_mut_struct_arg.snap
+  lint: false
+---
+

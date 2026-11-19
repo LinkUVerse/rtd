@@ -4,7 +4,7 @@
 use crate::{
     execution::{
         dispatch_tables::VMDispatchTables,
-        interpreter::state::{CallStack, MachineState},
+        interpreter::state::{CallStack, MachineState, TypeArguments},
         tracing::trace,
         values::Value,
     },
@@ -20,7 +20,6 @@ use std::sync::Arc;
 use tracing::instrument;
 
 mod eval;
-pub(crate) mod helpers;
 pub mod locals;
 pub(crate) mod state;
 
@@ -31,7 +30,7 @@ pub(crate) fn run(
     vtables: &mut VMDispatchTables,
     telemetry: &mut TransactionTelemetryContext,
     vm_config: Arc<VMConfig>,
-    type_limits: TypeLimits,
+    type_limits: Arc<TypeLimits>,
     extensions: &mut NativeContextExtensions,
     tracer: &mut Option<VMTracer<'_>>,
     gas_meter: &mut impl GasMeter,
@@ -66,23 +65,24 @@ pub(crate) fn run(
             )
             .map_err(|e| {
                 e.at_code_offset(fun_ref.index(), 0)
-                    .finish(Location::Module(
-                        fun_ref.module_id(&vtables.interner).clone(),
-                    ))
+                    .finish(Location::Module(fun_ref.module_id(&vtables.interner)))
             });
             trace!(tracer, |tracer| {
                 tracer.exit_initial_native_frame(&return_result, &gas_meter.remaining_gas().into())
             });
             return_result.map(|values| values.into_iter().collect())
         } else {
+            // Size every entry-point type argument once; every limit check against them during
+            // execution is pure arithmetic from here on.
+            let ty_args = TypeArguments::new(vtables, ty_args, &type_limits).map_err(|e| {
+                e.at_code_offset(fun_ref.index(), 0)
+                    .finish(Location::Module(fun_ref.module_id(&vtables.interner)))
+            })?;
             let call_stack = CallStack::new(function, ty_args, args).map_err(|e| {
                 e.at_code_offset(fun_ref.index(), 0)
-                    .finish(Location::Module(
-                        fun_ref.module_id(&vtables.interner).clone(),
-                    ))
+                    .finish(Location::Module(fun_ref.module_id(&vtables.interner)))
             })?;
-            let state =
-                MachineState::new(Arc::clone(&vtables.interner), type_limits, call_stack);
+            let state = MachineState::new(Arc::clone(&vtables.interner), type_limits, call_stack);
             eval::run(state, vtables, telemetry, vm_config, extensions, tracer, gas_meter)
         }
     };

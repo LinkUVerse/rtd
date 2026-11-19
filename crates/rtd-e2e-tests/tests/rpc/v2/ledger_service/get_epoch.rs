@@ -7,8 +7,8 @@ use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::GetEpochRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::GetEpochRequest;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
 use test_cluster::TestClusterBuilder;
 
 #[sim_test]

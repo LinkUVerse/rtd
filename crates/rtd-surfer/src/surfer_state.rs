@@ -2,24 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use indexmap::IndexSet;
-use linku_common::fatal;
 use move_binary_format::file_format::Visibility;
 use move_binary_format::normalized;
 use move_core_types::identifier::IdentStr;
 use move_core_types::language_storage::StructTag;
+use linku_common::fatal;
 use rand::rngs::StdRng;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use rtd_move_build::BuildConfig;
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::base_types::{ConsensusObjectSequenceKey, ObjectID, ObjectRef, RtdAddress};
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::object::{Object, Owner};
 use rtd_types::storage::WriteKind;
-use rtd_types::transaction::{CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TransactionData};
+use rtd_types::transaction::{
+    CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_GENERIC, TEST_ONLY_GAS_UNIT_FOR_PUBLISH,
+    TransactionData,
+};
 use rtd_types::{Identifier, RTD_FRAMEWORK_ADDRESS};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use test_cluster::TestCluster;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
@@ -169,7 +172,7 @@ impl SurferState {
             vec![],
             self.gas_object,
             args,
-            TEST_ONLY_GAS_UNIT_FOR_PUBLISH * rgp,
+            TEST_ONLY_GAS_UNIT_FOR_GENERIC * rgp,
             rgp,
         )
         .unwrap();

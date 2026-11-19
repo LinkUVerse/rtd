@@ -14,7 +14,7 @@ use bytes::Bytes;
 use move_binary_format::normalized;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::Transaction;
+use rtd_rpc::proto::sui::rpc::v2::Transaction;
 use rtd_sdk_types::Address;
 use rtd_sdk_types::Argument;
 use rtd_sdk_types::Command;
@@ -90,7 +90,7 @@ pub fn resolve_transaction(
 /// an unauthenticated caller.
 fn enforce_ptb_structural_limits(
     protocol_config: &ProtocolConfig,
-    inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
+    inputs: &[rtd_rpc::proto::sui::rpc::v2::Input],
     commands: &[Command],
 ) -> Result<()> {
     let max_commands = protocol_config.max_programmable_tx_commands() as usize;
@@ -224,10 +224,10 @@ fn resolve_unresolved_transaction(
     reference_gas_price: u64,
     max_gas_budget: u64,
     sender: rtd_sdk_types::Address,
-    unresolved_inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
+    unresolved_inputs: &[rtd_rpc::proto::sui::rpc::v2::Input],
     commands: Vec<Command>,
-    gas_payment: Option<&rtd_rpc::proto::rtd::rpc::v2::GasPayment>,
-    expiration: Option<&rtd_rpc::proto::rtd::rpc::v2::TransactionExpiration>,
+    gas_payment: Option<&rtd_rpc::proto::sui::rpc::v2::GasPayment>,
+    expiration: Option<&rtd_rpc::proto::sui::rpc::v2::TransactionExpiration>,
 ) -> Result<TransactionData> {
     let gas_data = if let Some(unresolved_gas_payment) = gas_payment {
         let gas_coins = unresolved_gas_payment
@@ -426,7 +426,7 @@ fn resolve_object_reference_with_object(
 pub(super) fn resolve_ptb(
     service: &RpcService,
     called_packages: &mut NormalizedPackages,
-    unresolved_inputs: &[rtd_rpc::proto::rtd::rpc::v2::Input],
+    unresolved_inputs: &[rtd_rpc::proto::sui::rpc::v2::Input],
     commands: Vec<Command>,
 ) -> Result<ProgrammableTransaction> {
     // Precompute uses of every input argument across all commands once, so that
@@ -451,10 +451,10 @@ fn resolve_arg(
     service: &RpcService,
     called_packages: &mut NormalizedPackages,
     arg_uses: &ArgUses,
-    arg: &rtd_rpc::proto::rtd::rpc::v2::Input,
+    arg: &rtd_rpc::proto::sui::rpc::v2::Input,
     arg_idx: usize,
 ) -> Result<CallArg> {
-    use rtd_rpc::proto::rtd::rpc::v2::input::InputKind;
+    use rtd_rpc::proto::sui::rpc::v2::input::InputKind;
 
     match UnresolvedInput::from_proto(arg)? {
         // Pure, already prepared BCS input
@@ -918,11 +918,11 @@ struct UnresolvedObjectReference {
     digest: Option<rtd_sdk_types::Digest>,
 }
 
-impl TryFrom<&rtd_rpc::proto::rtd::rpc::v2::ObjectReference> for UnresolvedObjectReference {
+impl TryFrom<&rtd_rpc::proto::sui::rpc::v2::ObjectReference> for UnresolvedObjectReference {
     type Error = FieldViolation;
 
     fn try_from(
-        value: &rtd_rpc::proto::rtd::rpc::v2::ObjectReference,
+        value: &rtd_rpc::proto::sui::rpc::v2::ObjectReference,
     ) -> Result<Self, Self::Error> {
         let object_id = value.object_id().parse().map_err(|e| {
             FieldViolation::new("object_id")
@@ -950,7 +950,7 @@ impl TryFrom<&rtd_rpc::proto::rtd::rpc::v2::ObjectReference> for UnresolvedObjec
 }
 
 struct UnresolvedInput<'a> {
-    pub kind: Option<rtd_rpc::proto::rtd::rpc::v2::input::InputKind>,
+    pub kind: Option<rtd_rpc::proto::sui::rpc::v2::input::InputKind>,
     pub pure: Option<&'a Bytes>,
     pub object_id: Option<rtd_sdk_types::Address>,
     pub version: Option<rtd_sdk_types::Version>,
@@ -961,7 +961,7 @@ struct UnresolvedInput<'a> {
 }
 
 impl<'a> UnresolvedInput<'a> {
-    fn from_proto(input: &'a rtd_rpc::proto::rtd::rpc::v2::Input) -> Result<Self, FieldViolation> {
+    fn from_proto(input: &'a rtd_rpc::proto::sui::rpc::v2::Input) -> Result<Self, FieldViolation> {
         Ok(Self {
             kind: input.kind.map(|_| input.kind()),
             literal: input.literal.as_deref(),
@@ -1005,13 +1005,13 @@ impl<'a> UnresolvedInput<'a> {
                             })?,
                         ),
                         withdraw_from: match w.source() {
-                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::Sender => {
+                            rtd_rpc::proto::sui::rpc::v2::funds_withdrawal::Source::Sender => {
                                 WithdrawFrom::Sender
                             }
-                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::Sponsor => {
+                            rtd_rpc::proto::sui::rpc::v2::funds_withdrawal::Source::Sponsor => {
                                 WithdrawFrom::Sponsor
                             }
-                            rtd_rpc::proto::rtd::rpc::v2::funds_withdrawal::Source::SenderAllowance => {
+                            rtd_rpc::proto::sui::rpc::v2::funds_withdrawal::Source::SenderAllowance => {
                                 WithdrawFrom::SenderAllowance {
                                     funder: w.funder().parse().map_err(|e| {
                                         FieldViolation::new("funder")

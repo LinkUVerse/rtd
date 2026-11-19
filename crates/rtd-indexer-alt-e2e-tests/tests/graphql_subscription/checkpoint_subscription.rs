@@ -7,8 +7,8 @@
 //! deterministic runtime.
 
 use async_graphql::connection::CursorType;
-use rtd_indexer_alt_graphql::CheckpointToken;
 use serde_json::json;
+use rtd_indexer_alt_graphql::CheckpointToken;
 use tokio_stream::StreamExt;
 
 use crate::testing::SubscriptionTestCluster;
@@ -490,6 +490,30 @@ async fn test_subscription_resume_with_after_cursor() {
     let second = checkpoint_seq(&stream.next().await.unwrap());
     assert_eq!(first, resume_seq + 1);
     assert_eq!(second, first + 1);
+}
+
+/// Resume with an `after` cursor ahead of the ledger's indexed tip, as a client does when it
+/// reconnects with the cursor of a live edge before the ledger has caught up. The subscription
+/// waits for every pipeline, the ledger's included, to reach the cursor's checkpoint before it
+/// scans, and delivery starts right after the cursor, with no repeats.
+#[tokio::test]
+async fn test_subscription_resume_with_after_cursor_ahead_of_ledger() {
+    let cluster = SubscriptionTestCluster::new().await;
+
+    // The ledger can't have indexed past the validator's tip, so it is behind this cursor.
+    let resume_seq = cluster.validator_checkpoint_tip() + 10;
+    let cursor = CheckpointToken::cursor(resume_seq).encode_cursor();
+    let query = format!(
+        r#"subscription {{ checkpoints(after: "{cursor}") {{ node {{ sequenceNumber }} }} }}"#,
+    );
+    let mut stream = cluster.subscribe(&query).await;
+
+    let mut received = vec![];
+    for _ in 0..5 {
+        received.push(checkpoint_seq(&stream.next().await.unwrap()));
+    }
+    let expected: Vec<_> = (resume_seq + 1..=resume_seq + 5).collect();
+    assert_eq!(received, expected);
 }
 
 #[tokio::test]

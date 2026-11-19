@@ -31,6 +31,7 @@ use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 use tokio::time::Instant;
 
+use simulacrum::Simulacrum;
 use rtd_consistent_store::ChainId;
 use rtd_consistent_store::Db;
 use rtd_consistent_store::DbOptions;
@@ -62,7 +63,6 @@ use rtd_types::digests::ChainIdentifier;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
-use simulacrum::Simulacrum;
 
 use crate::ingestion::SimulacrumIngestion;
 use crate::local_store::LocalStore;
@@ -242,6 +242,7 @@ impl ServiceManager {
                 ..IndexerArgs::default()
             },
             ingestion_client,
+            None,
             None,
             rtd_rpc_store::ConsistencyConfig::default(),
             None,
@@ -464,7 +465,7 @@ impl ServiceManager {
 
 #[cfg(test)]
 mod tests {
-    use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
+    use rtd_types::digests::get_mainnet_chain_identifier;
 
     use super::*;
 
@@ -534,7 +535,7 @@ mod tests {
     #[test]
     fn open_writes_metadata_and_seeds_chain_identifier() {
         let dir = tempfile::tempdir().unwrap();
-        let chain_identifier = ChainIdentifier::from(CheckpointDigest::new([0xA5; 32]));
+        let chain_identifier = get_mainnet_chain_identifier();
 
         let services =
             ServiceManager::open(dir.path(), "mainnet".to_owned(), 42, chain_identifier).unwrap();
@@ -564,7 +565,7 @@ mod tests {
     #[test]
     fn open_rejects_mismatched_metadata() {
         let dir = tempfile::tempdir().unwrap();
-        let chain_identifier = ChainIdentifier::from(CheckpointDigest::new([0xA5; 32]));
+        let chain_identifier = get_mainnet_chain_identifier();
         drop(ServiceManager::open(
             dir.path(),
             "mainnet".to_owned(),

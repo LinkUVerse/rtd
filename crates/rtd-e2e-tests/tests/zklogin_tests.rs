@@ -8,13 +8,18 @@ use fastcrypto_zkp::bn254::zk_login::ZkLoginInputs;
 use fastcrypto_zkp::bn254::zk_login_api::ZkLoginEnv;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use shared_crypto::intent::PersonalMessage;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::committee::EpochId;
-use rtd_types::crypto::{PublicKey, RtdKeyPair, Signature};
+use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair};
 use rtd_types::error::{RtdErrorKind, RtdResult, UserInputError};
 use rtd_types::messages_grpc::SubmitTxRequest;
 use rtd_types::signature::{GenericSignature, VerifyParams};
@@ -26,11 +31,6 @@ use rtd_types::utils::{
     get_legacy_zklogin_user_address, get_zklogin_user_address, make_zklogin_tx, pinned_jwks,
 };
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentMessage;
-use shared_crypto::intent::PersonalMessage;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 
@@ -254,59 +254,74 @@ async fn test_expired_zklogin_sig() {
 #[cfg(msim)]
 #[sim_test]
 async fn test_conflicting_jwks() {
-    use futures::StreamExt;
-    use rtd_json_rpc_types::RtdTransactionBlockEffectsAPI;
-    use rtd_json_rpc_types::TransactionFilter;
-    use rtd_types::base_types::ObjectID;
-    use rtd_types::transaction::{TransactionDataAPI, TransactionKind};
     use std::collections::HashSet;
-    use std::sync::{Arc, Mutex};
+    use rtd_types::RTD_AUTHENTICATOR_STATE_OBJECT_ID;
+    use rtd_types::effects::TransactionEffectsAPI;
+    use rtd_types::transaction::{TransactionDataAPI, TransactionKind};
     use tokio::time::Duration;
 
+    // The scan below reads the contents of every checkpoint the fullnode has
+    // executed, so pruning must not remove the early epochs first.
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_epoch_duration_ms(15000)
         .with_jwk_fetch_interval(Duration::from_secs(5))
+        .disable_fullnode_pruning()
         .build()
         .await;
-
-    let jwks = Arc::new(Mutex::new(Vec::new()));
-    let jwks_clone = jwks.clone();
-
-    test_cluster.fullnode_handle.rtd_node.with(|node| {
-        let mut txns = node.state().subscription_handler.subscribe_transactions(
-            TransactionFilter::ChangedObject(ObjectID::from_hex_literal("0x7").unwrap()),
-        );
-        let state = node.state();
-
-        tokio::spawn(async move {
-            while let Some(tx) = txns.next().await {
-                let digest = *tx.transaction_digest();
-                let tx = state
-                    .get_transaction_cache_reader()
-                    .get_transaction_block(&digest)
-                    .unwrap();
-                match &tx.data().intent_message().value.kind() {
-                    TransactionKind::EndOfEpochTransaction(_) => (),
-                    TransactionKind::AuthenticatorStateUpdate(update) => {
-                        let jwks = &mut *jwks_clone.lock().unwrap();
-                        for jwk in &update.new_active_jwks {
-                            jwks.push(jwk.clone());
-                        }
-                    }
-                    _ => panic!("{:?}", tx),
-                }
-            }
-        });
-    });
 
     for _ in 0..5 {
         test_cluster.wait_for_epoch(None).await;
     }
 
+    // Collect the JWKs activated by every transaction that mutated the
+    // authenticator state object by walking the checkpoints the fullnode has
+    // executed so far.
+    let jwks = test_cluster.fullnode_handle.rtd_node.with(|node| {
+        let state = node.state();
+        let cache = state.get_transaction_cache_reader();
+        let highest_executed = state
+            .get_checkpoint_store()
+            .get_highest_executed_checkpoint_seq_number()
+            .unwrap()
+            .expect("fullnode has executed at least one checkpoint");
+
+        let mut jwks = Vec::new();
+        for seq in 0..=highest_executed {
+            let contents = state
+                .get_checkpoint_contents_by_sequence_number(seq)
+                .unwrap();
+            for digests in contents.iter() {
+                let effects = cache
+                    .get_executed_effects(&digests.transaction)
+                    .expect("executed transaction has effects");
+                let mutates_authenticator_state = effects
+                    .mutated()
+                    .iter()
+                    .any(|(oref, _)| oref.0 == RTD_AUTHENTICATOR_STATE_OBJECT_ID);
+                if !mutates_authenticator_state {
+                    continue;
+                }
+
+                let tx = cache
+                    .get_transaction_block(&digests.transaction)
+                    .expect("executed transaction is in the cache");
+                match tx.data().intent_message().value.kind() {
+                    TransactionKind::EndOfEpochTransaction(_) => (),
+                    TransactionKind::AuthenticatorStateUpdate(update) => {
+                        jwks.extend(update.new_active_jwks.iter().cloned());
+                    }
+                    _ => panic!("{:?}", tx),
+                }
+            }
+        }
+        jwks
+    });
+
     let mut seen_jwks = HashSet::new();
 
     // ensure no jwk is repeated.
-    for jwk in jwks.lock().unwrap().iter() {
+    for jwk in &jwks {
         assert!(seen_jwks.insert((jwk.jwk_id.clone(), jwk.jwk.clone(), jwk.epoch)));
     }
 }
@@ -455,7 +470,8 @@ async fn zklogin_v1_to_v2_migration_scenario_test() {
             config.zklogin_max_epoch_upper_bound_delta(),
             config.additional_multisig_checks(),
             config.validate_zklogin_public_identifier(),
-        );
+        )
+        .with_mldsa65_in_multisig(config.mldsa65_auth());
 
         // Capture debug logs for assert fallback or not.
         let logs = Logs::default();

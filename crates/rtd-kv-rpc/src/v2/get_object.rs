@@ -3,9 +3,9 @@
 
 use futures::StreamExt;
 use rtd_kvstore::{BigTableClient, KeyValueStoreReader};
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, GetObjectResponse, GetObjectResult};
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsRequest;
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsResponse;
+use rtd_rpc::proto::sui::rpc::v2::{GetObjectRequest, GetObjectResponse, GetObjectResult};
 use rtd_rpc_api::{
     ObjectNotFoundError, RpcError, grpc::v2::ledger_service::validate_get_object_requests,
 };
@@ -33,10 +33,16 @@ pub(crate) async fn get_object(
         validate_get_object_requests(vec![(object_id, version)], read_mask)?;
     let (object_id, version) = requests[0];
     let object = if let Some(height) = admission {
-        client
-            .get_object_at_checkpoint(object_id.into(), version, height)
+        let object = client
+            .get_object_at_checkpoint(object_id.into(), height)
             .await?
-            .ok_or_else(|| ObjectNotFoundError::new(object_id))?
+            .ok_or_else(|| ObjectNotFoundError::new(object_id))?;
+        if let Some(version) = version {
+            if object.version().value() != version {
+                return Err(ObjectNotFoundError::new_with_version(object_id, version).into());
+            }
+        }
+        object
     } else {
         match version {
             Some(version) => client
@@ -82,7 +88,7 @@ pub(crate) async fn batch_get_objects(
             let mask = &read_mask;
             async move {
                 match reader
-                    .get_object_at_checkpoint(address.into(), version, height)
+                    .get_object_at_checkpoint(address.into(), height)
                     .await
                 {
                     Ok(Some(object)) => match object_to_response(&object, mask, resolver).await {

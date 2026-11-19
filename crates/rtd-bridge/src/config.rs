@@ -14,6 +14,13 @@ use alloy::primitives::Address as EthAddress;
 use alloy::providers::Provider;
 use anyhow::anyhow;
 use futures::StreamExt;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use std::collections::BTreeMap;
+use std::collections::HashSet;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::Arc;
 use rtd_config::Config;
 use rtd_keys::keypair_file::read_key;
 use rtd_types::base_types::ObjectRef;
@@ -25,13 +32,6 @@ use rtd_types::digests::{get_mainnet_chain_identifier, get_testnet_chain_identif
 use rtd_types::event::EventID;
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::object::Owner;
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use std::collections::BTreeMap;
-use std::collections::HashSet;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
 use tracing::info;
 
 #[serde_as]
@@ -398,20 +398,22 @@ impl BridgeNodeConfig {
             .get_chain_identifier()
             .await
             .map_err(|e| anyhow!("Error getting chain identifier from Rtd: {:?}", e))?;
-        if self.rtd.rtd_bridge_chain_id == BridgeChainId::RtdMainnet as u8 {
-            let expected = get_mainnet_chain_identifier()
-                .ok_or_else(|| anyhow!("RTD mainnet genesis identifier is not configured"))?;
-            anyhow::ensure!(
-                rtd_identifier == expected.to_string(),
-                "Expected RTD mainnet chain identifier {expected}, but connected to {rtd_identifier}"
+        if self.rtd.rtd_bridge_chain_id == BridgeChainId::RtdMainnet as u8
+            && rtd_identifier != get_mainnet_chain_identifier().to_string()
+        {
+            anyhow::bail!(
+                "Expected rtd chain identifier {}, but connected to {}",
+                self.rtd.rtd_bridge_chain_id,
+                rtd_identifier
             );
         }
-        if self.rtd.rtd_bridge_chain_id == BridgeChainId::RtdTestnet as u8 {
-            let expected = get_testnet_chain_identifier()
-                .ok_or_else(|| anyhow!("RTD testnet genesis identifier is not configured"))?;
-            anyhow::ensure!(
-                rtd_identifier == expected.to_string(),
-                "Expected RTD testnet chain identifier {expected}, but connected to {rtd_identifier}"
+        if self.rtd.rtd_bridge_chain_id == BridgeChainId::RtdTestnet as u8
+            && rtd_identifier != get_testnet_chain_identifier().to_string()
+        {
+            anyhow::bail!(
+                "Expected rtd chain identifier {}, but connected to {}",
+                self.rtd.rtd_bridge_chain_id,
+                rtd_identifier
             );
         }
         info!(

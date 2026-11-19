@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::Parser;
-use move_package_alt::{
+use move_package::{
     cache_package,
     schema::{Environment, ManifestDependencyInfo},
 };
-use rtd_package_alt::RtdFlavor;
 use serde::Deserialize;
+use rtd_package_alt::RtdFlavor;
 
 /// Download a package and return information about it. Note that local packages must use the
 /// absolute path.

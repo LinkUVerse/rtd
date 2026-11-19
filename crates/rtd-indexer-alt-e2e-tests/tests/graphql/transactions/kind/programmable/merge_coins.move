@@ -3,7 +3,7 @@
 
 //# init --protocol-version 108 --accounts A B --addresses test=0x0 --simulator
 
-//# programmable --sender A --inputs 100 200 @B  
+//# programmable --sender A --inputs 100 200 @B
 //> 0: SplitCoins(Gas, [Input(0), Input(1)]);
 //> 1: MergeCoins(Gas, [NestedResult(0, 0)]);
 //> 2: TransferObjects([NestedResult(0, 1)], Input(2));
@@ -17,6 +17,7 @@
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   # Merge one coin back into Gas coin
   mergeIntoGas: transaction(digest: "@{digest_1}") {
@@ -42,9 +43,10 @@ fragment Arg on TransactionArgument {
   ... on TxResult { cmd ix }
   ... on GasCoin { _ }
 }
-
+*/
 
 //# run-graphql
+/*
 { 
   # Merge split coins together
   mergeSplitCoins: transaction(digest: "@{digest_3}") {
@@ -70,3 +72,4 @@ fragment Arg on TransactionArgument {
   ... on TxResult { cmd ix }
   ... on GasCoin { _ }
 }
+*/

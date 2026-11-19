@@ -351,6 +351,12 @@ CompressedSignature:
       ZkLogin:
         NEWTYPE:
           TYPENAME: ZkLoginAuthenticatorAsBytes
+    5:
+      MLDSA65:
+        NEWTYPE:
+          TUPLEARRAY:
+            CONTENT: U8
+            SIZE: 3309
 CongestedObjects:
   NEWTYPESTRUCT:
     SEQ:
@@ -675,6 +681,8 @@ ExecutionErrorKind:
         STRUCT:
           - id:
               TYPENAME: ObjectID
+    42:
+      TransactionExpired: UNIT
 ExecutionFailure:
   STRUCT:
     - error:
@@ -1064,6 +1072,12 @@ PublicKey:
       ZkLogin:
         NEWTYPE:
           TYPENAME: ZkLoginPublicIdentifier
+    5:
+      MLDSA65:
+        NEWTYPE:
+          TUPLEARRAY:
+            CONTENT: U8
+            SIZE: 1952
 RandomnessRound:
   NEWTYPESTRUCT: U64
 RandomnessStateUpdate:

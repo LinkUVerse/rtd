@@ -1,3 +1,1 @@
-# enoki
-
-This package is not included in the current `rtd-ts-sdk` fork. It is not part of the supported RTD SDK surface.
+`@linku/enoki` has moved to https://github.com/LinkUVerse/ts-sdks/tree/main/packages/enoki

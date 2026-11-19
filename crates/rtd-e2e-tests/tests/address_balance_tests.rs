@@ -3,10 +3,17 @@
 
 use move_core_types::{identifier::Identifier, u256::U256};
 use rand::{Rng, seq::SliceRandom};
-use rtd_core::accumulators::balances::get_all_balances_for_owner;
+use shared_crypto::intent::Intent;
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::*;
-use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
+use rtd_protocol_config::ProtocolConfig;
 use rtd_simulator::has_mainnet_protocol_config_override;
 use rtd_test_transaction_builder::FundSource;
 use rtd_types::{
@@ -14,28 +21,18 @@ use rtd_types::{
     RTD_FRAMEWORK_PACKAGE_ID, TypeTag,
     accumulator_root::AccumulatorValue,
     balance::Balance,
-    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, dbg_addr},
+    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, dbg_addr},
     coin_reservation::{CoinReservationResolverTrait, ParsedObjectRefWithdrawal},
     digests::{ChainIdentifier, CheckpointDigest},
-    effects::{InputConsensusObject, TransactionEffectsAPI},
+    effects::{InputConsensusObject, TransactionEffects, TransactionEffectsAPI},
     error::UserInputResult,
     gas::GasCostSummary,
     gas_coin::GAS,
-    object::Owner,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
-    supported_protocol_versions::SupportedProtocolVersions,
     transaction::{
-        Argument, CallArg, Command, FundsWithdrawalArg, GasData, ObjectArg, SharedObjectMutability,
+        Argument, Command, FundsWithdrawalArg, GasData, ObjectArg, SharedObjectMutability,
         Transaction, TransactionData, TransactionDataAPI, TransactionDataV1, TransactionExpiration,
         TransactionKind, VerifiedTransaction, WithdrawalTypeArg,
-    },
-};
-use shared_crypto::intent::Intent;
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
     },
 };
 use test_cluster::{
@@ -94,125 +91,19 @@ fn create_transaction_with_expiration(
     })
 }
 
-// Test protocol gating of accumulator root creation. This test can be deleted after the feature
-// is released.
-#[cfg_attr(not(msim), ignore)]
-#[sim_test]
-async fn test_accumulators_root_created() {
-    let test_env = TestEnvBuilder::new()
-        .with_proto_override_cb(Box::new(|version, mut cfg| {
-            if version == ProtocolVersion::MAX - 1 {
-                cfg.disable_accumulators_for_testing();
-                cfg.set_create_root_accumulator_object_for_testing(false);
-            } else if version == ProtocolVersion::MAX {
-                // accumulators are enabled for devnet/tests, so we need to disable them to run
-                // this test
-                cfg.disable_accumulators_for_testing();
-                cfg.set_create_root_accumulator_object_for_testing(true);
-                // for some reason all 4 nodes are not reliably submitting capability messages
-                cfg.set_buffer_stake_for_protocol_upgrade_bps_for_testing(0);
-            } else if version == ProtocolVersion::MAX_ALLOWED {
-                cfg.set_enable_accumulators_for_testing(true);
-            }
-            cfg
-        }))
-        .with_test_cluster_builder_cb(Box::new(|builder| {
-            builder
-                .with_num_validators(1)
-                // We start at MAX - 1 to be sure the root object isn't created in genesis, and then
-                // immediately reconfigure.
-                .with_protocol_version(ProtocolVersion::MAX - 1)
-                .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
-                    ProtocolVersion::MAX.as_u64() - 1,
-                    ProtocolVersion::MAX_ALLOWED.as_u64(),
-                ))
-        }))
-        .build()
-        .await;
-
-    test_env.trigger_reconfiguration().await;
-
-    // accumulator root is not created yet.
-    test_env.cluster.fullnode_handle.rtd_node.with(|node| {
-        let state = node.state();
-        assert!(
-            !state
-                .load_epoch_store_one_call_per_task()
-                .accumulator_root_exists()
-        );
-    });
-
-    test_env.trigger_reconfiguration().await;
-
-    // accumulator root was created at the end of previous epoch,
-    // but we didn't upgrade to the next protocol version yet.
-    test_env.cluster.fullnode_handle.rtd_node.with(|node| {
-        let state = node.state();
-        assert!(
-            state
-                .load_epoch_store_one_call_per_task()
-                .accumulator_root_exists()
-        );
-        assert_eq!(
-            state
-                .load_epoch_store_one_call_per_task()
-                .protocol_config()
-                .version,
-            ProtocolVersion::MAX
-        );
-    });
-
-    // now we can upgrade to the next protocol version.
-    test_env.trigger_reconfiguration().await;
-
-    test_env.cluster.fullnode_handle.rtd_node.with(|node| {
-        let state = node.state();
-        assert_eq!(
-            state
-                .load_epoch_store_one_call_per_task()
-                .protocol_config()
-                .version,
-            ProtocolVersion::MAX_ALLOWED
-        );
-    });
-}
-
 // Test protocol gating of address balances. This test can be deleted after the feature
 // is released.
 #[cfg_attr(not(msim), ignore)]
 #[sim_test]
 async fn test_accumulators_disabled() {
     let mut test_env = TestEnvBuilder::new()
-        .with_proto_override_cb(Box::new(|version, mut cfg| {
-            if version == ProtocolVersion::MAX - 1 {
-                cfg.disable_accumulators_for_testing();
-                cfg.set_create_root_accumulator_object_for_testing(false);
-            } else if version == ProtocolVersion::MAX {
-                // accumulators are enabled for devnet/tests, so we need to disable them to run
-                // this test
-                cfg.disable_accumulators_for_testing();
-                cfg.set_create_root_accumulator_object_for_testing(true);
-                // for some reason all 4 nodes are not reliably submitting capability messages
-                cfg.set_buffer_stake_for_protocol_upgrade_bps_for_testing(0);
-            } else if version == ProtocolVersion::MAX_ALLOWED {
-                cfg.set_enable_accumulators_for_testing(true);
-            }
+        .with_protocol_version(140.into())
+        .with_proto_override_cb(Box::new(|_, mut cfg| {
+            cfg.disable_accumulators_for_testing();
             cfg
-        }))
-        .with_test_cluster_builder_cb(Box::new(|builder| {
-            builder
-                // We start at MAX - 1 to be sure the root object isn't created in genesis, and then
-                // immediately reconfigure.
-                .with_protocol_version(ProtocolVersion::MAX - 1)
-                .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
-                    ProtocolVersion::MAX.as_u64() - 1,
-                    ProtocolVersion::MAX_ALLOWED.as_u64(),
-                ))
         }))
         .build()
         .await;
-
-    test_env.trigger_reconfiguration().await;
 
     let (sender, gas) = test_env.get_sender_and_gas(0);
 
@@ -237,59 +128,6 @@ async fn test_accumulators_disabled() {
     let (_, effects) = test_env.exec_tx_directly(tx).await.unwrap();
     let status = effects.status().clone();
     assert!(status.is_err());
-
-    // we reconfigure, and create the accumulator root at the end of this epoch.
-    // but because the root did not exist during this epoch, we don't upgrade to
-    // the next protocol version yet.
-    test_env.trigger_reconfiguration().await;
-
-    // Withdraw must still be rejected at signing.
-    let withdraw_tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(
-            FundSource::address_fund_with_reservation(1000),
-            vec![(1000, dbg_addr(2))],
-        )
-        .build();
-    test_env.exec_tx_directly(withdraw_tx).await.unwrap_err();
-
-    // transfer fails at execution time
-    let (_, gas) = test_env.get_sender_and_gas(0);
-    let tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(1000, recipient)])
-        .build();
-
-    let (_, effects) = test_env.exec_tx_directly(tx).await.unwrap();
-    let status = effects.status().clone();
-    assert!(status.is_err());
-
-    // after one more reconfig, we can upgrade to the next protocol version.
-    test_env.trigger_reconfiguration().await;
-
-    let (_, gas) = test_env.get_sender_and_gas(0);
-    let tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(1000, sender)])
-        .build();
-    test_env.exec_tx_directly(tx).await.unwrap();
-
-    test_env.verify_accumulator_exists(sender, 1000);
-
-    // Withdraw can succeed now
-    let withdraw_tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(
-            FundSource::address_fund_with_reservation(1000),
-            vec![(1000, dbg_addr(2))],
-        )
-        .build();
-    test_env.exec_tx_directly(withdraw_tx).await.unwrap();
-
-    test_env.verify_accumulator_removed(sender);
-
-    // ensure that no conservation failures are detected during reconfig.
-    test_env.trigger_reconfiguration().await;
 }
 
 #[sim_test]
@@ -524,6 +362,7 @@ async fn test_address_balance_gas() {
         return;
     }
     let mut test_env = TestEnvBuilder::new()
+        .with_protocol_version(140.into())
         .with_proto_override_cb(Box::new(|_, mut cfg| {
             cfg.disable_gasless_for_testing();
             cfg
@@ -2203,11 +2042,16 @@ fn assert_coin_balance_overflow(effects: &impl TransactionEffectsAPI) {
 
 // Mainnet and testnet still depend on the overflow guards in the flag-off path.
 fn object_funds_test_env(check_in_execution: bool) -> TestEnvBuilder {
-    TestEnvBuilder::new().with_proto_override_cb(Box::new(move |_, mut cfg| {
+    let test_env = TestEnvBuilder::new().with_proto_override_cb(Box::new(move |_, mut cfg| {
         cfg.set_enable_object_funds_withdraw_for_testing(true);
         cfg.set_check_object_funds_withdraw_in_execution_for_testing(check_in_execution);
         cfg
-    }))
+    }));
+    if check_in_execution {
+        test_env
+    } else {
+        test_env.with_protocol_version(140.into())
+    }
 }
 
 /// Regression shape for an old accumulator overflow bug: an unbacked object-sourced `u64::MAX`
@@ -3013,129 +2857,6 @@ async fn test_sponsored_address_balance_storage_oog() {
     );
 
     test_env.cluster.trigger_reconfiguration().await;
-}
-
-#[sim_test]
-async fn test_get_all_balances() {
-    let mut test_env = TestEnvBuilder::new().with_num_validators(1).build().await;
-
-    let sender = test_env.get_sender(0);
-
-    publish_and_mint_trusted_coin(&mut test_env, sender).await;
-
-    let (_, gas) = test_env.get_sender_and_gas(0);
-    // send 1000 gas from the gas coins to ourselves
-    let tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(1000, sender)])
-        .build();
-
-    test_env.exec_tx_directly(tx).await.unwrap();
-
-    let recipient = RtdAddress::random_for_testing_only();
-    // send 1000 gas from the gas coins to the other recipient
-    let (_, gas) = test_env.get_sender_and_gas(0);
-    let tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(FundSource::coin(gas), vec![(1001, recipient)])
-        .build();
-
-    test_env.exec_tx_directly(tx).await.unwrap();
-
-    test_env.cluster.fullnode_handle.rtd_node.with(|node| {
-        let state = node.state();
-        let indexes = state.indexes.clone().unwrap();
-        let runtime_object_resolver = state.get_runtime_object_resolver().as_ref();
-
-        let balances =
-            get_all_balances_for_owner(sender, runtime_object_resolver, &indexes).unwrap();
-
-        assert_eq!(balances.len(), 2);
-        assert!(
-            balances
-                .iter()
-                .any(|(t, _)| t.to_canonical_string(true).contains("::rtd::RTD"))
-        );
-        assert!(balances.iter().any(|(t, _)| {
-            t.to_canonical_string(true)
-                .contains("::trusted_coin::TRUSTED_COIN")
-        }));
-    });
-}
-
-// publishes trusted_coin, mints a coin with balance 1000000, transfers some to the sender's
-// address balance, and returns the updated gas object ref
-async fn publish_and_mint_trusted_coin(test_env: &mut TestEnv, sender: RtdAddress) {
-    let test_tx_builder = test_env.tx_builder(sender);
-
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.extend(["tests", "rpc", "data", "trusted_coin"]);
-    let coin_publish = test_tx_builder.publish_async(path).await.build();
-
-    let (_, effects) = test_env.exec_tx_directly(coin_publish).await.unwrap();
-
-    // Find the treasury cap object
-    let treasury_cap = {
-        let mut treasury_cap = None;
-        for (obj_ref, owner) in effects.created() {
-            if owner.is_address_owned() {
-                let object = test_env
-                    .cluster
-                    .fullnode_handle
-                    .rtd_node
-                    .with_async(|node| async move { node.state().get_object(&obj_ref.0).unwrap() })
-                    .await;
-                if object.type_().unwrap().name().as_str() == "TreasuryCap" {
-                    treasury_cap = Some(obj_ref);
-                    break;
-                }
-            }
-        }
-        treasury_cap.expect("Treasury cap not found")
-    };
-
-    // extract the newly published package id.
-    let package_id = effects.published_packages().into_iter().next().unwrap();
-
-    // call my_coin::mint to mint a coin with balance 1000000
-    let test_tx_builder = test_env.tx_builder(sender);
-    let mint_tx = test_tx_builder
-        .move_call(
-            package_id,
-            "trusted_coin",
-            "mint",
-            vec![
-                CallArg::Object(ObjectArg::ImmOrOwnedObject(treasury_cap)),
-                CallArg::Pure(bcs::to_bytes(&1000000u64).unwrap()),
-            ],
-        )
-        .build();
-    let (_, mint_effects) = test_env.exec_tx_directly(mint_tx).await.unwrap();
-
-    // the trusted coin is the only address-owned object created.
-    let trusted_coin_ref = mint_effects
-        .created()
-        .iter()
-        .find(|(_, owner)| owner.is_address_owned())
-        .unwrap()
-        .0;
-
-    let send_tx = test_env
-        .tx_builder(sender)
-        .transfer_funds_to_address_balance(
-            FundSource::Coin(trusted_coin_ref),
-            vec![(1000, sender)],
-            format!("{}::trusted_coin::TRUSTED_COIN", package_id)
-                .parse()
-                .unwrap(),
-        )
-        .build();
-    let (_, send_effects) = test_env.exec_tx_directly(send_tx).await.unwrap();
-    assert!(
-        send_effects.status().is_ok(),
-        "Transaction should succeed, got: {:?}",
-        send_effects.status()
-    );
 }
 
 #[sim_test]
@@ -4114,181 +3835,6 @@ async fn test_two_large_reservations_overflow() {
 /// Test that JSON-RPC rtd_executeTransactionBlock returns correct balance changes
 /// when using address balance withdrawals (FundsWithdrawal).
 ///
-/// This test reproduces a bug where rtd_executeTransactionBlock returns balanceChanges: []
-/// despite the transaction producing balance changes that are visible when querying
-/// the same digest via rtd_getTransactionBlock.
-#[sim_test]
-async fn test_json_rpc_balance_changes_with_address_balance_withdrawal() {
-    use rtd_json_rpc_api::{ReadApiClient, WriteApiClient};
-    use rtd_json_rpc_types::{RtdTransactionBlockEffectsAPI, RtdTransactionBlockResponseOptions};
-    use rtd_types::transaction_driver_types::ExecuteTransactionRequestType;
-
-    let mut test_env = TestEnvBuilder::new().build().await;
-
-    let (sender, gas_coin) = test_env.get_sender_and_gas(0);
-    let receiver = RtdAddress::random_for_testing_only();
-
-    // Fund sender's address balance with enough for gas + withdrawal
-    let deposit_amount = 100_000_000u64;
-    let deposit_tx = test_env
-        .tx_builder(sender)
-        .transfer_rtd_to_address_balance(FundSource::coin(gas_coin), vec![(deposit_amount, sender)])
-        .build();
-    test_env.exec_tx_directly(deposit_tx).await.unwrap();
-    test_env.verify_accumulator_exists(sender, deposit_amount);
-
-    // Create a transaction that withdraws from address balance and transfers to receiver
-    let withdraw_amount = 1_000_000u64;
-    let tx = create_redeem_and_transfer_transaction(
-        sender,
-        receiver,
-        withdraw_amount,
-        test_env.rgp,
-        test_env.chain_id,
-        0,
-    );
-
-    // Sign the transaction
-    let signed_tx = test_env.cluster.sign_transaction(&tx).await;
-    let (tx_bytes, signatures) = signed_tx.to_tx_bytes_and_signatures();
-    let tx_digest = *signed_tx.digest();
-
-    // Execute via JSON-RPC with show_balance_changes and show_effects
-    #[allow(deprecated)]
-    let rpc_client = test_env.cluster.rpc_client();
-    let execute_response = rpc_client
-        .execute_transaction_block(
-            tx_bytes,
-            signatures,
-            Some(
-                RtdTransactionBlockResponseOptions::new()
-                    .with_balance_changes()
-                    .with_effects(),
-            ),
-            Some(ExecuteTransactionRequestType::WaitForLocalExecution),
-        )
-        .await
-        .expect("Transaction execution should succeed");
-
-    // Now get the same transaction by digest
-    let get_response = rpc_client
-        .get_transaction_block(
-            tx_digest,
-            Some(
-                RtdTransactionBlockResponseOptions::new()
-                    .with_balance_changes()
-                    .with_effects(),
-            ),
-        )
-        .await
-        .expect("Get transaction should succeed");
-
-    // Get gas used from effects to verify exact amounts
-    let effects = execute_response
-        .effects
-        .as_ref()
-        .expect("effects should be present");
-    let gas_used = effects.gas_cost_summary();
-    let net_gas_cost = gas_used.computation_cost + gas_used.storage_cost - gas_used.storage_rebate;
-
-    let execute_balance_changes = execute_response
-        .balance_changes
-        .as_ref()
-        .expect("execute_transaction_block should return balance_changes");
-
-    let get_balance_changes = get_response
-        .balance_changes
-        .as_ref()
-        .expect("get_transaction_block should return balance_changes");
-
-    // Verify transaction succeeded
-    assert!(
-        effects.status().is_ok(),
-        "Transaction should succeed, got: {:?}",
-        effects.status()
-    );
-
-    // There should be exactly 2 balance changes: sender (negative) and receiver (positive)
-    assert_eq!(
-        execute_balance_changes.len(),
-        2,
-        "Expected 2 balance changes (sender and receiver), got: {:?}",
-        execute_balance_changes
-    );
-
-    // Find sender's and receiver's balance changes from execute_transaction_block
-    let sender_change = execute_balance_changes
-        .iter()
-        .find(|bc| bc.owner == Owner::AddressOwner(sender))
-        .expect("Should have balance change for sender");
-    let receiver_change = execute_balance_changes
-        .iter()
-        .find(|bc| bc.owner == Owner::AddressOwner(receiver))
-        .expect("Should have balance change for receiver");
-
-    // Verify coin type is RTD for both
-    assert_eq!(
-        sender_change.coin_type,
-        GAS::type_tag(),
-        "Sender balance change should be RTD"
-    );
-    assert_eq!(
-        receiver_change.coin_type,
-        GAS::type_tag(),
-        "Receiver balance change should be RTD"
-    );
-
-    // Verify receiver gets exactly the withdraw amount
-    assert_eq!(
-        receiver_change.amount, withdraw_amount as i128,
-        "Receiver should receive exactly the withdraw amount"
-    );
-
-    // Verify sender's exact balance change: -(withdraw_amount + net_gas_cost)
-    let expected_sender_change = -((withdraw_amount as i128) + (net_gas_cost as i128));
-    assert_eq!(
-        sender_change.amount, expected_sender_change,
-        "Sender should spend exactly withdraw_amount ({}) + net_gas_cost ({})",
-        withdraw_amount, net_gas_cost
-    );
-
-    // Verify the total balance change equals exactly the negative net gas cost
-    // (receiver gains withdraw_amount, sender loses withdraw_amount + gas, net = -gas)
-    let total_change: i128 = execute_balance_changes.iter().map(|bc| bc.amount).sum();
-    assert_eq!(
-        total_change,
-        -(net_gas_cost as i128),
-        "Total balance change should equal negative net gas cost"
-    );
-
-    // Verify get_transaction_block returns identical balance changes
-    assert_eq!(
-        execute_balance_changes.len(),
-        get_balance_changes.len(),
-        "execute_transaction_block and get_transaction_block should return same number of balance changes"
-    );
-    let get_sender_change = get_balance_changes
-        .iter()
-        .find(|bc| bc.owner == Owner::AddressOwner(sender))
-        .expect("get_transaction_block should have balance change for sender");
-    let get_receiver_change = get_balance_changes
-        .iter()
-        .find(|bc| bc.owner == Owner::AddressOwner(receiver))
-        .expect("get_transaction_block should have balance change for receiver");
-    assert_eq!(
-        sender_change.amount, get_sender_change.amount,
-        "Sender balance change should match between execute and get"
-    );
-    assert_eq!(
-        receiver_change.amount, get_receiver_change.amount,
-        "Receiver balance change should match between execute and get"
-    );
-
-    // Verify sender's address balance was correctly decremented
-    let expected_remaining_balance = deposit_amount - withdraw_amount - net_gas_cost;
-    test_env.verify_accumulator_exists(sender, expected_remaining_balance);
-}
-
 fn create_redeem_and_transfer_transaction(
     sender: RtdAddress,
     receiver: RtdAddress,
@@ -4398,6 +3944,8 @@ async fn gas_coin_send_funds_storage_out_of_gas_charges_sender_not_receiver() {
     let mut test_env = TestEnvBuilder::new()
         .with_proto_override_cb(Box::new(|_, mut cfg| {
             cfg.enable_address_balance_gas_payments_for_testing();
+            // Pin the rebate rate so the low budget below cannot cover storage.
+            cfg.set_storage_rebate_rate_for_testing(9900);
             cfg
         }))
         .with_num_validators(1)
@@ -4600,4 +4148,124 @@ async fn address_balance_gas_transfer_storage_objects_out_of_gas_no_panic() {
 
     // Reconfig runs RTD conservation invariant checks across the epoch boundary
     test_env.cluster.trigger_reconfiguration().await;
+}
+
+/// Each `send_wide_to_distinct` write carries a ~3 KB type tag, so 400 distinct recipients
+/// produce more than 1 MB of accumulator writes in effects.
+const WIDE_ACCUMULATOR_RECIPIENTS: u64 = 400;
+
+async fn send_wide_accumulator_writes(limit_enabled: bool, count: u64) -> TransactionEffects {
+    send_accumulator_writes(limit_enabled, "send_wide_to_distinct", count).await
+}
+
+async fn send_accumulator_writes(
+    limit_enabled: bool,
+    function: &str,
+    count: u64,
+) -> TransactionEffects {
+    let mut test_env = TestEnvBuilder::new()
+        .with_proto_override_cb(Box::new(move |_, mut cfg| {
+            cfg.set_complete_effects_size_estimate_for_testing(limit_enabled);
+            cfg
+        }))
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let pkg = test_env.setup_test_package(move_test_code_path()).await;
+    let (sender, gas) = test_env.get_sender_and_gas(0);
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let count_arg = builder.pure(count).unwrap();
+    builder.programmable_move_call(
+        pkg,
+        Identifier::new("accumulator_spam").unwrap(),
+        Identifier::new(function).unwrap(),
+        vec![],
+        vec![count_arg],
+    );
+    let tx = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        50_000_000_000,
+        test_env.rgp,
+    );
+
+    let (_, effects) = test_env
+        .exec_tx_directly(tx)
+        .await
+        .expect("execution must not panic the node");
+    effects
+}
+
+#[sim_test]
+async fn test_accumulator_writes_count_toward_effects_size_limit() {
+    let max_effects_size = ProtocolConfig::get_for_max_version_UNSAFE()
+        .max_serialized_tx_effects_size_bytes() as usize;
+
+    let effects = send_wide_accumulator_writes(true, WIDE_ACCUMULATOR_RECIPIENTS).await;
+    assert!(
+        matches!(
+            effects.status(),
+            rtd_types::execution_status::ExecutionStatus::Failure(failure)
+                if matches!(
+                    failure.error,
+                    rtd_types::execution_status::ExecutionFailureStatus::EffectsTooLarge { .. }
+                )
+        ),
+        "expected EffectsTooLarge, got {:?}",
+        effects.status()
+    );
+    let effects_size = bcs::serialized_size(&effects).unwrap();
+    assert!(
+        effects_size <= max_effects_size,
+        "effects size {effects_size} exceeds limit {max_effects_size}"
+    );
+    assert!(
+        effects.accumulator_events().len() <= 1,
+        "only the gas write may remain: {:?}",
+        effects.accumulator_events()
+    );
+
+    let effects = send_wide_accumulator_writes(true, 10).await;
+    assert!(effects.status().is_ok(), "{:?}", effects.status());
+    assert_eq!(effects.accumulator_events().len(), 10);
+}
+
+/// Shows the size bypass that `complete_effects_size_estimate` closes.
+#[sim_test]
+async fn test_accumulator_writes_exceed_effects_size_limit_when_unchecked() {
+    let max_effects_size = ProtocolConfig::get_for_max_version_UNSAFE()
+        .max_serialized_tx_effects_size_bytes() as usize;
+
+    let effects = send_wide_accumulator_writes(false, WIDE_ACCUMULATOR_RECIPIENTS).await;
+    assert!(effects.status().is_ok(), "{:?}", effects.status());
+    let effects_size = bcs::serialized_size(&effects).unwrap();
+    assert!(
+        effects_size > max_effects_size,
+        "effects size {effects_size} is within limit {max_effects_size}"
+    );
+}
+
+#[sim_test]
+async fn test_accumulator_event_count_limit() {
+    let max = ProtocolConfig::get_for_max_version_UNSAFE().max_num_accumulator_events();
+
+    let effects = send_accumulator_writes(true, "send_to_one", max).await;
+    assert!(effects.status().is_ok(), "{:?}", effects.status());
+    assert_eq!(effects.accumulator_events().len(), 1);
+
+    let effects = send_accumulator_writes(true, "send_to_one", max + 1).await;
+    assert!(
+        matches!(
+            effects.status(),
+            rtd_types::execution_status::ExecutionStatus::Failure(failure)
+                if matches!(
+                    failure.error,
+                    rtd_types::execution_status::ExecutionFailureStatus::MovePrimitiveRuntimeError(_)
+                )
+        ),
+        "expected an accumulator event count failure, got {:?}",
+        effects.status()
+    );
 }

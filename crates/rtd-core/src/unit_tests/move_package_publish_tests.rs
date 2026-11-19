@@ -4,16 +4,17 @@
 use crate::authority::{
     authority_tests::{call_move, init_state_with_ids, submit_and_execute},
     move_integration_tests::{build_and_publish_test_package, build_test_package},
+    test_authority_builder::TestAuthorityBuilder,
 };
 
 use move_binary_format::CompiledModule;
 use move_core_types::identifier::Identifier;
-use rtd_protocol_config::ProtocolConfig;
+use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::{
     MOVE_STDLIB_PACKAGE_ID,
     base_types::ObjectID,
     error::{RtdErrorKind, UserInputError},
-    object::{Data, ObjectRead, Owner},
+    object::{Data, Object, ObjectRead, Owner},
     transaction::{Argument, TEST_ONLY_GAS_UNIT_FOR_PUBLISH, TransactionData},
     utils::to_sender_signed_transaction,
 };
@@ -23,11 +24,11 @@ use rtd_types::crypto::{AccountKeyPair, get_key_pair};
 use crate::authority::move_integration_tests::{
     build_multi_publish_txns, build_package, run_multi_txns,
 };
+use std::collections::HashSet;
 use rtd_framework::BuiltInFramework;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus};
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use std::collections::HashSet;
 
 #[tokio::test]
 #[cfg_attr(msim, ignore)]
@@ -356,15 +357,17 @@ async fn test_publish_more_than_max_packages_error() {
 #[cfg_attr(msim, ignore)]
 async fn test_publish_deserialize_error_phasing() {
     async fn run(unified_linkage: bool) -> (ExecutionErrorKind, Option<usize>) {
-        let _guard = ProtocolConfig::apply_overrides_for_testing(move |_, mut config| {
-            config.set_enable_unified_linkage_for_testing(unified_linkage);
-            config.set_harden_linkage_consistency_for_testing(unified_linkage);
-            config
-        });
+        let mut protocol_config = ProtocolConfig::get_for_version(140.into(), Chain::Unknown);
+        protocol_config.set_enable_unified_linkage_for_testing(unified_linkage);
+        protocol_config.set_harden_linkage_consistency_for_testing(unified_linkage);
 
         let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
         let gas_object_id = ObjectID::random();
-        let authority = init_state_with_ids(vec![(sender, gas_object_id)]).await;
+        let authority = TestAuthorityBuilder::new()
+            .with_protocol_config(protocol_config)
+            .build()
+            .await;
+        authority.insert_genesis_object(Object::with_id_owner_for_testing(gas_object_id, sender));
 
         // Valid modules, corrupted so deserialization fails.
         let mut modules =

@@ -3,11 +3,16 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::ident_str;
+use linku_common::ZipDebugEqIteratorExt;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use rtd_core::authority::AuthorityState;
 use rtd_macros::*;
+use rtd_package_resolver::{PackageStoreWithLruCache, SyncResolver};
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_types::{
     RTD_SYSTEM_PACKAGE_ID,
@@ -15,11 +20,11 @@ use rtd_types::{
     governance::StakedRtd,
     object::{Object, Owner},
     programmable_transaction_builder::ProgrammableTransactionBuilder,
+    storage::ObjectStore,
     rtd_system_state::{
         RtdSystemStateTrait,
         rtd_system_state_summary::{RtdSystemStateSummary, RtdValidatorSummary},
     },
-    storage::ObjectStore,
     transaction::{
         Argument, Command, ObjectArg, ProgrammableTransaction,
         TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, TransactionData,
@@ -28,10 +33,6 @@ use rtd_types::{
 use rtd_types::{
     base_types::SequenceNumber,
     effects::{TransactionEffects, TransactionEffectsAPI},
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
 };
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
@@ -172,12 +173,10 @@ impl StressTestRunner {
         println!("CREATED:");
         let state = self.state();
 
-        let epoch_store = state.load_epoch_store_one_call_per_task();
         let backing_package_store = state.get_backing_package_store();
-        let mut layout_resolver = epoch_store.executor().type_layout_resolver(
-            epoch_store.protocol_config(),
-            Box::new(backing_package_store.as_ref()),
-        );
+        let mut layout_resolver = SyncResolver::new(PackageStoreWithLruCache::new(
+            backing_package_store.as_ref(),
+        ));
         for (obj_ref, _) in effects.created() {
             let object_opt = state
                 .get_object_store()
@@ -185,7 +184,7 @@ impl StressTestRunner {
             let Some(object) = object_opt else { continue };
             let struct_tag = object.struct_tag().unwrap();
             let total_rtd =
-                object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                object.get_total_rtd(&mut layout_resolver).unwrap() - object.storage_rebate;
             println!(">> {struct_tag} TOTAL_RTD: {total_rtd}");
         }
 
@@ -197,7 +196,7 @@ impl StressTestRunner {
                 .unwrap();
             let struct_tag = object.struct_tag().unwrap();
             let total_rtd =
-                object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                object.get_total_rtd(&mut layout_resolver).unwrap() - object.storage_rebate;
             println!(">> {struct_tag} TOTAL_RTD: {total_rtd}");
         }
 
@@ -210,7 +209,7 @@ impl StressTestRunner {
                 .unwrap();
             let struct_tag = object.struct_tag().unwrap();
             let total_rtd =
-                object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                object.get_total_rtd(&mut layout_resolver).unwrap() - object.storage_rebate;
             println!(">> {struct_tag} TOTAL_RTD: {total_rtd}");
         }
     }
@@ -339,12 +338,10 @@ mod add_stake {
             {
                 let state = runner.state();
                 let cache = state.get_backing_package_store();
-                let epoch_store = state.load_epoch_store_one_call_per_task();
-                let mut layout_resolver = epoch_store
-                    .executor()
-                    .type_layout_resolver(epoch_store.protocol_config(), Box::new(cache.as_ref()));
+                let mut layout_resolver =
+                    SyncResolver::new(PackageStoreWithLruCache::new(cache.as_ref()));
                 let staked_amount =
-                    object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                    object.get_total_rtd(&mut layout_resolver).unwrap() - object.storage_rebate;
                 assert_eq!(staked_amount, self.stake_amount);
             };
 

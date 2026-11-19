@@ -2,7 +2,7 @@
 name = "transaction-fuzzer"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <eng@linkuverse.com>"]
 description = "Tool to fuzz the system with randomly generated transactions"
 license = "Apache-2.0"
 publish = false
@@ -21,6 +21,7 @@ tracing.workspace = true
 
 once_cell.workspace = true
 rtd-core.workspace = true
+rtd-package-resolver.workspace = true
 rtd-protocol-config.workspace = true
 rtd-types = { workspace = true, features = ["fuzzing"] }
 rtd-move-build.workspace = true

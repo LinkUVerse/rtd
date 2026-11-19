@@ -4,6 +4,7 @@ use crate::{NativesCostTable, get_extension};
 use fastcrypto::vrf::VRFProof;
 use fastcrypto::vrf::ecvrf::{ECVRFProof, ECVRFPublicKey};
 use move_binary_format::errors::PartialVMResult;
+use move_binary_format::{safe_assert, safe_assert_eq};
 use move_core_types::gas_algebra::InternalGas;
 use move_vm_runtime::{
     execution::{
@@ -46,8 +47,8 @@ pub fn ecvrf_verify(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 4);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 4);
 
     // Load the cost parameters from the protocol config
     let ecvrf_ecvrf_verify_cost_params = get_extension!(context, NativesCostTable)?
@@ -68,10 +69,12 @@ pub fn ecvrf_verify(
     // Charge the arg size dependent costs
     native_charge_gas_early_exit!(
         context,
-        ecvrf_ecvrf_verify_cost_params.ecvrf_ecvrf_verify_alpha_string_cost_per_byte
-            * (alpha_string_len as u64).into()
-            + ecvrf_ecvrf_verify_cost_params.ecvrf_ecvrf_verify_alpha_string_cost_per_block
-                * (alpha_string_len.div_ceil(ECVRF_SHA512_BLOCK_SIZE) as u64).into()
+        ecvrf_ecvrf_verify_cost_params
+            .ecvrf_ecvrf_verify_alpha_string_cost_per_byte
+            .saturating_mul(alpha_string_len as u64)
+            + ecvrf_ecvrf_verify_cost_params
+                .ecvrf_ecvrf_verify_alpha_string_cost_per_block
+                .saturating_mul(alpha_string_len.div_ceil(ECVRF_SHA512_BLOCK_SIZE) as u64)
     );
 
     let cost = context.gas_used();

@@ -36,8 +36,7 @@ pub const RTD_KEYSTORE_FILENAME: &str = "rtd.keystore";
 pub const RTD_KEYSTORE_ALIASES_FILENAME: &str = "rtd.aliases";
 pub const RTD_BENCHMARK_GENESIS_GAS_KEYSTORE_FILENAME: &str = "benchmark.keystore";
 pub const RTD_GENESIS_FILENAME: &str = "genesis.blob";
-/// There is no default public RTD devnet endpoint; configure a node URL explicitly.
-pub const RTD_DEV_NET_URL: &str = "";
+pub const RTD_DEV_NET_URL: &str = "https://fullnode.devnet.rtd.io:443";
 
 pub const AUTHORITIES_DB_NAME: &str = "authorities_db";
 pub const CONSENSUS_DB_NAME: &str = "consensus_db";

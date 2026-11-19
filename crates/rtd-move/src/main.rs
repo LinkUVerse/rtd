@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use clap::*;
 use colored::Colorize;
-use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
+use move_package_compilation::build_config::BuildConfig as MoveBuildConfig;
 use rtd_config::{RTD_CLIENT_CONFIG, rtd_config_dir};
 use rtd_move::execute_move_command;
 use rtd_sdk::wallet_context::WalletContext;

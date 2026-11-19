@@ -4,10 +4,10 @@ version: "3"
 services:
   validator:
     container_name: validator
-    image: ${RTD_NODE_IMAGE:?Set RTD_NODE_IMAGE to an RTD validator image built from this checkout}
+    image: linku/rtd-node:${RTD_SHA} # UPDATE HERE
     environment:
       - RUST_BACKTRACE=1
-      - RUST_LOG=info,rtd_core=debug,consensus=debug,jsonrpsee=error
+      - RUST_LOG=info,rtd_core=debug,consensus=debug
     labels:
       org.label-schema.name: "validator"
     ports:

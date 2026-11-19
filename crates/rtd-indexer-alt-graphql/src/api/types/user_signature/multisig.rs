@@ -46,6 +46,7 @@ pub(crate) struct MultisigMember {
 /// A multisig member's public key, varying by scheme.
 #[derive(Union, Clone)]
 pub(crate) enum MultisigMemberPublicKey {
+    MlDsa65(MlDsa65PublicKey),
     Ed25519(Ed25519PublicKey),
     Secp256k1(Secp256k1PublicKey),
     Secp256r1(Secp256r1PublicKey),
@@ -54,6 +55,13 @@ pub(crate) enum MultisigMemberPublicKey {
 }
 
 /// An Ed25519 public key.
+/// An ML-DSA-65 public key.
+#[derive(SimpleObject, Clone)]
+pub(crate) struct MlDsa65PublicKey {
+    /// The raw public key bytes.
+    bytes: Option<Base64>,
+}
+
 #[derive(SimpleObject, Clone)]
 pub(crate) struct Ed25519PublicKey {
     /// The raw public key bytes.
@@ -127,6 +135,12 @@ fn compressed_signature_to_scheme(sig: &CompressedSignature) -> Option<Signature
                 .ok()
                 .map(|native| SignatureScheme::ZkLogin(ZkLoginSignature { native }))
         }
+        CompressedSignature::MLDSA65(b) => Some(SignatureScheme::MlDsa65(
+            crate::api::types::user_signature::MlDsa65Signature {
+                signature: Some(Base64(b.0.to_vec())),
+                public_key: None,
+            },
+        )),
         CompressedSignature::Passkey(b) => {
             bcs::from_bytes::<rtd_types::passkey_authenticator::PasskeyAuthenticator>(&b.0)
                 .ok()
@@ -155,6 +169,9 @@ impl From<&rtd_types::multisig::MultiSigPublicKey> for MultisigCommittee {
 impl From<&PublicKey> for MultisigMemberPublicKey {
     fn from(pk: &PublicKey) -> Self {
         match pk {
+            PublicKey::MLDSA65(_) => MultisigMemberPublicKey::MlDsa65(MlDsa65PublicKey {
+                bytes: Some(Base64(pk.as_ref().to_vec())),
+            }),
             PublicKey::Ed25519(_) => MultisigMemberPublicKey::Ed25519(Ed25519PublicKey {
                 bytes: Some(Base64(pk.as_ref().to_vec())),
             }),

@@ -10,13 +10,13 @@ use rand::seq::SliceRandom;
 use rtd_protocol_config::Chain;
 use tokio::time::sleep;
 
+use std::sync::Arc;
+use std::time::Duration;
 use rtd_benchmark::drivers::BenchmarkCmp;
 use rtd_benchmark::drivers::BenchmarkStats;
 use rtd_benchmark::drivers::bench_driver::BenchDriver;
 use rtd_benchmark::drivers::driver::Driver;
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
-use std::sync::Arc;
-use std::time::Duration;
 
 use rtd_benchmark::benchmark_setup::BenchmarkSetup;
 use rtd_benchmark::options::Opts;
@@ -100,7 +100,8 @@ async fn main() -> Result<()> {
                 .choose(&mut rand::thread_rng())
                 .context("Failed to get proxy for system state observer")?
                 .clone(),
-        );
+        )
+        .with_setup_gas_price_multiplier(opts.setup_gas_price_multiplier);
         system_state_observer.state.changed().await?;
         eprintln!(
             "Found new state (reference gas price and/or protocol config) from system state object = {:?}",

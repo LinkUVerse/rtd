@@ -13,6 +13,8 @@ use prometheus::Registry;
 use rand::rngs::OsRng;
 use tracing::info;
 
+use simulacrum::Simulacrum;
+use simulacrum::store::in_mem_store::KeyStore;
 use rtd_protocol_config::ProtocolVersion;
 use rtd_rpc_api::RpcService;
 use rtd_rpc_api::ServerVersion;
@@ -22,11 +24,9 @@ use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_checkpoint::VerifiedCheckpoint;
+use rtd_types::storage::RpcStateReader;
 use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
-use rtd_types::storage::RpcStateReader;
-use simulacrum::Simulacrum;
-use simulacrum::store::in_mem_store::KeyStore;
 
 use crate::Node;
 use crate::context::Context;
@@ -111,9 +111,10 @@ pub async fn initialize(
     version: &str,
     data_dir: Option<PathBuf>,
     seed_input: SeedInput,
+    headers: Vec<String>,
 ) -> Result<(Context, SubscriptionServiceHandle)> {
     // 1. Prepare metadata and GraphQL, then open the RPC store before constructing ForkStore.
-    let gql = GraphQLClient::new(node.clone(), version)?;
+    let gql = GraphQLClient::new(node.clone(), version, headers)?;
     let local = MetadataStore::new(&node, forked_at_checkpoint, data_dir)?;
     let network_name = node.network_name();
     crate::seed::ensure_seed_policy(&local, &seed_input)?;
@@ -293,7 +294,7 @@ fn override_validators(
 
 #[cfg(test)]
 mod tests {
-    use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
+    use rtd_types::digests::get_mainnet_chain_identifier;
 
     use crate::seed::SeedManifest;
 
@@ -359,7 +360,7 @@ mod tests {
             temp.path(),
             "mainnet".to_owned(),
             17,
-            ChainIdentifier::from(CheckpointDigest::new([0xA5; 32])),
+            get_mainnet_chain_identifier(),
         )
         .expect("fork metadata should write");
 

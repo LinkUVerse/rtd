@@ -3,11 +3,11 @@
 
 use crate::command::Component;
 use crate::mock_storage::InMemoryObjectStore;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 use rtd_core::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use rtd_core::authority::authority_store_tables::LiveObject;
-use rtd_core::authority::shared_object_version_manager::{
-    AssignedTxAndVersions, AssignedVersions, Schedulable,
-};
+use rtd_core::authority::shared_object_version_manager::{AssignedTxAndVersions, AssignedVersions};
 use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
 use rtd_core::authority::{AuthorityState, ExecutionEnv};
 use rtd_core::authority_server::{ValidatorService, ValidatorServiceMetrics};
@@ -28,8 +28,6 @@ use rtd_types::object::Object;
 use rtd_types::transaction::{
     DEFAULT_VALIDATOR_GAS_PRICE, Transaction, TransactionDataAPI, VerifiedTransaction,
 };
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct SingleValidator {
@@ -40,7 +38,6 @@ pub struct SingleValidator {
 impl SingleValidator {
     pub(crate) async fn new(genesis_objects: &[Object], component: Component) -> Self {
         let validator = TestAuthorityBuilder::new()
-            .disable_indexer()
             .with_starting_objects(genesis_objects)
             // This is needed to properly run checkpoint executor.
             .insert_genesis_checkpoint()
@@ -199,7 +196,7 @@ impl SingleValidator {
             .read_objects_for_execution(&executable.key(), assigned_versions, &input_objects)
             .unwrap();
 
-        let (gas_status, input_objects) = rtd_transaction_checks::check_certificate_input(
+        let input_objects = rtd_transaction_checks::check_certificate_input(
             &executable,
             objects,
             self.epoch_store.protocol_config(),
@@ -222,7 +219,7 @@ impl SingleValidator {
                 // funds, so there are no unsettled withdrawals to account for.
                 &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
                 gas_data,
-                gas_status,
+                self.epoch_store.reference_gas_price(),
                 kind,
                 None, // compat_args
                 signer,
@@ -296,11 +293,13 @@ impl SingleValidator {
             .iter()
             .map(|tx| self.create_executable(tx.clone()))
             .collect();
-        let assignables: Vec<_> = executables.iter().map(Schedulable::Transaction).collect();
+        // The benchmark runs no settlements, so it must not claim an accumulator root
+        // version: transactions are enqueued one at a time, and a version group is only
+        // enqueued once (see `execution_scheduler::causal_admission`).
         self.epoch_store
-            .assign_shared_object_versions_idempotent(
+            .assign_shared_object_versions_for_tests(
                 self.get_validator().get_object_cache_reader().as_ref(),
-                assignables.iter(),
+                &executables,
             )
             .unwrap()
     }

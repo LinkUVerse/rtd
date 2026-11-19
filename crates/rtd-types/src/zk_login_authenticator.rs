@@ -5,7 +5,7 @@ use crate::crypto::PublicKey;
 use crate::signature_verification::VerifiedDigestCache;
 use crate::{
     base_types::{EpochId, RtdAddress},
-    crypto::{DefaultHash, RtdSignature, Signature, SignatureScheme},
+    crypto::{DefaultHash, Signature, SignatureScheme, RtdSignature},
     digests::ZKLoginInputsDigest,
     error::{RtdError, RtdErrorKind, RtdResult},
     signature::{AuthenticatorTrait, VerifyParams},
@@ -210,6 +210,17 @@ impl AuthenticatorTrait for ZkLoginAuthenticator {
                 error: format!("OIDC provider not supported: {}", self.inputs.get_iss()),
             }
             .into());
+        }
+
+        // zkLogin is classical (Groth16 over BN254); a PQ ephemeral key adds nothing.
+        match self.user_signature.scheme() {
+            SignatureScheme::ED25519 | SignatureScheme::Secp256k1 | SignatureScheme::Secp256r1 => {}
+            s => {
+                return Err(RtdErrorKind::InvalidSignature {
+                    error: format!("zkLogin ephemeral signature scheme not supported: {s}"),
+                }
+                .into());
+            }
         }
 
         // Verify the ephemeral signature over the intent message of the transaction data.

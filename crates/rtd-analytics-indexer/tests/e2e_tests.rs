@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 
-use linku_common::ZipDebugEqIteratorExt;
 use mock_store::MockStore;
+use linku_common::ZipDebugEqIteratorExt;
 use object_store::ObjectStore;
 use object_store::ObjectStoreExt as _;
 use object_store::memory::InMemory;
@@ -21,7 +21,7 @@ use rtd_indexer_alt_framework_store_traits::Connection;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::test_checkpoint_data_builder::AdvanceEpochConfig;
 use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;

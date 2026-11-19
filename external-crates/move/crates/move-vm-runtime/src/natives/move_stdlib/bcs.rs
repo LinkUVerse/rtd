@@ -12,28 +12,25 @@ use crate::{
     },
     pop_arg,
 };
-use move_binary_format::{errors::PartialVMResult, safe_unwrap};
+use move_binary_format::{errors::PartialVMResult, safe_assert_eq, safe_unwrap};
 use move_core_types::{
-    gas_algebra::{InternalGas, InternalGasPerByte, NumBytes},
-    vm_status::sub_status::NFE_BCS_SERIALIZATION_FAILURE,
+    gas_algebra::InternalGas, vm_status::sub_status::NFE_BCS_SERIALIZATION_FAILURE,
 };
 use smallvec::smallvec;
 use std::{collections::VecDeque, sync::Arc};
 /***************************************************************************************************
  * native fun to_bytes
  *
- *   gas cost: size_of(val_type) * input_unit_cost +        | get type layout
- *             size_of(val) * input_unit_cost +             | serialize value
- *             max(size_of(output), 1) * output_unit_cost
+ *   gas cost: layout_cost(val_type) +
+ *             max(size_of(output), legacy_min_output_size) * output_unit_cost
  *
- *             If any of the first two steps fails, a partial cost + an additional failure_cost
- *             will be charged.
+ *             Layout or serialization failures additionally attempt to charge failure_cost.
  *
  **************************************************************************************************/
 #[derive(Debug, Clone)]
 pub struct ToBytesGasParameters {
-    pub per_byte_serialized: InternalGasPerByte,
-    pub legacy_min_output_size: NumBytes,
+    pub per_byte_serialized: InternalGas,
+    pub legacy_min_output_size: u64,
     pub failure: InternalGas,
 }
 
@@ -45,8 +42,8 @@ fn native_to_bytes(
     mut ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.len() == 1);
-    debug_assert!(args.len() == 1);
+    safe_assert_eq!(ty_args.len(), 1);
+    safe_assert_eq!(args.len(), 1);
 
     // pop type and value
     let ref_to_val = pop_arg!(args, Reference);
@@ -81,11 +78,10 @@ fn native_to_bytes(
     };
     native_charge_gas_early_exit!(
         context,
-        gas_params.per_byte_serialized
-            * std::cmp::max(
-                NumBytes::new(serialized_value.len() as u64),
-                gas_params.legacy_min_output_size,
-            )
+        gas_params.per_byte_serialized.saturating_mul(std::cmp::max(
+            serialized_value.len() as u64,
+            gas_params.legacy_min_output_size,
+        ))
     );
 
     Ok(NativeResult::ok(
@@ -97,7 +93,8 @@ fn native_to_bytes(
 pub fn make_native_to_bytes(gas_params: ToBytesGasParameters) -> NativeFunction {
     Arc::new(
         move |context, ty_args, args| -> PartialVMResult<NativeResult> {
-            native_to_bytes(&gas_params, context, ty_args, args)
+            let result = native_to_bytes(&gas_params, context, ty_args, args);
+            NativeResult::map_out_of_gas(context.gas_budget(), result)
         },
     )
 }

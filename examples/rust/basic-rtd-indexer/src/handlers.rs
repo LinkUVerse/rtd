@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// docs::#processordeps (see rtd/docs/content/guides/developer/advanced/custom-indexer.mdx)
+// docs::#processordeps (see https://docs.rtd.io/develop/accessing-data/custom-indexer/custom-indexers)
 use anyhow::Result;
 use std::sync::Arc;
 use rtd_indexer_alt_framework::pipeline::Processor;

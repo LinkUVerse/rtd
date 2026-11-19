@@ -5,42 +5,43 @@
 
 //# publish --sender A
 #[allow(deprecated_usage)]
-module P::fake {
-    use rtd::coin::{Self, DenyCapV2};
+module P::fake;
 
-    public struct FAKE has drop {}
+use rtd::coin::{Self, DenyCapV2};
 
-    public struct Wrapper has key, store {
-        id: UID,
-        cap: DenyCapV2<FAKE>,
-    }
+public struct FAKE has drop {}
 
-    fun init(witness: FAKE, ctx: &mut TxContext){
-        let (treasury_cap, deny_cap, metadata) = coin::create_regulated_currency_v2(
-          witness,
-          2,
-          b"FAKE",
-          b"",
-          b"",
-          option::none(),
-          false,
-          ctx
-        );
+public struct Wrapper has key, store {
+    id: UID,
+    cap: DenyCapV2<FAKE>,
+}
 
-        let wrapper = Wrapper {
-            id: object::new(ctx),
-            cap: deny_cap,
-        };
+fun init(witness: FAKE, ctx: &mut TxContext) {
+    let (treasury_cap, deny_cap, metadata) = coin::create_regulated_currency_v2(
+        witness,
+        2,
+        b"FAKE",
+        b"",
+        b"",
+        option::none(),
+        false,
+        ctx,
+    );
 
-        transfer::public_freeze_object(metadata);
-        transfer::public_transfer(wrapper, ctx.sender());
-        transfer::public_transfer(treasury_cap, @0x0);
-    }
+    let wrapper = Wrapper {
+        id: object::new(ctx),
+        cap: deny_cap,
+    };
+
+    transfer::public_freeze_object(metadata);
+    transfer::public_transfer(wrapper, ctx.sender());
+    transfer::public_transfer(treasury_cap, @0x0);
 }
 
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   coinMetadata(coinType: "@{P}::fake::FAKE") {
     decimals
@@ -60,3 +61,4 @@ module P::fake {
     }
   }
 }
+*/

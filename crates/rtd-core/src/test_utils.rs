@@ -3,6 +3,9 @@
 
 use fastcrypto::traits::KeyPair;
 use move_core_types::{account_address::AccountAddress, ident_str};
+use shared_crypto::intent::{Intent, IntentScope};
+use std::sync::Arc;
+use std::time::Duration;
 use rtd_config::genesis::Genesis;
 use rtd_macros::nondeterministic;
 use rtd_types::base_types::{FullObjectRef, ObjectID, random_object_ref};
@@ -22,9 +25,6 @@ use rtd_types::{
     message_envelope::Message,
     transaction::CertifiedTransaction,
 };
-use shared_crypto::intent::{Intent, IntentScope};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::time::timeout;
 use tracing::{info, warn};
 

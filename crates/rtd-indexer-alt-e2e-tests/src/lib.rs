@@ -17,6 +17,10 @@ use diesel::QueryDsl;
 use diesel_async::RunQueryDsl;
 use prost::Message;
 use reqwest::Client;
+use serde_json::Value;
+use serde_json::json;
+use simulacrum::AdvanceEpochConfig;
+use simulacrum::Simulacrum;
 use rtd_futures::service::Service;
 use rtd_indexer_alt::BootstrapGenesis;
 use rtd_indexer_alt::config::IndexerConfig;
@@ -36,10 +40,6 @@ use rtd_indexer_alt_graphql::RpcArgs as GraphQlArgs;
 use rtd_indexer_alt_graphql::args::SubscriptionArgs;
 use rtd_indexer_alt_graphql::config::RpcConfig as GraphQlConfig;
 use rtd_indexer_alt_graphql::start_rpc as start_graphql;
-use rtd_indexer_alt_jsonrpc::NodeArgs as JsonRpcNodeArgs;
-use rtd_indexer_alt_jsonrpc::RpcArgs as JsonRpcArgs;
-use rtd_indexer_alt_jsonrpc::config::RpcConfig as JsonRpcConfig;
-use rtd_indexer_alt_jsonrpc::start_rpc as start_jsonrpc;
 use rtd_indexer_alt_reader::consistent_reader::ConsistentReaderArgs;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeArgs;
 use rtd_indexer_alt_reader::kv_loader::KvArgs;
@@ -47,9 +47,12 @@ use rtd_indexer_alt_reader::system_package_task::SystemPackageTaskArgs;
 use rtd_kv_rpc::KvRpcConfig;
 use rtd_kv_rpc::KvRpcServer;
 use rtd_kvstore::ALL_PIPELINE_NAMES;
+use rtd_kvstore::BITMAP_INDEX_V2_PIPELINE;
 use rtd_kvstore::BigTableClient;
 use rtd_kvstore::BigTableIndexer;
+use rtd_kvstore::BitmapSchema;
 use rtd_kvstore::CHECKPOINTS_PIPELINE;
+use rtd_kvstore::EVENT_BITMAP_INDEX_V2_PIPELINE;
 use rtd_kvstore::IndexerConfig as BtIndexerConfig;
 use rtd_kvstore::IngestionConfig as BtIngestionConfig;
 use rtd_kvstore::KeyValueStoreReader;
@@ -65,7 +68,7 @@ use rtd_protocol_config::Chain;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::AccountKeyPair;
@@ -74,10 +77,6 @@ use rtd_types::error::ExecutionError;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::messages_checkpoint::VerifiedCheckpoint;
 use rtd_types::transaction::Transaction;
-use serde_json::Value;
-use serde_json::json;
-use simulacrum::AdvanceEpochConfig;
-use simulacrum::Simulacrum;
 use tempfile::TempDir;
 use tokio::time::error::Elapsed;
 use tokio::time::interval;
@@ -105,9 +104,9 @@ pub struct FullCluster {
     temp_dir: TempDir,
 }
 
-/// A collection of the off-chain services (an indexer, a database, and JSON-RPC/GraphQL servers
-/// that read from that database), grouped together to simplify set-up and tear-down for tests. The
-/// included RPC servers do not support transaction dry run and execution.
+/// A collection of the off-chain services (an indexer, a database, and a GraphQL server that reads
+/// from that database), grouped together to simplify set-up and tear-down for tests. The included
+/// RPC servers do not support transaction dry run and execution.
 ///
 /// The database is temporary, and will be cleaned up when the cluster is dropped, and the RPCs are
 /// set-up to listen on a random, available port, to avoid conflicts when multiple instances are
@@ -115,9 +114,6 @@ pub struct FullCluster {
 pub struct OffchainCluster {
     /// The address the consistent store is listening on.
     consistent_listen_address: SocketAddr,
-
-    /// The address the JSON-RPC server is listening on.
-    jsonrpc_listen_address: SocketAddr,
 
     /// The address the GraphQL server is listening on.
     graphql_listen_address: SocketAddr,
@@ -163,8 +159,6 @@ pub struct OffchainClusterConfig {
     pub fullnode_args: FullnodeArgs,
     pub indexer_config: IndexerConfig,
     pub consistent_config: ConsistentConfig,
-    pub jsonrpc_config: JsonRpcConfig,
-    pub jsonrpc_node_args: JsonRpcNodeArgs,
     pub graphql_config: GraphQlConfig,
     pub bootstrap_genesis: Option<BootstrapGenesis>,
     pub kv_rpc_config: KvRpcConfig,
@@ -189,8 +183,8 @@ impl FullCluster {
     }
 
     /// Creates a new cluster executing transactions using `executor`. The indexer is configured
-    /// using `indexer_args` and `indexer_config, the JSON-RPC server is configured using
-    /// `jsonrpc_config`, and the GraphQL server is configured using `graphql_config`.
+    /// using `indexer_args` and `indexer_config`, and the GraphQL server is configured using
+    /// `graphql_config`.
     pub async fn new_with_configs(
         mut executor: Simulacrum,
         offchain_cluster_config: OffchainClusterConfig,
@@ -274,8 +268,11 @@ impl FullCluster {
             checkpoint.sequence_number,
             timeout,
         );
+        let kv_rpc = self
+            .offchain
+            .wait_for_kv_rpc(checkpoint.sequence_number, timeout);
 
-        try_join!(indexer, consistent_store, graphql, bigtable)
+        try_join!(indexer, consistent_store, graphql, bigtable, kv_rpc)
             .expect("Timed out waiting for off-chain services");
 
         checkpoint
@@ -320,11 +317,6 @@ impl FullCluster {
     /// The URL to send Consistent Store requests to.
     pub fn consistent_store_url(&self) -> Url {
         self.offchain.consistent_store_url()
-    }
-
-    /// The URL to send JSON-RPC requests to.
-    pub fn jsonrpc_url(&self) -> Url {
-        self.offchain.jsonrpc_url()
     }
 
     /// The URL to send GraphQL requests to.
@@ -381,6 +373,11 @@ impl FullCluster {
     ) -> Result<(), Elapsed> {
         self.offchain.wait_for_graphql(checkpoint, timeout).await
     }
+
+    /// Waits until kv-rpc serves the given `checkpoint`, or the `timeout` is reached (an error).
+    pub async fn wait_for_kv_rpc(&self, checkpoint: u64, timeout: Duration) -> Result<(), Elapsed> {
+        self.offchain.wait_for_kv_rpc(checkpoint, timeout).await
+    }
 }
 
 impl OffchainCluster {
@@ -388,9 +385,8 @@ impl OffchainCluster {
     ///
     /// - `indexer_args`, `client_args`, and `indexer_config` control the indexer. In particular
     ///   `client_args` is used to configure the client that the indexer uses to fetch checkpoints.
-    /// - `jsonrpc_config` controls the JSON-RPC server.
     /// - `graphql_config` controls the GraphQL server.
-    /// - `registry` is used to register metrics for the indexer, JSON-RPC, and GraphQL servers.
+    /// - `registry` is used to register metrics for the indexer and GraphQL servers.
     pub async fn new(
         client_args: ClientArgs,
         OffchainClusterConfig {
@@ -399,8 +395,6 @@ impl OffchainCluster {
             fullnode_args,
             indexer_config,
             consistent_config,
-            jsonrpc_config,
-            jsonrpc_node_args,
             graphql_config,
             bootstrap_genesis,
             kv_rpc_config,
@@ -412,9 +406,6 @@ impl OffchainCluster {
         let consistent_port = get_available_port();
         let consistent_listen_address =
             SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), consistent_port);
-
-        let jsonrpc_port = get_available_port();
-        let jsonrpc_listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), jsonrpc_port);
 
         let graphql_port = get_available_port();
         let graphql_listen_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), graphql_port);
@@ -436,11 +427,6 @@ impl OffchainCluster {
         let consistent_args = ConsistentArgs {
             rpc_listen_address: consistent_listen_address,
             tls: ConsistentTlsArgs::default(),
-        };
-
-        let jsonrpc_args = JsonRpcArgs {
-            rpc_listen_address: jsonrpc_listen_address,
-            ..Default::default()
         };
 
         let graphql_args = GraphQlArgs {
@@ -486,11 +472,6 @@ impl OffchainCluster {
             ..Default::default()
         };
 
-        // One switch drives both sides: the kv-rpc server only serves the List
-        // APIs when they are enabled, and the graphql/jsonrpc readers only
-        // consume them when they are. Off by default, matching production.
-        let enable_list_apis = kv_rpc_config.enable_list_apis();
-
         let (bigtable_client, bigtable_emulator, archival_service) = start_archival(
             client_args.clone(),
             kv_rpc_address,
@@ -507,23 +488,8 @@ impl OffchainCluster {
                     .parse()
                     .expect("Failed to parse kv-rpc URI"),
             ),
-            enable_list_apis: Some(enable_list_apis),
             ..Default::default()
         };
-
-        let jsonrpc = start_jsonrpc(
-            Some(database_url.clone()),
-            DbArgs::default(),
-            kv_args.clone(),
-            consistent_reader_args.clone(),
-            jsonrpc_args,
-            jsonrpc_node_args,
-            SystemPackageTaskArgs::default(),
-            jsonrpc_config,
-            registry,
-        )
-        .await
-        .context("Failed to start JSON-RPC server")?;
 
         let graphql = start_graphql(
             Some(database_url.clone()),
@@ -544,13 +510,11 @@ impl OffchainCluster {
 
         let services = indexer
             .merge(consistent_store)
-            .merge(jsonrpc)
             .merge(graphql)
             .merge(archival_service);
 
         Ok(Self {
             consistent_listen_address,
-            jsonrpc_listen_address,
             graphql_listen_address,
             kv_rpc_listen_address: kv_rpc_address,
             kv_rpc_plaintext_listen_address: kv_rpc_plaintext_address,
@@ -572,12 +536,6 @@ impl OffchainCluster {
     /// The URL to send Consistent Store requests to.
     pub fn consistent_store_url(&self) -> Url {
         Url::parse(&format!("http://{}/", self.consistent_listen_address))
-            .expect("Failed to parse RPC URL")
-    }
-
-    /// The URL to send JSON-RPC requests to.
-    pub fn jsonrpc_url(&self) -> Url {
-        Url::parse(&format!("http://{}/", self.jsonrpc_listen_address))
             .expect("Failed to parse RPC URL")
     }
 
@@ -797,6 +755,43 @@ impl OffchainCluster {
         .await
     }
 
+    /// Waits until kv-rpc's served height, which bounds every answer it gives, has reached the
+    /// given `checkpoint`, or the `timeout` is reached (an error). The height comes from
+    /// `GetServiceInfo`: a cached copy of the BigTable watermarks that kv-rpc refreshes in the
+    /// background, so it can trail them.
+    pub async fn wait_for_kv_rpc(&self, checkpoint: u64, timeout: Duration) -> Result<(), Elapsed> {
+        let url = self.kv_rpc_url().to_string();
+        tokio::time::timeout(timeout, async move {
+            let mut interval = interval(Duration::from_millis(200));
+            let mut client = None;
+            loop {
+                interval.tick().await;
+                if client.is_none() {
+                    client =
+                        rpc::v2::ledger_service_client::LedgerServiceClient::connect(url.clone())
+                            .await
+                            .ok();
+                }
+                let Some(client) = client.as_mut() else {
+                    continue;
+                };
+                if client
+                    .get_service_info(rpc::v2::GetServiceInfoRequest::default())
+                    .await
+                    .is_ok_and(|response| {
+                        response
+                            .into_inner()
+                            .checkpoint_height
+                            .is_some_and(|cp| cp >= checkpoint)
+                    })
+                {
+                    break;
+                }
+            }
+        })
+        .await
+    }
+
     /// Waits until every pipeline in `pipelines` has caught up to the given `checkpoint`, or the
     /// `timeout` is reached (an error).
     pub async fn wait_for_bigtable(
@@ -836,8 +831,6 @@ impl Default for OffchainClusterConfig {
             fullnode_args: FullnodeArgs::default(),
             indexer_config: IndexerConfig::for_test(),
             consistent_config: ConsistentConfig::for_test(),
-            jsonrpc_config: Default::default(),
-            jsonrpc_node_args: Default::default(),
             graphql_config: Default::default(),
             bootstrap_genesis: None,
             kv_rpc_config: KvRpcConfig::default(),
@@ -908,6 +901,11 @@ pub async fn write_checkpoint(path: &Path, checkpoint: Checkpoint) -> anyhow::Re
     Ok(())
 }
 
+/// Alpha BigTable pipelines the archival stack registers: the v2 bitmap pipelines, whose tables
+/// kv-rpc reads.
+const BIGTABLE_ALPHA_PIPELINES: [&str; 2] =
+    [BITMAP_INDEX_V2_PIPELINE, EVENT_BITMAP_INDEX_V2_PIPELINE];
+
 /// Start the archival stack: BigTable emulator, BigTable indexer, and rtd-kv-rpc.
 async fn start_archival(
     client_args: ClientArgs,
@@ -943,6 +941,7 @@ async fn start_archival(
         CommitterConfig::default(),
         BtIndexerConfig::default(),
         bt_pipeline_layer,
+        &BIGTABLE_ALPHA_PIPELINES,
         Chain::Unknown,
         registry,
     )
@@ -956,14 +955,15 @@ async fn start_archival(
         .await
         .context("Failed to start BigTable indexer")?;
 
+    let ledger_history = kv_rpc_config.ledger_history();
     let kv_rpc_server = KvRpcServer::new_local_with_config(
         emulator.host().to_string(),
         INSTANCE_ID.to_string(),
         None,
-        kv_rpc_config.ledger_history(),
+        ledger_history,
         kv_rpc_config.request_bigtable_concurrency(),
         kv_rpc_config.stages(),
-        kv_rpc_config.enable_list_apis(),
+        true,
     )
     .await
     .context("Failed to create KvRpcServer")?;

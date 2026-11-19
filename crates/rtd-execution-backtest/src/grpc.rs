@@ -16,7 +16,7 @@ use futures::StreamExt as _;
 use futures::TryStreamExt as _;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::proto::proto_to_timestamp_ms;
-use rtd_rpc::proto::rtd::rpc::v2 as rpc;
+use rtd_rpc::proto::sui::rpc::v2 as rpc;
 use rtd_types::base_types::ObjectID;
 use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
 use rtd_types::object::Object;

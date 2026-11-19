@@ -7,7 +7,7 @@ use move_core_types::language_storage::TypeTag;
 use rtd_types::{
     accumulator_root::AccumulatorObjId,
     balance::Balance,
-    base_types::{RtdAddress, SequenceNumber},
+    base_types::{SequenceNumber, RtdAddress},
     error::{RtdErrorKind, RtdResult, UserInputError},
 };
 

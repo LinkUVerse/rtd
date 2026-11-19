@@ -1,6 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+import { useRtdClientContext } from "@linku/dapp-kit";
 import { formatAddress } from "@linku/rtd/utils";
 import { CheckIcon, CopyIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
@@ -18,10 +19,11 @@ export function ExplorerLink({
   isAddress?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const explorer = import.meta.env.VITE_RTD_EXPLORER_URL?.trim();
-  const link = explorer
-    ? `${explorer.replace(/\/$/, "")}/${isAddress ? "address" : "object"}/${encodeURIComponent(id)}`
-    : undefined;
+  const { network } = useRtdClientContext();
+
+  const link = `https://suiexplorer.com/${
+    isAddress ? "address" : "object"
+  }/${id}?network=${network}`;
 
   const copy = () => {
     navigator.clipboard.writeText(id);
@@ -45,13 +47,9 @@ export function ExplorerLink({
         />
       )}
 
-      {link ? (
-        <a href={link} target="_blank" rel="noreferrer">
-          {formatAddress(id)}
-        </a>
-      ) : (
-        <span title={id}>{formatAddress(id)}</span>
-      )}
+      <a href={link} target="_blank" rel="noreferrer">
+        {formatAddress(id)}
+      </a>
     </span>
   );
 }

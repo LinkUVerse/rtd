@@ -14,9 +14,9 @@ use crate::Result;
 use crate::RpcError;
 use crate::RpcService;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::VerifySignatureRequest;
-use rtd_rpc::proto::rtd::rpc::v2::VerifySignatureResponse;
-use rtd_rpc::proto::rtd::rpc::v2::signature_verification_service_server::SignatureVerificationService;
+use rtd_rpc::proto::sui::rpc::v2::VerifySignatureRequest;
+use rtd_rpc::proto::sui::rpc::v2::VerifySignatureResponse;
+use rtd_rpc::proto::sui::rpc::v2::signature_verification_service_server::SignatureVerificationService;
 
 #[tonic::async_trait]
 impl SignatureVerificationService for RpcService {
@@ -180,7 +180,7 @@ fn signature_may_contain_zklogin(signature: &rtd_sdk_types::UserSignature) -> bo
 
 fn build_zklogin_verifier(
     service: &RpcService,
-    request_jwks: &[rtd_rpc::proto::rtd::rpc::v2::ActiveJwk],
+    request_jwks: &[rtd_rpc::proto::sui::rpc::v2::ActiveJwk],
 ) -> Result<rtd_crypto::zklogin::ZkloginVerifier> {
     // If jwks from the request is empty we load the current set of active jwks that are onchain
     let jwks = {

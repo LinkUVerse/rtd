@@ -5,24 +5,36 @@
 
 #![allow(dead_code)]
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use prost_types::FieldMask;
 use rand::rngs::OsRng;
 use rand::seq::IteratorRandom;
+use shared_crypto::intent::Intent;
+use std::time::Duration;
+use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_rosetta::errors::Error;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
-    Bcs, ChangedObject, ExecuteTransactionRequest, ExecutedTransaction, GetObjectRequest,
-    GetTransactionRequest, ListOwnedObjectsRequest, Transaction as GrpcTransaction, UserSignature,
+use rtd_rpc::proto::sui::rpc::v2::{
+    Bcs, ChangedObject, ExecuteTransactionRequest, ExecutedTransaction, GetBalanceRequest,
+    GetObjectRequest, GetTransactionRequest, ListOwnedObjectsRequest,
+    Transaction as GrpcTransaction, UserSignature,
 };
 use rtd_types::{
+    Identifier, RTD_FRAMEWORK_PACKAGE_ID,
     base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress},
-    coin::Coin,
+    coin::{COIN_MODULE_NAME, Coin},
+    gas_coin::GAS,
     object::Object,
-    transaction::Transaction,
+    programmable_transaction_builder::ProgrammableTransactionBuilder,
+    transaction::{Argument, Command, Transaction, TransactionData, TransactionDataAPI},
 };
-use std::time::Duration;
+
+pub const RTD_COIN_TYPE: &str =
+    "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD";
+
+/// Gas budget for the RTD transfers the helpers below execute.
+const RTD_TRANSFER_GAS_BUDGET: u64 = 50_000_000;
 
 /// Helper function to get all coins for an address using gRPC list_owned_objects
 /// This replaces get_all_coins JSON-RPC calls with native gRPC implementation
@@ -77,13 +89,9 @@ pub async fn get_random_rtd(
     sender: RtdAddress,
     except: Vec<ObjectID>,
 ) -> ObjectRef {
-    let coins = get_coins_by_type(
-        client,
-        sender,
-        Some("0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD"),
-    )
-    .await
-    .unwrap();
+    let coins = get_coins_by_type(client, sender, Some(RTD_COIN_TYPE))
+        .await
+        .unwrap();
 
     let coin = coins
         .iter()
@@ -100,6 +108,128 @@ pub fn get_coin_value(object: &Object) -> u64 {
         .expect("Object should be a coin")
         .expect("Coin should have valid balance data")
         .1
+}
+
+/// Total balance of `coin_type` held by `address`: its coin objects plus its address balance.
+pub async fn get_total_balance(
+    client: &mut GrpcClient,
+    address: RtdAddress,
+    coin_type: &str,
+) -> u64 {
+    let request = GetBalanceRequest::default()
+        .with_owner(address.to_string())
+        .with_coin_type(coin_type.to_string());
+    client
+        .state_client()
+        .get_balance(request)
+        .await
+        .unwrap()
+        .into_inner()
+        .balance
+        .and_then(|b| b.balance)
+        .unwrap_or(0)
+}
+
+/// Total RTD balance of `address`: its `Coin<RTD>` objects plus its RTD address balance.
+pub async fn get_rtd_balance(client: &mut GrpcClient, address: RtdAddress) -> u64 {
+    get_total_balance(client, address, RTD_COIN_TYPE).await
+}
+
+/// Transfer every `Coin<RTD>` owned by `owner` to `recipient`, paying gas from those coins, so
+/// `owner` is left without any RTD coin objects.
+pub async fn send_all_rtd_coins(
+    client: &mut GrpcClient,
+    keystore: &Keystore,
+    owner: RtdAddress,
+    recipient: RtdAddress,
+) -> Result<()> {
+    let coins: Vec<ObjectRef> = get_coins_by_type(client, owner, Some(RTD_COIN_TYPE))
+        .await?
+        .iter()
+        .map(|coin| coin.compute_object_reference())
+        .collect();
+    let (gas_payment, other_coins) = coins
+        .split_first()
+        .ok_or_else(|| anyhow!("{owner} owns no RTD coins"))?;
+    let gas_price = client.get_reference_gas_price().await?;
+    let tx_data = TransactionData::new_pay_all_rtd(
+        owner,
+        other_coins.to_vec(),
+        recipient,
+        *gas_payment,
+        RTD_TRANSFER_GAS_BUDGET,
+        gas_price,
+    );
+    sign_and_execute(client, keystore, tx_data).await
+}
+
+/// Send exactly `amount` MIST from `sender` to `recipient` as a single new `Coin<RTD>`.
+pub async fn send_rtd_coin(
+    client: &mut GrpcClient,
+    keystore: &Keystore,
+    sender: RtdAddress,
+    recipient: RtdAddress,
+    amount: u64,
+) -> Result<()> {
+    let gas_payment = get_random_rtd(client, sender, vec![]).await;
+    let gas_price = client.get_reference_gas_price().await?;
+    let tx_data = TransactionData::new_transfer_rtd(
+        recipient,
+        sender,
+        Some(amount),
+        gas_payment,
+        RTD_TRANSFER_GAS_BUDGET,
+        gas_price,
+    );
+    sign_and_execute(client, keystore, tx_data).await
+}
+
+/// Send exactly `amount` MIST from `sender` to `recipient`'s RTD address balance.
+pub async fn send_rtd_to_address_balance(
+    client: &mut GrpcClient,
+    keystore: &Keystore,
+    sender: RtdAddress,
+    recipient: RtdAddress,
+    amount: u64,
+) -> Result<()> {
+    let gas_payment = get_random_rtd(client, sender, vec![]).await;
+    let gas_price = client.get_reference_gas_price().await?;
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let amount_arg = builder.pure(amount)?;
+    let funds = builder.command(Command::SplitCoins(Argument::GasCoin, vec![amount_arg]));
+    let recipient_arg = builder.pure(recipient)?;
+    builder.command(Command::move_call(
+        RTD_FRAMEWORK_PACKAGE_ID,
+        Identifier::from(COIN_MODULE_NAME),
+        Identifier::new("send_funds")?,
+        vec![GAS::type_tag()],
+        vec![funds, recipient_arg],
+    ));
+    let tx_data = TransactionData::new_programmable(
+        sender,
+        vec![gas_payment],
+        builder.finish(),
+        RTD_TRANSFER_GAS_BUDGET,
+        gas_price,
+    );
+    sign_and_execute(client, keystore, tx_data).await
+}
+
+async fn sign_and_execute(
+    client: &mut GrpcClient,
+    keystore: &Keystore,
+    tx_data: TransactionData,
+) -> Result<()> {
+    let signature = keystore
+        .sign_secure(&tx_data.sender(), &tx_data, Intent::rtd_transaction())
+        .await?;
+    let response =
+        execute_transaction(client, &Transaction::from_data(tx_data, vec![signature])).await?;
+    let status = response.effects().status();
+    if !status.success() {
+        return Err(anyhow!("Transaction failed: {:?}", status.error()));
+    }
+    Ok(())
 }
 
 /// Extract object reference from changed_objects in transaction response

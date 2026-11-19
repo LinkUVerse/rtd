@@ -3,8 +3,8 @@
 
 use crate::{ErrorReason, Result, RpcError, RpcService};
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageService;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageService;
+use rtd_rpc::proto::sui::rpc::v2::{
     GetDatatypeRequest, GetDatatypeResponse, GetFunctionRequest, GetFunctionResponse,
     GetPackageRequest, GetPackageResponse, ListPackageVersionsRequest, ListPackageVersionsResponse,
 };

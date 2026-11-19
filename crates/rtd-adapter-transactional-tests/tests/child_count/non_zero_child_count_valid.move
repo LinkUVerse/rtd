@@ -8,36 +8,35 @@
 
 //# publish
 
-module test::m {
-    use rtd::dynamic_object_field as ofield;
+module test::m;
 
-    public struct S has key, store {
-        id: rtd::object::UID,
-    }
+use rtd::dynamic_object_field as ofield;
 
-    public struct R has key, store {
-        id: rtd::object::UID,
-        s: S,
-    }
+public struct S has key, store {
+    id: rtd::object::UID,
+}
 
-    public entry fun mint(ctx: &mut TxContext) {
-        let mut id = rtd::object::new(ctx);
-        let child = S { id: rtd::object::new(ctx) };
-        ofield::add(&mut id, 0u64, child);
-        rtd::transfer::public_transfer(S { id }, tx_context::sender(ctx))
-    }
+public struct R has key, store {
+    id: rtd::object::UID,
+    s: S,
+}
 
-    public entry fun mint_and_share(ctx: &mut TxContext) {
-        let mut id = rtd::object::new(ctx);
-        let child = S { id: rtd::object::new(ctx) };
-        ofield::add(&mut id, 0u64, child);
-        rtd::transfer::public_share_object(S { id })
-    }
+public entry fun mint(ctx: &mut TxContext) {
+    let mut id = rtd::object::new(ctx);
+    let child = S { id: rtd::object::new(ctx) };
+    ofield::add(&mut id, 0u64, child);
+    rtd::transfer::public_transfer(S { id }, tx_context::sender(ctx))
+}
 
-    public entry fun transfer(s: S, recipient: address) {
-        rtd::transfer::public_transfer(s, recipient)
-    }
+public entry fun mint_and_share(ctx: &mut TxContext) {
+    let mut id = rtd::object::new(ctx);
+    let child = S { id: rtd::object::new(ctx) };
+    ofield::add(&mut id, 0u64, child);
+    rtd::transfer::public_share_object(S { id })
+}
 
+public entry fun transfer(s: S, recipient: address) {
+    rtd::transfer::public_transfer(s, recipient)
 }
 
 //

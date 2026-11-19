@@ -83,7 +83,7 @@ public struct StakedRtd has key, store {
 }
 
 /// An alternative to `StakedRtd` that holds the pool token amount instead of the RTD balance.
-/// StakedRtd objects can be converted to FungibleStakedRtds after the initial warmup period.
+/// StakedRtd objects can be converted to FungibleStakedSuis after the initial warmup period.
 /// The advantage of this is that you can now merge multiple StakedRtd objects from different
 /// activation epochs into a single FungibleStakedRtd object.
 public struct FungibleStakedRtd has key, store {

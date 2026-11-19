@@ -18,9 +18,9 @@ use move_vm_types::{
     pop_arg,
     values::{Struct, Value, Vector},
 };
-use rtd_types::{TypeTag, base_types::MoveObjectType};
 use smallvec::smallvec;
 use std::collections::VecDeque;
+use rtd_types::{TypeTag, base_types::MoveObjectType};
 use tracing::{error, instrument};
 
 const E_BCS_SERIALIZATION_FAILURE: u64 = 2;
@@ -102,7 +102,7 @@ pub fn read_setting_impl(
 
     native_charge_gas_early_exit!(
         context,
-        config_read_setting_impl_cost_per_byte * u64::from(size).into()
+        config_read_setting_impl_cost_per_byte.saturating_mul(u64::from(size))
     );
 
     Ok(NativeResult::ok(

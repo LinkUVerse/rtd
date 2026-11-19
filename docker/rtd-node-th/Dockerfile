@@ -43,6 +43,8 @@ COPY --from=builder /rtd/target/release/rtd      /opt/rtd/bin/rtd-th
 COPY --from=builder /rtd/target/release/rtd-tool /opt/rtd/bin/rtd-tool-th
 COPY --from=builder /rtd/target/release/stress   /opt/rtd/bin/stress-th
 
+ENV PATH="$PATH:/opt/rtd/bin"
+
 ARG BUILD_DATE
 ARG GIT_REVISION
 LABEL build-date=$BUILD_DATE

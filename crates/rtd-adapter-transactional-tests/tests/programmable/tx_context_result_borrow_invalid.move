@@ -6,7 +6,7 @@
 // the TxContext return rule, so TxContext can never become a PTB result even with references
 // allowed in PTBs
 
-//# init --addresses test=0x0 --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0
 
 //# publish
 module test::m;
@@ -19,26 +19,19 @@ public fun imm_id(ctx: &TxContext): &TxContext {
     ctx
 }
 
-public fun mut_tx(_: &mut TxContext) {
-}
+public fun mut_tx(_: &mut TxContext) {}
 
-public fun imm_tx(_: &TxContext) {
-}
+public fun imm_tx(_: &TxContext) {}
 
-public fun imm_imm_tx(_: &TxContext, _: &TxContext) {
-}
+public fun imm_imm_tx(_: &TxContext, _: &TxContext) {}
 
-public fun gen_mut<T>(_: &mut T) {
-}
+public fun gen_mut<T>(_: &mut T) {}
 
-public fun gen_imm<T>(_: &T) {
-}
+public fun gen_imm<T>(_: &T) {}
 
-public fun gen_mut_tx<T>(_: &mut T, _: &mut TxContext) {
-}
+public fun gen_mut_tx<T>(_: &mut T, _: &mut TxContext) {}
 
-public fun gen_imm_tx<T>(_: &T, _: &TxContext) {
-}
+public fun gen_imm_tx<T>(_: &T, _: &TxContext) {}
 
 public fun gen_mut_id<T>(x: &mut T): &mut T {
     x

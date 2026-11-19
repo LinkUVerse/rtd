@@ -6,21 +6,21 @@ use std::num::NonZeroUsize;
 use anyhow::{Result, anyhow};
 use once_cell::sync::Lazy;
 use prost_types::FieldMask;
+use serde_json::json;
+use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_rosetta::CoinMetadataCache;
 use rtd_rosetta::operations::Operations;
 use rtd_rosetta::types::PreprocessMetadata;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     BatchGetObjectsRequest, GetObjectRequest, GetTransactionRequest,
 };
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::supported_protocol_versions::ProtocolConfig;
 use rtd_types::transaction::{Transaction, TransactionData};
-use serde_json::json;
-use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 use super::rosetta_client::{RosettaError, start_rosetta_test_server};
@@ -621,6 +621,7 @@ async fn test_pay_with_many_small_coins_with_budget() -> Result<()> {
             keystore,
             Some(PreprocessMetadata {
                 budget: Some(budget),
+                estimate_only: false,
             }),
         )
         .await
@@ -1071,6 +1072,7 @@ async fn test_pay_with_many_small_coins_fail_insufficient_balance_with_budget() 
             keystore,
             Some(PreprocessMetadata {
                 budget: Some(budget as u64 + 1), // add 1 to fail
+                estimate_only: false,
             }),
         )
         .await;
@@ -1264,6 +1266,7 @@ async fn test_pay_with_many_small_coins_fail_insufficient_budget() -> Result<()>
             keystore,
             Some(PreprocessMetadata {
                 budget: Some(budget as u64),
+                estimate_only: false,
             }),
         )
         .await;

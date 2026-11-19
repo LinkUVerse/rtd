@@ -1,11 +1,5 @@
 # DeepBook Predict examples
 
-These examples are inactive until DeepBook Predict and its SDK deployment
-record are available on RTD. Set `RTD_PREDICT_NETWORK`,
-`RTD_PREDICT_GRPC_URL`, `RTD_PREDICT_DEPLOYMENT`, and `RTD_CHAIN_ID` from that
-deployment. The example checks the SDK deployment name and chain ID before
-using its package and object IDs.
-
 TypeScript sources for the DeepBook Predict docs. The docs pull these files in
 with `<ImportContent mode="code" tag="..." />`, so the published samples stay
 tied to code that type-checks.
@@ -29,8 +23,31 @@ Each source file wraps its doc chunk in `// docs::#<tag>` / `// docs::/#<tag>`
 markers. The tags map to these pages:
 
 - `config`, `client`, `create-manager`, `markets`, `mint-binary`: DeepBook Predict landing quickstart.
-- `config`, `client`, `create-manager`, `markets`, `mint-binary`, `mint-range`, `redeem`, `supply`, `withdraw`: Testnet workflow tutorial.
-- `sessions-authorize`, `sessions-list`, `sessions-trade`, `sessions-revoke`: Sessions contract reference.
+- `config`, `client`, `create-manager`, `markets`, `queue-mint`, `queue-sell`, `supply`, `withdraw`: Testnet workflow tutorial.
+- `queue-mint`, `queue-sell`: Delayed Execution contract reference and the Positions SDK page.
+- `mint-binary`, `mint-range`, `redeem`: the immediate trade path, on the Predict contract reference.
+- `sessions-authorize`, `sessions-list`, `sessions-trade`, `sessions-queue`, `sessions-revoke`: Sessions contract reference.
+
+From Predict protocol version 4, a network's trades are queued orders: an
+order is placed now and filled or refunded shortly after, at Pyth's signed
+price for a fixed instant. `queue-mint.ts`, `queue-sell.ts` and
+`sessions-queue.ts` use that path. `mint.ts`, `mint-range.ts`, `redeem.ts` and
+the trade wrappers in `sessions-trade.ts` are the immediate path, which a
+network runs only before its delayed-execution cutover, so those files abort on
+both networks. Both networks run Predict protocol version 5, which also retires
+settled redemption, so `claimSettled` in `redeem.ts` and
+`claimSettledAsSession` in `sessions-trade.ts` abort too. The queue's
+settlement walk pays every queued fill with no claim. Only Predict protocol
+version 5, `deepbook_predict_orders` version 2 and Sessions version 4 accept
+calls. `client.predict.read.executionMode()` reports which path a network is
+on.
+
+Testnet works from `@linku/deepbook-v3` 2.10.0. Mainnet needs 2.13.0 or
+later, the first release that calls Predict protocol version 5,
+`deepbook_predict_orders` version 2 and Sessions version 4 there, because
+earlier releases call a Predict, order-desk or Sessions version that the
+Mainnet Version 5 cutover retired. The `package.json` floor is 2.13.0, with
+the `@linku/rtd` 2.39.1 peer dependency it names.
 
 The `sessions-*` files import from `@linku/deepbook-v3/sessions`, a separate
 subpath from `/predict`. They build owner-signed grant transactions and

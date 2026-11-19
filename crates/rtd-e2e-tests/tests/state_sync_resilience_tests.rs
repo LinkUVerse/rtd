@@ -3,6 +3,8 @@
 
 #[cfg(msim)]
 mod test {
+    use std::sync::Arc;
+    use std::time::Duration;
     use rtd_config::p2p::{DiscoveryConfig, StateSyncConfig};
     use rtd_macros::sim_test;
     use rtd_simulator::SimConfig;
@@ -10,8 +12,6 @@ mod test {
     use rtd_simulator::net::NetSim;
     use rtd_simulator::net::config::{InterNodeLatencyMap, LatencyDistribution};
     use rtd_simulator::plugin::simulator;
-    use std::sync::Arc;
-    use std::time::Duration;
     use test_cluster::TestClusterBuilder;
 
     fn simple_latency_config() -> SimConfig {

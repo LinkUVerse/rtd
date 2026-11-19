@@ -18,7 +18,7 @@ use futures::stream::BoxStream;
 use rtd_kvstore::tables;
 use rtd_kvstore::{CheckpointData, TransactionData};
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, ExecutedTransaction, TransactionEffects};
+use rtd_rpc::proto::sui::rpc::v2::{Checkpoint, ExecutedTransaction, TransactionEffects};
 use rtd_rpc_api::RpcError;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::storage::ObjectKey;

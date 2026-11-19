@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::base_types::ObjectID;
 use rtd_types::object::Object;
 

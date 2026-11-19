@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prometheus::Registry;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Weak};
 use rtd_config::NodeConfig;
 use rtd_node::{RtdNode, RtdNodeHandle};
 use rtd_types::base_types::ConciseableName;
-use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tracing::{info, trace};
 
@@ -87,6 +87,10 @@ impl Container {
     /// Get a RtdNodeHandle to the node owned by the container.
     pub fn get_node_handle(&self) -> Option<RtdNodeHandle> {
         Some(RtdNodeHandle::new(self.node_watch.borrow().upgrade()?))
+    }
+
+    pub fn sim_node_id(&self) -> Option<rtd_simulator::task::NodeId> {
+        self.handle.as_ref().map(|h| h.node_id)
     }
 
     /// Check to see that the Node is still alive by checking if the receiving side of the

@@ -1,7 +1,7 @@
 [package]
 name = "rtd-indexer-alt-reader"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -23,6 +23,7 @@ diesel.workspace = true
 diesel-async = { workspace = true, features = ["bb8", "postgres", "async-connection-wrapper"] }
 futures.workspace = true
 http.workspace = true
+http-body-util.workspace = true
 prost-types.workspace = true
 prometheus.workspace = true
 thiserror.workspace = true
@@ -37,7 +38,7 @@ linku-common.workspace = true
 
 rtd-futures.workspace = true
 rtd-indexer-alt-consistent-api.workspace = true
-rtd-indexer-alt-metrics.workspace = true
+rtd-indexer-alt-metrics = { workspace = true, features = ["postgres"] }
 rtd-indexer-alt-schema.workspace = true
 rtd-kvstore.workspace = true
 rtd-package-resolver.workspace = true
@@ -48,6 +49,5 @@ rtd-sql-macro.workspace = true
 rtd-types.workspace = true
 
 [dev-dependencies]
-rtd-protocol-config.workspace = true
-serde.workspace = true
+move-binary-format.workspace = true
 tokio-stream.workspace = true

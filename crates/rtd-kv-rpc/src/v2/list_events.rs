@@ -20,12 +20,12 @@ use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc::v2::Event as ProtoEvent;
-use rtd_rpc::proto::rtd::rpc::v2::ListEventsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListEventsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::Event as ProtoEvent;
+use rtd_rpc::proto::sui::rpc::v2::ListEventsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListEventsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_api::ErrorReason;
 use rtd_rpc_api::RpcError;
 use rtd_rpc_api::ledger_history::query_options::IntraTxCoordinate;
@@ -140,7 +140,7 @@ pub(crate) async fn list_events(
         .boxed());
     }
 
-    let scan_budget = ctx.scan_budget(BitmapIndexSpec::event());
+    let scan_budget = ctx.scan_budget(BitmapIndexSpec::event(rtd_kvstore::BitmapSchema::V2));
     let frontier_to_position: fn(u64) -> IntraTxCoordinate = if filtered {
         |seq| IntraTxCoordinate::from(event_seq::decode_event_seq(seq))
     } else {
@@ -159,7 +159,7 @@ pub(crate) async fn list_events(
             .eval_bitmap_query_stream(
                 query,
                 event_seq::packed_range(event_bounds.lo, event_bounds.hi),
-                BitmapIndexSpec::event(),
+                BitmapIndexSpec::event(rtd_kvstore::BitmapSchema::V2),
                 options.scan_direction(),
                 scan_budget,
                 ctx.bitmap_skip_policy(),
@@ -837,7 +837,7 @@ mod tests {
         query_context_with_registry,
     };
     use move_core_types::ident_str;
-    use rtd_rpc::proto::rtd::rpc::v2 as proto;
+    use rtd_rpc::proto::sui::rpc::v2 as proto;
     use rtd_rpc_cursor::CursorToken;
     use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use rtd_types::{base_types::ObjectID, event::Event, gas_coin::GAS};
@@ -1095,7 +1095,7 @@ mod tests {
     use std::ops::Bound;
 
     fn options(ordering: Ordering) -> QueryOptions {
-        let mut request = rtd_rpc::proto::rtd::rpc::v2::QueryOptions::default();
+        let mut request = rtd_rpc::proto::sui::rpc::v2::QueryOptions::default();
         request.ordering = Some(match ordering {
             Ordering::Ascending => 0,
             Ordering::Descending => 1,

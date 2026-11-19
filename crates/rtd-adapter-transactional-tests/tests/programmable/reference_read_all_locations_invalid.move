@@ -5,53 +5,53 @@
 // `SplitCoins` amounts and `TransferObjects` recipients are always `u64` and `address`, which
 // have `copy`, so they cannot be tested here.
 
-//# init --addresses test=0x0 --accounts A --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0 --accounts A
 
 //# publish
-module test::m {
-    use rtd::coin::Coin;
-    use rtd::rtd::RTD;
+module test::m;
 
-    public struct NoCopy has drop, store {
-        value: u64,
-    }
+use rtd::coin::Coin;
+use rtd::rtd::RTD;
 
-    public struct Obj has key, store {
-        id: UID,
-        inner: NoCopy,
-    }
+public struct NoCopy has drop, store {
+    value: u64,
+}
 
-    public fun id_ref<T>(x: &T): &T {
-        x
-    }
+public struct Obj has key, store {
+    id: UID,
+    inner: NoCopy,
+}
 
-    public fun borrow_mut<T>(x: &mut T): &mut T {
-        x
-    }
+public fun id_ref<T>(x: &T): &T {
+    x
+}
 
-    public fun no_copy(value: u64): NoCopy {
-        NoCopy { value }
-    }
+public fun borrow_mut<T>(x: &mut T): &mut T {
+    x
+}
 
-    public fun borrow_both(a: &NoCopy, b: &NoCopy): (&NoCopy, &NoCopy) {
-        (a, b)
-    }
+public fun no_copy(value: u64): NoCopy {
+    NoCopy { value }
+}
 
-    public fun new_obj(value: u64, ctx: &mut TxContext): Obj {
-        Obj { id: object::new(ctx), inner: NoCopy { value } }
-    }
+public fun borrow_both(a: &NoCopy, b: &NoCopy): (&NoCopy, &NoCopy) {
+    (a, b)
+}
 
-    public fun borrow_inner(o: &Obj): &NoCopy {
-        &o.inner
-    }
+public fun new_obj(value: u64, ctx: &mut TxContext): Obj {
+    Obj { id: object::new(ctx), inner: NoCopy { value } }
+}
 
-    public fun take(_: NoCopy) {}
+public fun borrow_inner(o: &Obj): &NoCopy {
+    &o.inner
+}
 
-    public fun take_vec(_: vector<NoCopy>) {}
+public fun take(_: NoCopy) {}
 
-    public fun take_coin(c: Coin<RTD>, ctx: &TxContext) {
-        transfer::public_transfer(c, ctx.sender())
-    }
+public fun take_vec(_: vector<NoCopy>) {}
+
+public fun take_coin(c: Coin<RTD>, ctx: &TxContext) {
+    transfer::public_transfer(c, ctx.sender())
 }
 
 // Move call value parameter

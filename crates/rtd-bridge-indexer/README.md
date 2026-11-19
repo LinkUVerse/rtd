@@ -8,7 +8,7 @@ Rtd Bridge Indexer is a binary that scans Rtd Bridge transactions on Rtd and Eth
 cargo build --bin bridge-indexer --release
 ```
 
-Build the indexer from source. No public RTD Bridge Indexer image is assumed.
+The pre-built Docker image for Bridge Indexer can be found in `linku/rtd-tools:{SHA}`
 
 ## Run Binary
 
@@ -19,26 +19,23 @@ bridge-indexer --config-path config.yaml
 
 ## Config
 
-RTD has no public Mainnet or published Bridge deployment. Replace every placeholder
-below with values from a network and bridge contract that you operate before running
-the indexer. The upstream Sui deployment addresses and checkpoint numbers do not
-identify RTD deployments.
-
 ```yaml
 ---
-remote_store_url: "<RTD_CHECKPOINT_STORE_URL>"
-eth_rpc_url: "<ETH_RPC_URL>"
-rtd_rpc_url: "<RTD_RPC_URL>"
+remote_store_url: https://checkpoints.mainnet.rtd.io
+eth_rpc_url: {eth rpc url}
+rtd_rpc_url: {rtd rpc url}
 
 concurrency: 500
-checkpoints_path: "<CHECKPOINTS_PATH>"
+checkpoints_path: {path-for-checkpoints}
 
-eth_rtd_bridge_contract_address: "<DEPLOYED_BRIDGE_CONTRACT_ADDRESS>"
-metric_port: <METRICS_PORT>
+eth_rtd_bridge_contract_address: 0xda3bD1fE1973470312db04551B65f401Bc8a92fD # <-- mainnet, 0xAE68F87938439afEEDd6552B0E83D2CbC2473623 for testnet
+metric_port: {port to export metrics}
 
-rtd_bridge_genesis_checkpoint: <RTD_BRIDGE_GENESIS_CHECKPOINT>
-eth_bridge_genesis_block: <ETH_BRIDGE_GENESIS_BLOCK>
+rtd_bridge_genesis_checkpoint: 55455583 # <-- mainnet, 43917829 for testnet
+# genesis block number for eth
+eth_bridge_genesis_block: 20811249 # <-- mainnet, 5997013 for testnet
 
-eth_ws_url: "<ETH_WEBSOCKET_URL>"
+eth_ws_url: {eth websocket url}
 
 ```
+

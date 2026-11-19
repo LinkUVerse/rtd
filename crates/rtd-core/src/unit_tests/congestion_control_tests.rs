@@ -16,6 +16,7 @@ use crate::{
     move_call,
 };
 use move_core_types::ident_str;
+use std::sync::Arc;
 use rtd_macros::{register_fail_point_arg, sim_test};
 use rtd_protocol_config::{
     Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
@@ -29,13 +30,12 @@ use rtd_types::transaction::PlainTransactionWithClaims;
 use rtd_types::transaction::VerifiedTransaction;
 use rtd_types::transaction::{ObjectArg, SharedObjectMutability};
 use rtd_types::{
-    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber},
+    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair},
     execution_status::{CongestedObjects, ExecutionErrorKind},
     object::Object,
     programmable_transaction_builder::ProgrammableTransactionBuilder,
 };
-use std::sync::Arc;
 
 pub const TEST_ONLY_GAS_PRICE: u64 = 1000;
 pub const TEST_ONLY_GAS_UNIT: u64 = 10_000;
@@ -343,7 +343,7 @@ async fn test_congestion_control_execution_cancellation() {
     let assigned_versions = scheduled_txns
         .iter()
         .find(|(s, _)| s.key() == tx_key)
-        .map(|(_, v)| v.clone())
+        .map(|(_, env)| env.assigned_versions.clone())
         .expect("Transaction should have assigned versions");
 
     let execution_env = ExecutionEnv::new().with_assigned_versions(assigned_versions);
@@ -381,8 +381,7 @@ async fn test_congestion_control_execution_cancellation() {
             effects,
             None,
             authority_state_2.get_object_cache_reader().as_ref(),
-        )
-        .unwrap();
+        );
     let execution_env = ExecutionEnv::new().with_assigned_versions(assigned_versions);
     let (effects_2, execution_error) = authority_state_2
         .try_execute_executable_for_test(&executable, execution_env)

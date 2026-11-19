@@ -4,6 +4,7 @@
 use move_binary_format::CompiledModule;
 use move_trace_format::format::MoveTraceBuilder;
 use move_vm_config::verifier::{MeterConfig, VerifierConfig};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::execution::ExecutionTiming;
 use rtd_types::execution_params::ExecutionOrEarlyError;
@@ -14,23 +15,20 @@ use rtd_types::{
     digests::TransactionDigest,
     effects::TransactionEffects,
     error::{ExecutionError, RtdError, RtdResult},
-    execution::{ExecutionResult, TypeLayoutStore},
-    gas::RtdGasStatus,
+    execution::ExecutionResult,
+    gas::{GasUsageReport, RtdGasStatus, RtdGasStatusAPI},
     inner_temporary_store::InnerTemporaryStore,
-    layout_resolver::LayoutResolver,
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use linku_common::debug_fatal;
 use move_bytecode_verifier_meter::Meter;
 use move_vm_runtime_v3::move_vm::MoveVM;
+use linku_common::debug_fatal;
 use rtd_adapter_v3::adapter::{new_move_vm, run_metered_move_bytecode_verifier};
 use rtd_adapter_v3::execution_engine::{
     execute_genesis_state_update, execute_transaction_to_effects,
 };
-use rtd_adapter_v3::type_layout_resolver::TypeLayoutResolver;
 use rtd_move_natives_v3::all_natives;
 use rtd_types::storage::BackingStore;
 use rtd_verifier_v3::meter::RtdVerifierMeter;
@@ -76,7 +74,7 @@ impl executor::Executor for Executor {
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -84,11 +82,17 @@ impl executor::Executor for Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionFailure>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let (inner_temp_store, gas_status, effects, timings, result) =
             execute_transaction_to_effects::<execution_mode::Normal>(
                 store,
@@ -112,7 +116,7 @@ impl executor::Executor for Executor {
         }
         (
             inner_temp_store,
-            gas_status,
+            gas_status.gas_usage_report(),
             effects,
             timings,
             result.map_err(ExecutionFailure::from),
@@ -132,7 +136,7 @@ impl executor::Executor for Executor {
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -140,11 +144,17 @@ impl executor::Executor for Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionError>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let (inner_temp_store, gas_status, effects, timings, result) =
             execute_transaction_to_effects::<execution_mode::Normal>(
                 store,
@@ -166,7 +176,13 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(protocol_config, transaction_digest, error);
         }
-        (inner_temp_store, gas_status, effects, timings, result)
+        (
+            inner_temp_store,
+            gas_status.gas_usage_report(),
+            effects,
+            timings,
+            result,
+        )
     }
 
     fn dev_inspect_transaction(
@@ -181,7 +197,7 @@ impl executor::Executor for Executor {
         input_objects: CheckedInputObjects,
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -189,10 +205,16 @@ impl executor::Executor for Executor {
         skip_all_checks: bool,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Result<Vec<ExecutionResult>, ExecutionError>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let (inner_temp_store, gas_status, effects, _timings, result) = if skip_all_checks {
             execute_transaction_to_effects::<execution_mode::DevInspect<true>>(
                 store,
@@ -233,7 +255,12 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(protocol_config, transaction_digest, error);
         }
-        (inner_temp_store, gas_status, effects, result)
+        (
+            inner_temp_store,
+            gas_status.gas_usage_report(),
+            effects,
+            result,
+        )
     }
 
     fn update_genesis_state(
@@ -269,14 +296,6 @@ impl executor::Executor for Executor {
             input_objects,
             pt,
         )
-    }
-
-    fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
-        &'vm self,
-        _protocol_config: &'vm ProtocolConfig,
-        store: Box<dyn TypeLayoutStore + 'store>,
-    ) -> Box<dyn LayoutResolver + 'r> {
-        Box::new(TypeLayoutResolver::new(&self.0, store))
     }
 }
 

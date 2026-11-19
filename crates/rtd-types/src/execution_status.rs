@@ -6,10 +6,10 @@ use crate::base_types::RtdAddress;
 use crate::error::{BoxError, ExecutionError, ExecutionErrorMetadata, ExecutionErrorTrait};
 use move_binary_format::file_format::{CodeOffset, TypeParameterIndex};
 use move_core_types::language_storage::ModuleId;
-use rtd_macros::EnumVariantOrder;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
+use rtd_macros::EnumVariantOrder;
 use thiserror::Error;
 
 #[cfg(test)]
@@ -298,6 +298,9 @@ pub enum ExecutionErrorKind {
 
     #[error("Non-exclusive write input object {id} has been modified")]
     NonExclusiveWriteInputObjectModified { id: ObjectID },
+
+    #[error("Transaction expired: the consensus commit timestamp is after its max_timestamp")]
+    TransactionExpired,
     // NOTE: if you want to add a new enum,
     // please add it at the end for Rust SDK backward compatibility.
 }

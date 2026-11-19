@@ -10,11 +10,14 @@ use rtd_data_store::{
 use anyhow::{Context, Result, anyhow, bail};
 use move_binary_format::CompiledModule;
 use move_core_types::account_address::AccountAddress;
-use move_package_alt::{
+use move_package::{
     RootPackage,
     schema::{Environment, EnvironmentName},
 };
-use move_package_alt_compilation::build_config::BuildConfig as MoveBuildConfig;
+use move_package_compilation::build_config::BuildConfig as MoveBuildConfig;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::PathBuf;
 use rtd_move_build::BuildConfig;
 use rtd_package_alt::RtdFlavor;
 use rtd_types::{
@@ -23,9 +26,6 @@ use rtd_types::{
     move_package::{MovePackage, TypeOrigin, UpgradeInfo},
     object::{Data, Object},
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
-use std::path::PathBuf;
 
 /// Information about a package in the cache
 pub struct PackageInfo {

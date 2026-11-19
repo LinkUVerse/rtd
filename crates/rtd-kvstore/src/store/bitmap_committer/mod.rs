@@ -70,7 +70,8 @@
 //! normal `tx_hi` tells the committer which buckets were already sealed before
 //! startup, so replayed rows for older buckets are ignored. The bitmap-only
 //! `bucket_start_cp` tells `init_watermark` how far to rewind the framework so
-//! the active bucket is rebuilt from replay.
+//! the active bucket is rebuilt from replay: it is at or before the first
+//! checkpoint that added a bit to the active bucket.
 
 use std::hash::Hasher;
 use std::sync::Arc;
@@ -86,11 +87,13 @@ use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use tokio::sync::mpsc;
 use tracing::warn;
 
+use crate::DurableProgress;
 use crate::bigtable::client::BigTableClient;
 use crate::bigtable::client::CheckpointSpan;
 use crate::handlers::BitmapIndexValue;
 use crate::rate_limiter::CompositeRateLimiter;
 use crate::store::BitmapInitialWatermarks;
+use crate::tables::BitmapSchema;
 
 pub(crate) use metrics::BitmapIndexMetrics;
 
@@ -180,9 +183,7 @@ impl Handle {
             .generation_tx
             .send(generation::Event::GenerationStarted {
                 watermark,
-                replay_floor_checkpoint: checkpoint_span
-                    .map(CheckpointSpan::lower_bound)
-                    .unwrap_or(generation_checkpoint),
+                first_checkpoint_with_bits: checkpoint_span.map(CheckpointSpan::lower_bound),
                 framework_commit_time,
             })
             .await
@@ -226,6 +227,7 @@ pub(crate) struct BitmapCommitter {
     pub pipeline: &'static str,
     pub table: &'static str,
     pub column: &'static str,
+    pub schema: BitmapSchema,
     pub is_sealed: fn(u64, CommitterWatermark) -> bool,
     pub initial_watermarks: BitmapInitialWatermarks,
     pub client: BigTableClient,
@@ -233,6 +235,9 @@ pub(crate) struct BitmapCommitter {
     pub write_chunk_size: usize,
     pub write_concurrency: usize,
     pub metrics: Arc<BitmapIndexMetrics>,
+    /// Records each watermark the generation worker promotes, once every row scheduled through
+    /// it is durable and before the watermark row is written.
+    pub durable_progress: DurableProgress,
 }
 
 pub(crate) type BitmapCommitterHandle = Handle;
@@ -250,6 +255,7 @@ impl BitmapCommitter {
             pipeline,
             table,
             column,
+            schema,
             is_sealed,
             initial_watermarks,
             client,
@@ -257,6 +263,7 @@ impl BitmapCommitter {
             write_chunk_size,
             write_concurrency,
             metrics,
+            durable_progress,
         } = self;
 
         // The generation task reads its initial watermark (`tx_hi` and
@@ -336,6 +343,7 @@ impl BitmapCommitter {
                 pipeline,
                 table,
                 column,
+                schema,
                 client,
                 rate_limiter,
                 write_rx,
@@ -376,6 +384,7 @@ impl BitmapCommitter {
                 watermark_commit_tx,
                 is_sealed,
                 initial_watermarks: initial_watermarks.clone(),
+                durable_progress,
             };
             async move { worker.run().await }
         });

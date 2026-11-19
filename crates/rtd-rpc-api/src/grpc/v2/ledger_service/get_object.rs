@@ -9,12 +9,12 @@ use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetObjectResponse;
-use rtd_rpc::proto::rtd::rpc::v2::GetObjectResult;
-use rtd_rpc::proto::rtd::rpc::v2::Object;
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsRequest;
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsResponse;
+use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetObjectResponse;
+use rtd_rpc::proto::sui::rpc::v2::GetObjectResult;
+use rtd_rpc::proto::sui::rpc::v2::Object;
 use rtd_sdk_types::Address;
 use rtd_types::full_checkpoint_content::ObjectSet;
 

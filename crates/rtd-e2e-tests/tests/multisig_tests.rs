@@ -16,6 +16,8 @@ use passkey_types::{
         PublicKeyCredentialUserEntity, UserVerificationRequirement,
     },
 };
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::net::SocketAddr;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
@@ -26,7 +28,7 @@ use rtd_types::passkey_authenticator::{PasskeyAuthenticator, to_signing_message}
 use rtd_types::{
     base_types::RtdAddress,
     crypto::{
-        CompressedSignature, PublicKey, RtdKeyPair, Signature, ZkLoginAuthenticatorAsBytes,
+        CompressedSignature, PublicKey, Signature, RtdKeyPair, ZkLoginAuthenticatorAsBytes,
         ZkLoginPublicIdentifier, get_key_pair,
     },
     error::RtdResult,
@@ -42,8 +44,6 @@ use rtd_types::{
     error::RtdErrorKind,
 };
 use rtd_types::{effects::TransactionEffectsAPI, error::UserInputError};
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::net::SocketAddr;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use url::Url;
 async fn do_upgraded_multisig_test() -> RtdResult<SubmitTxResponse> {
@@ -76,7 +76,7 @@ async fn create_credential_and_sign_test_tx_with_passkey_multisig(
     let store: Option<Passkey> = None;
     let my_authenticator = Authenticator::new(my_aaguid, store, user_validation_method);
     let mut my_client = Client::new(my_authenticator);
-    let origin = Url::parse("https://example.com").unwrap();
+    let origin = Url::parse("https://www.rtd.io").unwrap();
 
     // Create credential.
     let challenge_bytes_from_rp: Bytes = random_vec(32).into();

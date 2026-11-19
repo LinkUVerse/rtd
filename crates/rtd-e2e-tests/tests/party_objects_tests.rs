@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rand::distributions::Distribution;
+use std::net::SocketAddr;
+use std::time::Duration;
 use rtd_macros::sim_test;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
 use rtd_test_transaction_builder::publish_basics_package_and_make_party_object;
@@ -9,8 +11,6 @@ use rtd_types::base_types::{FullObjectRef, RtdAddress};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
-use std::net::SocketAddr;
-use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tracing::info;
 
@@ -58,6 +58,7 @@ async fn party_object_deletion_multiple_times() {
 
     let num_deletions = 20;
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_accounts(vec![AccountConfig {
             address: None,
             gas_amounts: vec![DEFAULT_GAS_AMOUNT; num_deletions],
@@ -125,6 +126,7 @@ async fn party_object_deletion_multiple_times_cert_racing() {
 
     let num_deletions = 10;
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_accounts(vec![AccountConfig {
             address: None,
             gas_amounts: vec![DEFAULT_GAS_AMOUNT; num_deletions],
@@ -240,6 +242,7 @@ async fn party_object_transfer_multiple_times() {
 
     let num_transfers = 20;
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_accounts(vec![AccountConfig {
             address: None,
             gas_amounts: vec![DEFAULT_GAS_AMOUNT; num_transfers],
@@ -313,17 +316,10 @@ async fn party_object_transfer_multiple_times() {
 async fn party_object_transfer_multi_certs() {
     telemetry_subscribers::init_for_testing();
 
-    // cause random delay just before tx is executed (to explore all orders)
-    rtd_macros::register_fail_point_async("transaction_execution_delay", move || async move {
-        let delay = {
-            let dist = rand::distributions::Uniform::new(0, 1000);
-            let mut rng = rand::thread_rng();
-            dist.sample(&mut rng)
-        };
-        tokio::time::sleep(Duration::from_millis(delay)).await;
-    });
-
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
 
     let (package, object) =
         publish_basics_package_and_make_party_object(&test_cluster.wallet).await;
@@ -341,6 +337,16 @@ async fn party_object_transfer_multi_certs() {
     let gas1 = accounts_and_gas[0].1[0];
     let gas2 = accounts_and_gas[0].1[1];
     let gas3 = accounts_and_gas[0].1[2];
+
+    // cause random delay just before tx is executed (to explore all orders)
+    rtd_macros::register_fail_point_async("transaction_execution_delay", move || async move {
+        let delay = {
+            let dist = rand::distributions::Uniform::new(0, 1000);
+            let mut rng = rand::thread_rng();
+            dist.sample(&mut rng)
+        };
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+    });
 
     let xfer_tx = test_cluster
         .test_transaction_builder_with_gas_object(sender, gas1)
@@ -567,11 +573,11 @@ async fn party_object_read() {
 async fn party_object_grpc() {
     use rtd_rpc::field::FieldMask;
     use rtd_rpc::field::FieldMaskUtil;
-    use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
-    use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
-    use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
-    use rtd_rpc::proto::rtd::rpc::v2::state_service_client::StateServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
+    use rtd_rpc::proto::sui::rpc::v2::state_service_client::StateServiceClient;
 
     let test_cluster = TestClusterBuilder::new().build().await;
 
@@ -705,20 +711,20 @@ async fn party_object_grpc() {
 async fn party_coin_grpc() {
     use rtd_rpc::field::FieldMask;
     use rtd_rpc::field::FieldMaskUtil;
-    use rtd_rpc::proto::rtd::rpc::v2::Argument;
-    use rtd_rpc::proto::rtd::rpc::v2::Command;
-    use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
-    use rtd_rpc::proto::rtd::rpc::v2::Input;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
-    use rtd_rpc::proto::rtd::rpc::v2::MoveCall;
-    use rtd_rpc::proto::rtd::rpc::v2::ProgrammableTransaction;
-    use rtd_rpc::proto::rtd::rpc::v2::SimulateTransactionRequest;
-    use rtd_rpc::proto::rtd::rpc::v2::Transaction;
-    use rtd_rpc::proto::rtd::rpc::v2::TransactionKind;
-    use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
-    use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
-    use rtd_rpc::proto::rtd::rpc::v2::state_service_client::StateServiceClient;
-    use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::Argument;
+    use rtd_rpc::proto::sui::rpc::v2::Command;
+    use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
+    use rtd_rpc::proto::sui::rpc::v2::Input;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::MoveCall;
+    use rtd_rpc::proto::sui::rpc::v2::ProgrammableTransaction;
+    use rtd_rpc::proto::sui::rpc::v2::SimulateTransactionRequest;
+    use rtd_rpc::proto::sui::rpc::v2::Transaction;
+    use rtd_rpc::proto::sui::rpc::v2::TransactionKind;
+    use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
+    use rtd_rpc::proto::sui::rpc::v2::state_service_client::StateServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
     use rtd_types::Identifier;
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{CallArg, ObjectArg, TransactionData};
@@ -889,110 +895,324 @@ async fn party_coin_grpc() {
     );
 }
 
-/// Transfer a party object as the object owner and ensure jsonrpc properly handles updating its
-/// indexes
+/// After a party object's consensus stream ends, transactions already sequenced on the old stream
+/// race an owned-object mutation of the same ID. The mutation writes the ID at the version the
+/// second old-stream transaction is assigned, so that transaction must still wait for the first
+/// one's stream-ended marker.
 #[sim_test]
-async fn party_object_jsonrpc() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+async fn party_object_stream_end_races_owned_mutation() {
+    telemetry_subscribers::init_for_testing();
 
-    let (package, object) =
-        publish_basics_package_and_make_party_object(&test_cluster.wallet).await;
-
-    let package_id = package.0;
-    let object_id = object.0;
-    let object_initial_shared_version = object.1;
-
-    #[allow(deprecated)]
-    let client = test_cluster.rtd_client();
-
-    let object = client
-        .read_api()
-        .get_object_with_options(
-            object_id,
-            rtd_json_rpc_types::RtdObjectDataOptions::new().with_owner(),
-        )
-        .await
-        .unwrap()
-        .data
-        .unwrap();
-    let original_owner = object.owner.unwrap();
-    assert!(matches!(
-        original_owner,
-        Owner::ConsensusAddressOwner { .. }
-    ));
-    let original_owner_address = original_owner.get_owner_address().unwrap();
-
-    let objects = client
-        .read_api()
-        .get_owned_objects(original_owner_address, None, None, None)
-        .await
-        .unwrap()
-        .data;
-
-    assert!(
-        objects
-            .into_iter()
-            .any(|o| o.data.unwrap().object_id == object_id)
-    );
-
-    // Make a transaction to transfer the party object.
-    let transaction = test_cluster
-        .test_transaction_builder()
-        .await
-        .call_object_party_transfer_single_owner(
-            package_id,
-            ObjectArg::SharedObject {
-                id: object_id,
-                initial_shared_version: object_initial_shared_version,
-                mutability: SharedObjectMutability::Mutable,
-            },
-            RtdAddress::ZERO,
-        )
-        .build();
-    test_cluster
-        .sign_and_execute_transaction(&transaction)
+    let iterations = 10;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .with_accounts(vec![AccountConfig {
+            address: None,
+            gas_amounts: vec![DEFAULT_GAS_AMOUNT; 5 * iterations + 2],
+        }])
+        .build()
         .await;
 
-    // Once we've transferred the object to another address we need to make sure that its owner is
-    // properly updated and that the owner index correctly updated
-    let object = client
-        .read_api()
-        .get_object_with_options(
-            object_id,
-            rtd_json_rpc_types::RtdObjectDataOptions::new().with_owner(),
-        )
+    let (package, _) = publish_basics_package_and_make_party_object(&test_cluster.wallet).await;
+    let package_id = package.0;
+
+    let accounts_and_gas = test_cluster
+        .wallet
+        .get_all_accounts_and_gas_objects()
         .await
-        .unwrap()
-        .data
         .unwrap();
-    let new_owner = object.owner.unwrap();
-    assert!(matches!(new_owner, Owner::ConsensusAddressOwner { .. }));
-    let new_owner_address = new_owner.get_owner_address().unwrap();
-    assert_eq!(new_owner_address, RtdAddress::ZERO);
+    let sender = accounts_and_gas[0].0;
+    let min_version = accounts_and_gas[0]
+        .1
+        .iter()
+        .map(|coin| coin.1)
+        .min()
+        .unwrap();
+    // Unused coins keep their genesis version, which is below every later lamport version, so the
+    // old-stream transaction and the owned mutation get the same lamport version.
+    let mut fresh_gas = accounts_and_gas[0]
+        .1
+        .iter()
+        .copied()
+        .filter(|coin| coin.1 == min_version)
+        .collect::<Vec<_>>();
+    assert!(fresh_gas.len() >= 5 * iterations);
 
-    let objects = client
-        .read_api()
-        .get_owned_objects(original_owner_address, None, None, None)
-        .await
-        .unwrap()
-        .data;
+    rtd_macros::register_fail_point_async("transaction_execution_delay", move || async move {
+        let delay = {
+            let dist = rand::distributions::Uniform::new(0, 1000);
+            let mut rng = rand::thread_rng();
+            dist.sample(&mut rng)
+        };
+        tokio::time::sleep(Duration::from_millis(delay)).await;
+    });
 
-    assert!(
-        !objects
+    let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
+    let mut digests = vec![];
+    for i in 0..iterations {
+        let create_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .call_object_create_party(package_id)
+            .build();
+        let create_tx = test_cluster.sign_transaction(&create_tx).await;
+        let (create_effects, _) = test_cluster
+            .submit_and_execute(create_tx, Some(client_ip))
+            .await
+            .unwrap();
+        let (object_id, start_version, _) = create_effects
+            .created()
             .into_iter()
-            .any(|o| o.data.unwrap().object_id == object_id)
-    );
+            .find(|(_, owner)| matches!(owner, Owner::ConsensusAddressOwner { .. }))
+            .unwrap()
+            .0;
+        let old_stream = ObjectArg::SharedObject {
+            id: object_id,
+            initial_shared_version: start_version,
+            mutability: SharedObjectMutability::Mutable,
+        };
 
-    let objects = client
-        .read_api()
-        .get_owned_objects(new_owner_address, None, None, None)
-        .await
-        .unwrap()
-        .data;
+        // Ends the stream by moving the object to the sender's address.
+        let end_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .move_call(
+                package_id,
+                "object_basics",
+                "transfer",
+                vec![
+                    CallArg::Object(old_stream),
+                    CallArg::Pure(bcs::to_bytes(&sender).unwrap()),
+                ],
+            )
+            .build();
+        let end_tx = test_cluster.sign_transaction(&end_tx).await;
 
-    assert!(
-        objects
+        let mut old_stream_txs = vec![];
+        for value in [1u64, 2] {
+            let tx = test_cluster
+                .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+                .await
+                .move_call(
+                    package_id,
+                    "object_basics",
+                    "set_value",
+                    vec![
+                        CallArg::Object(old_stream),
+                        CallArg::Pure(bcs::to_bytes(&value).unwrap()),
+                    ],
+                )
+                .build();
+            old_stream_txs.push(test_cluster.sign_transaction(&tx).await);
+        }
+
+        let (end_effects, _) = test_cluster
+            .submit_and_execute(end_tx, Some(client_ip))
+            .await
+            .unwrap();
+        assert!(end_effects.status().is_ok());
+        let (owned_ref, owner) = end_effects
+            .mutated()
             .into_iter()
-            .any(|o| o.data.unwrap().object_id == object_id)
-    );
+            .find(|(obj_ref, _)| obj_ref.0 == object_id)
+            .unwrap();
+        assert_eq!(owner, Owner::AddressOwner(sender));
+
+        let owned_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .move_call(
+                package_id,
+                "object_basics",
+                "set_value",
+                vec![
+                    CallArg::Object(ObjectArg::ImmOrOwnedObject(owned_ref)),
+                    CallArg::Pure(bcs::to_bytes(&3u64).unwrap()),
+                ],
+            )
+            .build();
+        let owned_tx = test_cluster.sign_transaction(&owned_tx).await;
+
+        let [tx_a, tx_b] = <[_; 2]>::try_from(old_stream_txs).unwrap();
+        digests.extend([*tx_a.digest(), *tx_b.digest(), *owned_tx.digest()]);
+        let (a, b, owned) = futures::join!(
+            test_cluster.submit_and_execute(tx_a, Some(client_ip)),
+            test_cluster.submit_and_execute(tx_b, Some(client_ip)),
+            test_cluster.submit_and_execute(owned_tx, Some(client_ip)),
+        );
+        let (a, _) = a.unwrap();
+        let (b, _) = b.unwrap();
+        let (owned, _) = owned.unwrap();
+        info!(
+            "iteration {i}: stream ended at {}, old-stream lamports {} and {}, owned lamport {}",
+            end_effects.lamport_version(),
+            a.lamport_version(),
+            b.lamport_version(),
+            owned.lamport_version(),
+        );
+        assert!(a.status().is_err());
+        assert!(b.status().is_err());
+        assert!(owned.status().is_ok());
+    }
+
+    let fullnode = test_cluster.spawn_new_fullnode().await.rtd_node;
+    fullnode
+        .state()
+        .get_transaction_cache_reader()
+        .notify_read_executed_effects("", &digests)
+        .await;
+}
+
+/// Same collision as `party_object_stream_end_races_owned_mutation`, but the owned mutation is
+/// final before the old-stream transactions are submitted, and no execution delay is injected.
+#[sim_test]
+async fn party_object_stream_end_after_owned_mutation() {
+    telemetry_subscribers::init_for_testing();
+
+    let iterations = 10;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_accounts(vec![AccountConfig {
+            address: None,
+            gas_amounts: vec![DEFAULT_GAS_AMOUNT; 5 * iterations + 2],
+        }])
+        .build()
+        .await;
+
+    let (package, _) = publish_basics_package_and_make_party_object(&test_cluster.wallet).await;
+    let package_id = package.0;
+
+    let accounts_and_gas = test_cluster
+        .wallet
+        .get_all_accounts_and_gas_objects()
+        .await
+        .unwrap();
+    let sender = accounts_and_gas[0].0;
+    let min_version = accounts_and_gas[0]
+        .1
+        .iter()
+        .map(|coin| coin.1)
+        .min()
+        .unwrap();
+    let mut fresh_gas = accounts_and_gas[0]
+        .1
+        .iter()
+        .copied()
+        .filter(|coin| coin.1 == min_version)
+        .collect::<Vec<_>>();
+    assert!(fresh_gas.len() >= 5 * iterations);
+
+    let client_ip = SocketAddr::new([127, 0, 0, 1].into(), 0);
+    let mut digests = vec![];
+    for i in 0..iterations {
+        let create_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .call_object_create_party(package_id)
+            .build();
+        let create_tx = test_cluster.sign_transaction(&create_tx).await;
+        let (create_effects, _) = test_cluster
+            .submit_and_execute(create_tx, Some(client_ip))
+            .await
+            .unwrap();
+        let (object_id, start_version, _) = create_effects
+            .created()
+            .into_iter()
+            .find(|(_, owner)| matches!(owner, Owner::ConsensusAddressOwner { .. }))
+            .unwrap()
+            .0;
+        let old_stream = ObjectArg::SharedObject {
+            id: object_id,
+            initial_shared_version: start_version,
+            mutability: SharedObjectMutability::Mutable,
+        };
+
+        let end_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .move_call(
+                package_id,
+                "object_basics",
+                "transfer",
+                vec![
+                    CallArg::Object(old_stream),
+                    CallArg::Pure(bcs::to_bytes(&sender).unwrap()),
+                ],
+            )
+            .build();
+        let end_tx = test_cluster.sign_transaction(&end_tx).await;
+        let (end_effects, _) = test_cluster
+            .submit_and_execute(end_tx, Some(client_ip))
+            .await
+            .unwrap();
+        assert!(end_effects.status().is_ok());
+        let (owned_ref, owner) = end_effects
+            .mutated()
+            .into_iter()
+            .find(|(obj_ref, _)| obj_ref.0 == object_id)
+            .unwrap();
+        assert_eq!(owner, Owner::AddressOwner(sender));
+
+        let owned_tx = test_cluster
+            .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+            .await
+            .move_call(
+                package_id,
+                "object_basics",
+                "set_value",
+                vec![
+                    CallArg::Object(ObjectArg::ImmOrOwnedObject(owned_ref)),
+                    CallArg::Pure(bcs::to_bytes(&3u64).unwrap()),
+                ],
+            )
+            .build();
+        let owned_tx = test_cluster.sign_transaction(&owned_tx).await;
+        let (owned, _) = test_cluster
+            .submit_and_execute(owned_tx.clone(), Some(client_ip))
+            .await
+            .unwrap();
+        assert!(owned.status().is_ok());
+
+        // Signed and submitted only after the owned mutation is final.
+        let mut old_stream_txs = vec![];
+        for value in [1u64, 2] {
+            let tx = test_cluster
+                .test_transaction_builder_with_gas_object(sender, fresh_gas.pop().unwrap())
+                .await
+                .move_call(
+                    package_id,
+                    "object_basics",
+                    "set_value",
+                    vec![
+                        CallArg::Object(old_stream),
+                        CallArg::Pure(bcs::to_bytes(&value).unwrap()),
+                    ],
+                )
+                .build();
+            old_stream_txs.push(test_cluster.sign_transaction(&tx).await);
+        }
+        let [tx_a, tx_b] = <[_; 2]>::try_from(old_stream_txs).unwrap();
+        digests.extend([*tx_a.digest(), *tx_b.digest(), *owned_tx.digest()]);
+        let (a, b) = futures::join!(
+            test_cluster.submit_and_execute(tx_a, Some(client_ip)),
+            test_cluster.submit_and_execute(tx_b, Some(client_ip)),
+        );
+        let (a, _) = a.unwrap();
+        let (b, _) = b.unwrap();
+        info!(
+            "iteration {i}: stream ended at {}, old-stream lamports {} and {}, owned lamport {}",
+            end_effects.lamport_version(),
+            a.lamport_version(),
+            b.lamport_version(),
+            owned.lamport_version(),
+        );
+        assert!(a.status().is_err());
+        assert!(b.status().is_err());
+    }
+
+    let fullnode = test_cluster.spawn_new_fullnode().await.rtd_node;
+    fullnode
+        .state()
+        .get_transaction_cache_reader()
+        .notify_read_executed_effects("", &digests)
+        .await;
 }

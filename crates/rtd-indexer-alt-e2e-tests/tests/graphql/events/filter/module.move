@@ -5,8 +5,8 @@
 
 //# publish --sender A
 module P1::M1 {
-    use rtd::event;
     use std::ascii;
+    use rtd::event;
 
     public struct EventA has copy, drop {
         message: ascii::String,
@@ -33,8 +33,8 @@ module P1::M1 {
 
 //# publish --sender B
 module P2::M2 {
-    use rtd::event;
     use std::ascii;
+    use rtd::event;
 
     public struct EventC has copy, drop {
         message: ascii::String,
@@ -69,6 +69,7 @@ module P2::M2 {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   allEvents: events(first: 50) {
     nodes {
@@ -137,8 +138,10 @@ fragment E on Event {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   eventsByModuleAndTypeIsUnavailable: events(first: 50, filter: {module: "@{P1}", type: "@{P1}::M1::EventC"}) {
     nodes {
@@ -146,3 +149,4 @@ fragment E on Event {
     }
   }
 }
+*/

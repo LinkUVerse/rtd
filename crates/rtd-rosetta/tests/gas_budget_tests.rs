@@ -11,7 +11,7 @@ use rtd_rosetta::types::{
     ConstructionCombineRequest, ConstructionCombineResponse, ConstructionMetadataRequest,
     ConstructionMetadataResponse, ConstructionPayloadsRequest, ConstructionPayloadsResponse,
     ConstructionPreprocessRequest, ConstructionPreprocessResponse, ConstructionSubmitRequest,
-    NetworkIdentifier, PreprocessMetadata, RtdEnv, Signature, SignatureType,
+    NetworkIdentifier, PreprocessMetadata, Signature, SignatureType, RtdEnv,
     TransactionIdentifierResponse,
 };
 use rtd_rpc::client::Client as GrpcClient;
@@ -60,6 +60,7 @@ async fn pay_with_gas_budget(budget: u64) -> anyhow::Result<FlowResponses> {
     // We manually use rosetta-flow here to check the intermediate results.
     let metadata = Some(PreprocessMetadata {
         budget: Some(budget),
+        estimate_only: false,
     });
 
     let preprocess_result: Result<ConstructionPreprocessResponse, RosettaError> = rosetta_client

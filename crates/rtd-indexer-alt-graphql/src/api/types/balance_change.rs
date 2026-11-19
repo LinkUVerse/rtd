@@ -3,7 +3,7 @@
 
 use anyhow::Context as _;
 use async_graphql::Object;
-use rtd_rpc::proto::rtd::rpc::v2::BalanceChange as GrpcBalanceChange;
+use rtd_rpc::proto::sui::rpc::v2::BalanceChange as GrpcBalanceChange;
 
 use crate::api::scalars::big_int::BigInt;
 use crate::api::types::address::Address;

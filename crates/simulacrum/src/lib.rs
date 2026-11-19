@@ -24,7 +24,7 @@ use rtd_framework_snapshot::load_bytecode_snapshot;
 use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 use rtd_swarm_config::genesis_config::AccountConfig;
 use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
@@ -34,12 +34,12 @@ use rtd_types::digests::{ChainIdentifier, ConsensusCommitDigest};
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::messages_consensus::ConsensusDeterminedVersionAssignments;
 use rtd_types::object::{Object, Owner};
-use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
 use rtd_types::storage::ObjectKey;
 use rtd_types::storage::{
     BackingPackageStore, ObjectStore, PackageObject, ReadStore, RpcStateReader,
     RuntimeObjectResolver,
 };
+use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
 use rtd_types::transaction::EndOfEpochTransactionKind;
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
@@ -929,13 +929,22 @@ impl<T: Send + Sync, V: store::SimulatorStore + Send + Sync> RpcStateReader for 
 
     fn get_struct_layout_with_overlay(
         &self,
-        _: &move_core_types::language_storage::StructTag,
-        _overlay: &rtd_types::full_checkpoint_content::ObjectSet,
-    ) -> rtd_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
-    {
-        Ok(None)
+        struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &rtd_types::full_checkpoint_content::ObjectSet,
+    ) -> rtd_types::storage::error::Result<
+        Option<move_core_types::annotated_value::MoveTypeLayout>,
+    > {
+        let store = rtd_types::storage::OverlayBackingPackageStore::new(overlay, self);
+        let resolver = rtd_package_resolver::SyncResolver::new(store);
+        match resolver.type_layout(
+            move_core_types::language_storage::TypeTag::Struct(Box::new(struct_tag.clone())),
+        ) {
+            Ok(layout) => Ok(Some(layout)),
+            Err(e) => Err(rtd_types::storage::error::Error::custom(e)),
+        }
     }
 }
+
 
 impl Simulacrum {
     /// Generate a random transfer transaction.
@@ -1095,7 +1104,7 @@ mod tests {
 
     #[test]
     fn simulate_transaction_uses_custom_chain_identifier() {
-        use rtd_types::digests::CheckpointDigest;
+        use rtd_types::digests::get_testnet_chain_identifier;
         use rtd_types::transaction::TransactionExpiration;
 
         let mut rng = OsRng;
@@ -1104,9 +1113,7 @@ mod tests {
             .with_chain_start_timestamp_ms(1)
             .deterministic_committee_size(NonZeroUsize::MIN)
             .build();
-        let mut custom_digest = *config.genesis.checkpoint().digest().inner();
-        custom_digest[0] ^= 0xff;
-        let chain_identifier = ChainIdentifier::from(CheckpointDigest::new(custom_digest));
+        let chain_identifier = get_testnet_chain_identifier();
         assert_ne!(
             chain_identifier,
             ChainIdentifier::from(*config.genesis.checkpoint().digest()),

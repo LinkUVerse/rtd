@@ -3,11 +3,11 @@
 
 use std::str::FromStr;
 
-use rtd_rpc::proto::rtd::rpc::v2alpha::GetCheckpointObjectProofRequest;
-use rtd_rpc::proto::rtd::rpc::v2alpha::GetCheckpointObjectProofResponse;
-use rtd_rpc::proto::rtd::rpc::v2alpha::OcsInclusionProof as ProtoOcsInclusionProof;
-use rtd_rpc::proto::rtd::rpc::v2alpha::OcsNonInclusionProof as ProtoOcsNonInclusionProof;
-use rtd_rpc::proto::rtd::rpc::v2alpha::get_checkpoint_object_proof_response;
+use rtd_rpc::proto::sui::rpc::v2alpha::GetCheckpointObjectProofRequest;
+use rtd_rpc::proto::sui::rpc::v2alpha::GetCheckpointObjectProofResponse;
+use rtd_rpc::proto::sui::rpc::v2alpha::OcsInclusionProof as ProtoOcsInclusionProof;
+use rtd_rpc::proto::sui::rpc::v2alpha::OcsNonInclusionProof as ProtoOcsNonInclusionProof;
+use rtd_rpc::proto::sui::rpc::v2alpha::get_checkpoint_object_proof_response;
 use rtd_sdk_types::ObjectReference as SdkObjectReference;
 use rtd_sdk_types::merkle::MerkleTree;
 use rtd_sdk_types::proof::OcsInclusionProof as SdkOcsInclusionProof;

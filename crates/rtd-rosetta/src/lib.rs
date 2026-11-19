@@ -17,7 +17,7 @@ use tracing::info;
 use prost_types::FieldMask;
 use rtd_rpc::client::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{GetCoinInfoRequest, GetEpochRequest};
+use rtd_rpc::proto::sui::rpc::v2::{GetCoinInfoRequest, GetEpochRequest};
 use rtd_sdk_types::{StructTag, TypeTag as SDKTypeTag};
 use rtd_types::digests::ChainIdentifier;
 
@@ -53,7 +53,7 @@ pub static RTD: Lazy<Currency> = Lazy::new(|| Currency {
     symbol: "RTD".to_string(),
     decimals: 9,
     metadata: CurrencyMetadata {
-        coin_type: SDKTypeTag::from(StructTag::rtd()).to_string(),
+        coin_type: SDKTypeTag::from(StructTag::sui()).to_string(),
     },
 });
 

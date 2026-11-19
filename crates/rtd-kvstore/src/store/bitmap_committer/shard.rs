@@ -7,6 +7,12 @@
 //! BigTable cells for the bitmap tables are written with `maxversions=1`, so
 //! each flush writes the full accumulated bitmap (not a delta). That requires
 //! keeping the bits OR'd in over the lifetime of this process in memory.
+//! The table's `BitmapSchema` derives each write's cell timestamp from the last
+//! checkpoint that contributed a bit to the row. Under `BitmapSchema::V2` the
+//! timestamp orders snapshots by that checkpoint, so the newest cell is the
+//! snapshot through the highest checkpoint, whichever writer or retry lands
+//! last. Every writer accumulates a bucket from its first checkpoint, so
+//! writes with one timestamp carry the same bitmap.
 //!
 //! Each `Shard` owns one of `NUM_SHARDS` disjoint slices of the full
 //! row space, keyed by `shard_for(row_key)`. Each shard is
@@ -26,9 +32,9 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use bytes::Bytes;
 use roaring::RoaringBitmap;
-use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use rustc_hash::FxHashMap;
 use rustc_hash::FxHashSet;
+use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
 use tokio::sync::mpsc;
 use tracing::debug;
 use tracing::info;
@@ -116,13 +122,9 @@ impl ShardWorker {
                 Some(seal) = self.seal_rx.recv() => {
                     self.handle_shard_seal(seal).await;
                 }
-                // Once producers close, all merges were handled. Waiting for the
-                // seal channel to close would deadlock with GenerationWorker:
-                // it owns the seal sender and waits for this shard's event sender.
-                merge = self.merge_rx.recv() => match merge {
-                    Some(merge) => self.handle_shard_merge(merge).await?,
-                    None => break,
-                },
+                Some(merge) = self.merge_rx.recv() => {
+                    self.handle_shard_merge(merge).await?;
+                }
                 else => break,
             }
         }
@@ -251,6 +253,7 @@ impl AccumulatedRow {
         writer::Row {
             row_key,
             serialized,
+            max_cp: self.max_cp,
             max_ts_ms: self.max_ts_ms,
             generation_checkpoint,
             checkpoint_span,

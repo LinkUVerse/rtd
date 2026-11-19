@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use inquire::Select;
+use std::collections::BTreeMap;
 use rtd_config::genesis::UnsignedGenesis;
 use rtd_types::rtd_system_state::RtdValidatorGenesis;
 use rtd_types::{
@@ -12,7 +13,6 @@ use rtd_types::{
     move_package::MovePackage,
     object::{MoveObject, Owner},
 };
-use std::collections::BTreeMap;
 
 const STR_ALL: &str = "All";
 const STR_EXIT: &str = "Exit";

@@ -10,12 +10,12 @@ use formatting::{FormattedField, format_list, format_param, singular_or_plural};
 
 use anyhow::{Context, Error, anyhow};
 use linku_common::ZipDebugEqIteratorExt;
-use rtd_rpc_api::Client;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use rtd_rpc_api::Client;
 
 use move_binary_format::file_format::{
     AbilitySet, DatatypeTyParameter, EnumDefinitionIndex, FunctionDefinitionIndex,
@@ -45,7 +45,7 @@ use move_core_types::{
     identifier::{IdentStr, Identifier},
 };
 use move_ir_types::location::{ByteIndex, Loc};
-use move_package_alt_compilation::compiled_package::CompiledUnitWithSource;
+use move_package_compilation::compiled_package::CompiledUnitWithSource;
 use rtd_move_build::CompiledPackage;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::base_types::ObjectID;

@@ -4,7 +4,7 @@
 // The motivating case: a `&mut Y` from `borrow_mut(&mut X, &mut TxContext)` roots only in
 // the object, so it survives a later TxContext use and can still be written through.
 
-//# init --addresses test=0x0 --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0
 
 //# publish
 module test::m;
@@ -30,8 +30,7 @@ public fun write(y: &mut Y, _ctx: &mut TxContext) {
     y.f = y.f + 1;
 }
 
-public fun mut_tx(_: &mut TxContext) {
-}
+public fun mut_tx(_: &mut TxContext) {}
 
 public fun check(y: &Y, expected: u64, _ctx: &TxContext) {
     assert!(y.f == expected, 0);

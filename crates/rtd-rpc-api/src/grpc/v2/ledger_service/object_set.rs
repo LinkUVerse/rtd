@@ -5,7 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use linku_common::ZipDebugEqIteratorExt;
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
 use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::object::Object;
 use rtd_types::storage::ObjectKey;

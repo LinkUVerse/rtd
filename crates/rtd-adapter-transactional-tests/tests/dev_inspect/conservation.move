@@ -7,13 +7,13 @@
 
 //# publish
 
-module test::m {
-    use rtd::rtd::RTD;
-    use rtd::coin::Coin;
+module test::m;
 
-    public fun transfer_back(c: Coin<RTD>, ctx: &mut TxContext) {
-        rtd::transfer::public_transfer(c, tx_context::sender(ctx))
-    }
+use rtd::coin::Coin;
+use rtd::rtd::RTD;
+
+public fun transfer_back(c: Coin<RTD>, ctx: &mut TxContext) {
+    rtd::transfer::public_transfer(c, tx_context::sender(ctx))
 }
 
 //# programmable --sender A --inputs struct(@empty,1) --dev-inspect

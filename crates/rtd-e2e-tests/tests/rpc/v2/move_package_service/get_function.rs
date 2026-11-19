@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rtd_macros::sim_test;
-use rtd_rpc::proto::rtd::rpc::v2::GetFunctionRequest;
-use rtd_rpc::proto::rtd::rpc::v2::move_package_service_client::MovePackageServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::GetFunctionRequest;
+use rtd_rpc::proto::sui::rpc::v2::move_package_service_client::MovePackageServiceClient;
 use test_cluster::TestClusterBuilder;
 
 use crate::v2::move_package_service::system_package_expectations::validate_new_unverified_validator_operation_cap_and_transfer_function;

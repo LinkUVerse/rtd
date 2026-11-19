@@ -4,7 +4,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
-        Arc,
+        Arc, LazyLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -13,18 +13,18 @@ use std::sync::Mutex;
 
 use clap::*;
 use fastcrypto::encoding::{Base58, Encoding, Hex};
-use linku_common::in_integration_test;
 use move_binary_format::{
-    binary_config::{BinaryConfig, TableConfig},
-    file_format_common::VERSION_1,
+    binary_config::{BinaryConfig, BinaryFormatLimitsProfile, TableConfig},
+    file_format_common::*,
 };
 use move_core_types::account_address::AccountAddress;
 use move_vm_config::verifier::VerifierConfig;
+use linku_common::in_integration_test;
+use serde::{Deserialize, Serialize};
+use serde_with::skip_serializing_none;
 use rtd_protocol_config_macros::{
     ProtocolConfigAccessors, ProtocolConfigFeatureFlagsGetters, ProtocolConfigOverride,
 };
-use serde::{Deserialize, Serialize};
-use serde_with::skip_serializing_none;
 use tracing::{info, warn};
 
 pub mod reachability;
@@ -38,7 +38,25 @@ pub use linku_common::assert_reachable_simtest;
 
 /// The minimum and maximum protocol versions supported by this build.
 const MIN_PROTOCOL_VERSION: u64 = 1;
-const MAX_PROTOCOL_VERSION: u64 = 139;
+const MAX_PROTOCOL_VERSION: u64 = 144;
+
+const TESTNET_USDC: &str =
+    "0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC";
+
+const MAINNET_USDC: &str =
+    "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC";
+const MAINNET_USDSUI: &str =
+    "0x44f838219cf67b058f3b37907b655f226153c18e33dfcd0da559a844fea9b1c1::usdsui::USDSUI";
+const MAINNET_RTD_USDE: &str =
+    "0x41d587e5336f1c86cad50d38a7136db99333bb9bda91cea4ba69115defeb1402::rtd_usde::RTD_USDE";
+const MAINNET_USDY: &str =
+    "0x960b531667636f39e85867775f52f6b1f220a058c4de786905bdf761e06a56bb::usdy::USDY";
+const MAINNET_FDUSD: &str =
+    "0xf16e6b723f242ec745dfd7634ad072c42d5c1d9ac9d62a39c381303eaa57693a::fdusd::FDUSD";
+const MAINNET_AUSD: &str =
+    "0x2053d08c1e2bd02791056171aab0fd12bd7cd7efad2ab8f6b9c8902f14df2ff2::ausd::AUSD";
+const MAINNET_USDB: &str =
+    "0xe14726c336e81b32328e92afc37345d159f5b550b09fa92bd43640cfdd0a0cfd::usdb::USDB";
 
 // Record history of protocol version allocations here:
 //
@@ -58,7 +76,7 @@ const MAX_PROTOCOL_VERSION: u64 = 139;
 //            hash module bytes individually before computing package digest.
 // Version 8: Disallow changing abilities and type constraints for type parameters in structs
 //            during upgrades.
-// Version 9: Limit the length of Move idenfitiers to 128.
+// Version 9: Limit the length of Move identifiers to 128.
 //            Disallow extraneous module bytes,
 //            advance_to_highest_supported_protocol_version,
 // Version 10:increase bytecode verifier `max_verifier_meter_ticks_per_function` and
@@ -395,8 +413,34 @@ const MAX_PROTOCOL_VERSION: u64 = 139;
 //              Enable allowances on mainnet.
 //              Merge colliding deferred-transaction entries in the consensus handler
 //              instead of overwriting (which stranded the displaced transactions).
-// Version 139: Prevent capacity splits and randomness tails from starving periodic
-//              checkpoint commit drains on devnet; preserve prior network behavior.
+//              Reduce the non-refundable storage fee from 1% to 0.01% on mainnet.
+// Version 139: Enable forwarding addresses on devnet.
+//              Enable ML-DSA-65 account signatures on devnet.
+//              Reduce the non-refundable storage fee from 1% to 0.01%.
+//              Allow random beacon DKG to complete after its timeout on devnet and testnet.
+//              Charge package inputs 1% of the per-byte object read cost.
+// Version 140: Add native vector bulk operations (keep_range, copy_range, replace_range
+//              and reverse) and their gas costs.
+//              Shuffle the block order within each round of a consensus commit on devnet.
+//              Disable the ID leak verifier.
+//              Enable check_object_funds_withdraw_in_execution on mainnet.
+//              Disable effects transaction dependencies on mainnet.
+//              Add the staggered-submission duplication signal thresholds.
+// Version 141: Refine the transaction effects size estimate.
+//              Limit the number of accumulator events per transaction.
+// Version 142: Abort with EInvalidVerifyingKey in groth16::verify_groth16_proof when the
+//              prepared verifying key length does not match the number of public inputs.
+//              Add `rtd::clock::borrow`, which references the Clock without a Clock input.
+//              Add the `object::is_shared_input_impl` native and its cost.
+//              Reject an overflowing x-coordinate in `secp256r1_ecrecover`.
+//              Configure explicit Move binary format encoding limits.
+//              Enable defer_owned_object_double_spend on all networks.
+// Version 143: Add and enable a new execution version.
+//              Simplify Nitro attestation header validation.
+//              Disable forwarding addresses on devnet.
+//              Charge a MIST-denominated amount for publish and upgrade commands before execution.
+//              Enable ML-DSA-65 account signatures on testnet.
+// Version 144: Enable timestamp-based transaction expiration on devnet.
 
 #[derive(Copy, Clone, Debug, Hash, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProtocolVersion(u64);
@@ -474,6 +518,19 @@ impl Chain {
             Chain::Unknown => "unknown",
         }
     }
+}
+
+/// Fetch the maximum value of a protocol config across all chains and versions.
+pub fn max_across_protocol<T: Ord>(f: impl Fn(&ProtocolConfig) -> Option<T>) -> Option<T> {
+    let mut max = None;
+    let mut version = ProtocolVersion::MIN;
+    while version <= ProtocolVersion::MAX {
+        max = max.max(f(&ProtocolConfig::get_for_version(version, Chain::Unknown)));
+        max = max.max(f(&ProtocolConfig::get_for_version(version, Chain::Mainnet)));
+        max = max.max(f(&ProtocolConfig::get_for_version(version, Chain::Testnet)));
+        version = version + 1;
+    }
+    max
 }
 
 pub struct Error(pub String);
@@ -704,6 +761,11 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     enable_nitro_attestation_always_include_required_pcrs_parsing: bool,
 
+    // Require an empty unprotected header and validate the protected header's exact shape.
+    // Reject trailing CBOR bytes and indefinite-length byte strings.
+    #[serde(skip_serializing_if = "is_false")]
+    simplify_nitro_header_validation: bool,
+
     // Reject functions with mutable Random.
     #[serde(skip_serializing_if = "is_false")]
     reject_mutable_random_on_entry_functions: bool,
@@ -789,6 +851,19 @@ struct FeatureFlags {
     // Enable passkey auth (SIP-9)
     #[serde(skip_serializing_if = "is_false")]
     passkey_auth: bool,
+
+    // Enable ML-DSA-65 (FIPS 204) account signatures, standalone and as
+    // multisig members.
+    #[serde(skip_serializing_if = "is_false")]
+    mldsa65_auth: bool,
+
+    // Reject an overflowing x-coordinate r + n in `secp256r1_ecrecover` instead of wrapping it.
+    #[serde(skip_serializing_if = "is_false")]
+    secp256r1_ecrecover_checks_x_below_p: bool,
+
+    // Use the refined transaction effects size estimate.
+    #[serde(skip_serializing_if = "is_false")]
+    complete_effects_size_estimate: bool,
 
     // Use AuthorityCapabilitiesV2
     #[serde(skip_serializing_if = "is_false")]
@@ -1036,6 +1111,10 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     always_advance_dkg_to_resolution: bool,
 
+    // If true, keep DKG pending after its timeout so that it can complete later in the epoch.
+    #[serde(skip_serializing_if = "is_false")]
+    allow_dkg_completion_after_timeout: bool,
+
     // Enable coin registry protocol
     #[serde(skip_serializing_if = "is_false")]
     enable_coin_registry: bool,
@@ -1136,6 +1215,10 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     create_forwarding_address_registry: bool,
 
+    // If true, resolve forwarding addresses through the forwarding address registry.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_forwarding_addresses: bool,
+
     // Corrects signature-to-signer mapping in CheckpointContentsV2.
     // Deprecated: must always be set to `true`.
     #[serde(skip_serializing_if = "is_false")]
@@ -1201,6 +1284,15 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     allowed_proposers: bool,
 
+    // If true, validators turn on staggered submission when commits show too many
+    // duplicate copies of transactions without allowed proposers. Requires
+    // `allowed_proposers`. This flag coordinates the rollout across validators.
+    // `NodeConfig::enable_staggered_submission_signal` lets an operator disable it on
+    // one node. Staggering runs only when both are enabled.
+    #[serde(skip_serializing_if = "is_false")]
+    #[skip_protocol_config_accessor]
+    staggered_submission_signal: bool,
+
     #[serde(skip_serializing_if = "is_false")]
     randomize_checkpoint_tx_limit_in_tests: bool,
 
@@ -1213,6 +1305,8 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     merge_randomness_into_checkpoint: bool,
 
+    // RTD: allow periodic checkpoint commit drains to keep capacity and randomness
+    // schedules from starving commit output. Devnet only.
     #[serde(skip_serializing_if = "is_false")]
     periodic_checkpoint_commit_drains: bool,
 
@@ -1245,6 +1339,12 @@ struct FeatureFlags {
     #[serde(skip_serializing_if = "is_false")]
     limit_groth16_pvk_inputs: bool,
 
+    // If true, groth16::verify_groth16_proof checks that the prepared verifying key has the
+    // length implied by the number of public inputs, and aborts with EInvalidVerifyingKey if it
+    // does not.
+    #[serde(skip_serializing_if = "is_false")]
+    check_groth16_pvk_length: bool,
+
     // If true, the funds-accumulator address-balance change invariant
     // (`TemporaryStore::check_address_balance_changes`) is enforced as a consensus check —
     // violations abort the tx via the conservation-recovery flow. When false, the check still
@@ -1267,6 +1367,10 @@ struct FeatureFlags {
     // If true enable unified linkage
     #[serde(skip_serializing_if = "is_false")]
     enable_unified_linkage: bool,
+
+    // Charge a MIST-denominated amount for Publish and Upgrade commands before execution.
+    #[serde(skip_serializing_if = "is_false")]
+    package_publish_charge: bool,
 
     // Enable allowance-sourced funds withdrawals (`WithdrawFrom::SenderAllowance`).
     // Requires `enable_accumulators`.
@@ -1293,6 +1397,24 @@ struct FeatureFlags {
     // silently dropped the displaced (finalized) transactions.
     #[serde(skip_serializing_if = "is_false")]
     merge_colliding_deferrals: bool,
+
+    // If true, consensus orders the blocks of each committed sub-dag within a round by a hash
+    // seeded from the leader block's digest, instead of by authority index. Rounds stay in
+    // ascending order, and transactions within a block keep their relative order.
+    #[serde(skip_serializing_if = "is_false")]
+    shuffle_consensus_commit_blocks: bool,
+
+    // If true, skip the Rtd ID leak verifier, allowing an existing `UID` to be used as an objects
+    // id.
+    #[serde(skip_serializing_if = "is_false")]
+    disable_id_leak_verifier: bool,
+
+    // If true, `min_timestamp` and `max_timestamp` in `ValidDuring` and `Validity` expirations
+    // are accepted. Validators reject a transaction before its `min_timestamp` by their local
+    // clocks, and a transaction scheduled by a commit after its `max_timestamp` fails with
+    // `TransactionExpired`.
+    #[serde(skip_serializing_if = "is_false")]
+    enable_timestamp_transaction_expiration: bool,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -1524,6 +1646,10 @@ pub struct ProtocolConfig {
     binary_variant_handles: Option<u16>,
     binary_variant_instantiation_handles: Option<u16>,
 
+    /// Move binary format limits profile.
+    #[skip_accessor]
+    binary_format_limits_profile: Option<BinaryFormatLimitsProfile>,
+
     /// Maximum size of the `contents` part of an object, in bytes. Enforced by the Rtd adapter when effects are produced.
     max_move_object_size: Option<u64>,
 
@@ -1594,6 +1720,11 @@ pub struct ProtocolConfig {
 
     /// Maximum number of Move events that a single transaction can emit. Enforced by the VM during execution.
     max_num_event_emit: Option<u64>,
+
+    /// Maximum number of accumulator events that a single transaction can emit. Enforced by the
+    /// adapter during execution. Each emitted event counts, before events on the same accumulator
+    /// are merged. There is no limit when unset.
+    max_num_accumulator_events: Option<u64>,
 
     /// Maximum number of new IDs that a single transaction can create. Enforced by the VM during execution.
     max_num_new_move_object_ids: Option<u64>,
@@ -1679,8 +1810,21 @@ pub struct ProtocolConfig {
     /// Cost per byte for a transaction that publishes a package
     package_publish_cost_per_byte: Option<u64>,
 
+    /// MIST charged per publish or upgrade command.
+    package_publish_charge_fixed: Option<u64>,
+
+    /// MIST charged per module of a publish or upgrade command.
+    package_publish_charge_per_module: Option<u64>,
+
+    /// MIST charged per dependency of a publish or upgrade command.
+    package_publish_charge_per_dependency: Option<u64>,
+
     // Per-byte cost of reading an object during transaction execution
     obj_access_cost_read_per_byte: Option<u64>,
+
+    // Cost per KiB (1,024 bytes) of reading a non-system package input. When unset, packages are
+    // charged `obj_access_cost_read_per_byte` like other input objects.
+    obj_access_cost_read_per_package_kb: Option<u64>,
 
     // Per-byte cost of writing an object during transaction execution
     obj_access_cost_mutate_per_byte: Option<u64>,
@@ -1842,6 +1986,8 @@ pub struct ProtocolConfig {
     // Cost params for the Move native function
     // `record_new_uid_from_hash(parent: address, bytes: address)`
     object_record_new_uid_from_hash_cost_base: Option<u64>,
+    // Cost params for the Move native function `is_shared_input_impl(id: address): bool`
+    object_is_shared_input_cost_base: Option<u64>,
 
     // Transfer
     // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -1871,6 +2017,10 @@ pub struct ProtocolConfig {
     tx_context_gas_budget_cost_base: Option<u64>,
     tx_context_ids_created_cost_base: Option<u64>,
     tx_context_replace_cost_base: Option<u64>,
+
+    // `clock` module
+    // Cost params for the Move native function `native_borrow(): &Clock`
+    clock_borrow_cost_base: Option<u64>,
 
     // Types
     // Cost params for the Move native function `is_one_time_witness<T: drop>(_: &T): bool`
@@ -2038,6 +2188,11 @@ pub struct ProtocolConfig {
     nitro_attestation_verify_base_cost: Option<u64>,
     nitro_attestation_verify_cost_per_cert: Option<u64>,
 
+    // Native layout cost multiplier in the layout cost formula.
+    layout_node_cost: Option<u64>,
+    // Layout size threshold above which the large-layout surcharge applies.
+    layout_node_cost_large_layout_threshold: Option<u64>,
+
     // Stdlib costs
     bcs_per_byte_serialized_cost: Option<u64>,
     bcs_legacy_min_output_size_cost: Option<u64>,
@@ -2070,6 +2225,14 @@ pub struct ProtocolConfig {
     vector_pop_back_base_cost: Option<u64>,
     vector_destroy_empty_base_cost: Option<u64>,
     vector_swap_base_cost: Option<u64>,
+    vector_reverse_base_cost: Option<u64>,
+    vector_reverse_per_elem_cost: Option<u64>,
+    vector_keep_range_base_cost: Option<u64>,
+    vector_keep_range_per_dropped_elem_cost: Option<u64>,
+    vector_keep_range_per_moved_elem_cost: Option<u64>,
+    vector_copy_range_base_cost: Option<u64>,
+    vector_replace_range_base_cost: Option<u64>,
+    vector_replace_range_per_elem_cost: Option<u64>,
     debug_print_base_cost: Option<u64>,
     debug_print_stack_trace_base_cost: Option<u64>,
 
@@ -2184,6 +2347,21 @@ pub struct ProtocolConfig {
     /// SIP-45: K in the formula `amplification_factor = max(0, gas_price / reference_gas_price - K)`.
     /// This is the threshold for activating consensus amplification.
     sip_45_consensus_amplification_threshold: Option<u64>,
+
+    /// Number of recent commits the staggered-submission signal looks at. It compares
+    /// excess copies of transactions without allowed proposers to unique user transactions.
+    staggered_submission_signal_window_commits: Option<u64>,
+    /// Average excess copies per commit in the window needed before the signal turns on.
+    staggered_submission_signal_min_excess_copies_per_commit: Option<u64>,
+    /// Number of commits the ratio must stay below a band's exit ratio before the
+    /// signal drops to a lower band.
+    staggered_submission_signal_exit_dwell_commits: Option<u64>,
+    /// Ratios to enter and exit each band, in basis points (bps) of the window's unique
+    /// user transactions. Band 1 delays submissions up to 1.6s and band 2 up to 4.8s.
+    staggered_submission_signal_band1_enter_ratio_bps: Option<u64>,
+    staggered_submission_signal_band1_exit_ratio_bps: Option<u64>,
+    staggered_submission_signal_band2_enter_ratio_bps: Option<u64>,
+    staggered_submission_signal_band2_exit_ratio_bps: Option<u64>,
 
     /// DEPRECATED: this was an ephemeral feature flag only used in per-epoch tables, which has now
     /// been deployed everywhere.
@@ -2328,6 +2506,16 @@ impl ProtocolConfig {
         if ret {
             // jwk updates required end-of-epoch transactions
             assert!(self.feature_flags.end_of_epoch_transaction_supported);
+        }
+        ret
+    }
+
+    pub fn staggered_submission_signal(&self) -> bool {
+        let ret = self.feature_flags.staggered_submission_signal;
+        if ret {
+            // The signal staggers transactions without allowed proposers. That
+            // distinction only exists when allowed_proposers is enabled.
+            assert!(self.feature_flags.allowed_proposers);
         }
         ret
     }
@@ -2637,6 +2825,7 @@ impl ProtocolConfig {
             binary_enum_def_instantiations: None,
             binary_variant_handles: None,
             binary_variant_instantiation_handles: None,
+            binary_format_limits_profile: None,
             max_move_object_size: Some(250 * 1024),
             max_move_package_size: Some(100 * 1024),
             max_publish_or_upgrade_per_ptb: None,
@@ -2659,6 +2848,7 @@ impl ProtocolConfig {
             max_fields_in_struct: Some(32),
             max_dependency_depth: Some(100),
             max_num_event_emit: Some(256),
+            max_num_accumulator_events: None,
             max_num_new_move_object_ids: Some(2048),
             max_num_new_move_object_ids_system_tx: Some(2048 * 16),
             max_num_deleted_move_object_ids: Some(2048),
@@ -2684,7 +2874,11 @@ impl ProtocolConfig {
             package_publish_cost_fixed: Some(1_000),
             base_tx_cost_per_byte: Some(0),
             package_publish_cost_per_byte: Some(80),
+            package_publish_charge_fixed: None,
+            package_publish_charge_per_module: None,
+            package_publish_charge_per_dependency: None,
             obj_access_cost_read_per_byte: Some(15),
+            obj_access_cost_read_per_package_kb: None,
             obj_access_cost_mutate_per_byte: Some(40),
             obj_access_cost_delete_per_byte: Some(40),
             obj_access_cost_verify_per_byte: Some(200),
@@ -2778,6 +2972,9 @@ impl ProtocolConfig {
             // Cost params for the Move native function
             // `record_new_uid_from_hash(parent: address, bytes: address)`. Introduced in v131.
             object_record_new_uid_from_hash_cost_base: None,
+            // Cost params for the Move native function `is_shared_input_impl(id: address): bool`.
+            // Introduced in v142.
+            object_is_shared_input_cost_base: None,
 
             // `transfer` module
             // Cost params for the Move native function `transfer_impl<T: key>(obj: T, recipient: address)`
@@ -2805,6 +3002,9 @@ impl ProtocolConfig {
             tx_context_gas_budget_cost_base: None,
             tx_context_ids_created_cost_base: None,
             tx_context_replace_cost_base: None,
+
+            // `clock` module
+            clock_borrow_cost_base: None,
 
             // `types` module
             // Cost params for the Move native function `is_one_time_witness<T: drop>(_: &T): bool`
@@ -2969,6 +3169,8 @@ impl ProtocolConfig {
             nitro_attestation_verify_base_cost: None,
             nitro_attestation_verify_cost_per_cert: None,
 
+            layout_node_cost: None,
+            layout_node_cost_large_layout_threshold: None,
             bcs_per_byte_serialized_cost: None,
             bcs_legacy_min_output_size_cost: None,
             bcs_failure_cost: None,
@@ -2997,6 +3199,14 @@ impl ProtocolConfig {
             vector_pop_back_base_cost: None,
             vector_destroy_empty_base_cost: None,
             vector_swap_base_cost: None,
+            vector_reverse_base_cost: None,
+            vector_reverse_per_elem_cost: None,
+            vector_keep_range_base_cost: None,
+            vector_keep_range_per_dropped_elem_cost: None,
+            vector_keep_range_per_moved_elem_cost: None,
+            vector_copy_range_base_cost: None,
+            vector_replace_range_base_cost: None,
+            vector_replace_range_per_elem_cost: None,
             debug_print_base_cost: None,
             debug_print_stack_trace_base_cost: None,
 
@@ -3073,6 +3283,13 @@ impl ProtocolConfig {
             gas_budget_based_txn_cost_absolute_cap_commit_count: None,
 
             sip_45_consensus_amplification_threshold: None,
+            staggered_submission_signal_window_commits: None,
+            staggered_submission_signal_min_excess_copies_per_commit: None,
+            staggered_submission_signal_exit_dwell_commits: None,
+            staggered_submission_signal_band1_enter_ratio_bps: None,
+            staggered_submission_signal_band1_exit_ratio_bps: None,
+            staggered_submission_signal_band2_enter_ratio_bps: None,
+            staggered_submission_signal_band2_exit_ratio_bps: None,
 
             use_object_per_epoch_marker_table_v2: None,
 
@@ -4546,6 +4763,9 @@ impl ProtocolConfig {
                     }
                     cfg.gasless_max_unused_inputs = Some(1);
                     cfg.gasless_max_pure_input_bytes = Some(32);
+                    if chain == Chain::Testnet {
+                        cfg.gasless_allowed_token_types = Some(vec![(TESTNET_USDC.to_string(), 0)]);
+                    }
                     cfg.transfer_receive_object_cost_per_byte = Some(1);
                     cfg.transfer_receive_object_type_cost_per_byte = Some(2);
                 }
@@ -4571,6 +4791,11 @@ impl ProtocolConfig {
                         cfg.feature_flags.enable_verify_bulletproofs_ristretto255 = true;
                     }
                     cfg.feature_flags.gasless_verify_remaining_balance = true;
+                    cfg.include_special_package_amendments = match chain {
+                        Chain::Mainnet => Some(MAINNET_LINKAGE_AMENDMENTS.clone()),
+                        Chain::Testnet => Some(TESTNET_LINKAGE_AMENDMENTS.clone()),
+                        Chain::Unknown => None,
+                    };
                     cfg.gasless_max_tx_size_bytes = Some(16 * 1024);
                     cfg.gasless_max_tps = Some(300);
                     cfg.gasless_max_computation_units = Some(5_000);
@@ -4602,8 +4827,21 @@ impl ProtocolConfig {
                         .include_checkpoint_artifacts_digest_in_summary = true;
                     cfg.feature_flags.enable_gasless = true;
 
-                    // A new RTD genesis has no pre-registered third-party gas tokens.
-                    cfg.gasless_allowed_token_types = Some(vec![]);
+                    // Set the mainnet allow-list. Testnet already has its USDC entry
+                    // from v119, so only set this on mainnet to avoid clobbering the
+                    // testnet value. $0.01 minimum transfer per stable; all listed
+                    // tokens have 6 decimals.
+                    if chain == Chain::Mainnet {
+                        cfg.gasless_allowed_token_types = Some(vec![
+                            (MAINNET_USDC.to_string(), 10_000),
+                            (MAINNET_USDSUI.to_string(), 10_000),
+                            (MAINNET_RTD_USDE.to_string(), 10_000),
+                            (MAINNET_USDY.to_string(), 10_000),
+                            (MAINNET_FDUSD.to_string(), 10_000),
+                            (MAINNET_AUSD.to_string(), 10_000),
+                            (MAINNET_USDB.to_string(), 10_000),
+                        ]);
+                    }
                 }
                 125 => {
                     cfg.feature_flags.granular_post_execution_checks = true;
@@ -4761,10 +4999,83 @@ impl ProtocolConfig {
                         cfg.feature_flags.disable_effects_tx_dependencies = true;
                     }
                     cfg.feature_flags.merge_colliding_deferrals = true;
+                    // Testnet already runs version 138, so it gets this change in version 139.
+                    if chain == Chain::Mainnet {
+                        cfg.storage_rebate_rate = Some(9999);
+                    }
                 }
                 139 => {
                     if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.enable_forwarding_addresses = true;
+                        cfg.feature_flags.mldsa65_auth = true;
                         cfg.feature_flags.periodic_checkpoint_commit_drains = true;
+                    }
+                    cfg.storage_rebate_rate = Some(9999);
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.allow_dkg_completion_after_timeout = true;
+                    }
+                    // Validators cache packages, so reading one costs far less than reading an object.
+                    cfg.obj_access_cost_read_per_package_kb = Some(154);
+                }
+                140 => {
+                    // Signal thresholds are set on every chain. They take effect only
+                    // where `staggered_submission_signal` is enabled.
+                    cfg.staggered_submission_signal_window_commits = Some(300);
+                    cfg.staggered_submission_signal_min_excess_copies_per_commit = Some(2);
+                    cfg.staggered_submission_signal_exit_dwell_commits = Some(6000);
+                    cfg.staggered_submission_signal_band1_enter_ratio_bps = Some(1000);
+                    cfg.staggered_submission_signal_band1_exit_ratio_bps = Some(500);
+                    cfg.staggered_submission_signal_band2_enter_ratio_bps = Some(5000);
+                    cfg.staggered_submission_signal_band2_exit_ratio_bps = Some(2500);
+
+                    cfg.vector_reverse_base_cost = Some(52);
+                    cfg.vector_reverse_per_elem_cost = Some(8);
+                    cfg.vector_keep_range_base_cost = Some(52);
+                    cfg.vector_keep_range_per_dropped_elem_cost = Some(1);
+                    cfg.vector_keep_range_per_moved_elem_cost = Some(8);
+                    cfg.vector_copy_range_base_cost = Some(52);
+                    cfg.vector_replace_range_base_cost = Some(52);
+                    cfg.vector_replace_range_per_elem_cost = Some(8);
+
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.shuffle_consensus_commit_blocks = true;
+                    }
+
+                    cfg.feature_flags.allow_references_in_ptbs = true;
+                    cfg.feature_flags.disable_id_leak_verifier = true;
+                    cfg.feature_flags.check_object_funds_withdraw_in_execution = true;
+                    cfg.feature_flags.disable_effects_tx_dependencies = true;
+                }
+                141 => {
+                    cfg.feature_flags.complete_effects_size_estimate = true;
+                    cfg.max_num_accumulator_events = Some(1024);
+                }
+                142 => {
+                    cfg.clock_borrow_cost_base = Some(52);
+                    cfg.feature_flags.check_groth16_pvk_length = true;
+                    cfg.object_is_shared_input_cost_base = Some(52);
+                    cfg.feature_flags.secp256r1_ecrecover_checks_x_below_p = true;
+                    cfg.binary_format_limits_profile = Some(BinaryFormatLimitsProfile::V1);
+                    cfg.feature_flags.defer_owned_object_double_spend = true;
+                }
+                143 => {
+                    cfg.execution_version = Some(5);
+                    cfg.package_arena_size_in_bytes = Some(20_000_000);
+                    cfg.feature_flags.simplify_nitro_header_validation = true;
+                    cfg.feature_flags.enable_forwarding_addresses = false;
+                    cfg.feature_flags.package_publish_charge = true;
+                    cfg.package_publish_charge_fixed = Some(1_000_000_000);
+                    cfg.package_publish_charge_per_module = Some(10_000_000);
+                    cfg.package_publish_charge_per_dependency = Some(10_000_000);
+                    if chain != Chain::Mainnet {
+                        cfg.feature_flags.mldsa65_auth = true;
+                    }
+                    cfg.layout_node_cost = Some(16);
+                    cfg.layout_node_cost_large_layout_threshold = Some(64);
+                }
+                144 => {
+                    if chain != Chain::Mainnet && chain != Chain::Testnet {
+                        cfg.feature_flags.enable_timestamp_transaction_expiration = true;
                     }
                 }
                 // Use this template when making changes:
@@ -4878,6 +5189,7 @@ impl ProtocolConfig {
                 .map(|limit| limit as u128),
             deprecate_global_storage_ops,
             disable_entry_point_signature_check: self.disable_entry_point_signature_check(),
+            disable_id_leak_verifier: self.disable_id_leak_verifier(),
             switch_to_regex_reference_safety: false,
             framework_tx_context_mut_restrictions: self.framework_tx_context_mut_restrictions(),
             disallow_jump_orphans: self.disallow_jump_orphans(),
@@ -4929,7 +5241,16 @@ impl ProtocolConfig {
                     .binary_variant_instantiation_handles_as_option()
                     .unwrap_or(u16::MAX),
             },
+            self.binary_format_limits(),
         )
+    }
+
+    pub fn binary_format_limits(
+        &self,
+    ) -> &'static move_binary_format::binary_config::BinaryFormatLimits {
+        self.binary_format_limits_profile
+            .unwrap_or(BinaryFormatLimitsProfile::LEGACY)
+            .limits()
     }
 
     /// Override one or more settings in the config, for testing.
@@ -4944,7 +5265,31 @@ impl ProtocolConfig {
         OverrideGuard
     }
 
+    /// Install a base override that applies before the override from `apply_overrides_for_testing`,
+    /// so that one can replace values set here. Base overrides stack and apply in the order they
+    /// were installed. Each is removed when its guard is dropped.
+    #[cfg(feature = "testing")]
+    pub fn apply_base_overrides_for_testing(
+        override_fn: impl Fn(ProtocolVersion, Self) -> Self + Send + Sync + 'static,
+    ) -> BaseOverrideGuard {
+        info!("installing base ProtocolConfig override for testing");
+        let override_fn: Arc<OverrideFn> = Arc::new(override_fn);
+        BASE_CONFIG_OVERRIDES
+            .lock()
+            .unwrap()
+            .push(override_fn.clone());
+        BaseOverrideGuard { override_fn }
+    }
+
     fn apply_config_override(version: ProtocolVersion, mut ret: Self) -> Self {
+        // Copy the list so that the lock is not held while the closures run.
+        #[cfg(feature = "testing")]
+        {
+            let fns = BASE_CONFIG_OVERRIDES.lock().unwrap().clone();
+            for override_fn in fns {
+                ret = override_fn(version, ret);
+            }
+        }
         if let Some(override_fn) = CONFIG_OVERRIDE.lock().unwrap().as_ref() {
             warn!(
                 "overriding ProtocolConfig settings with custom settings (you should not see this log outside of tests)"
@@ -5072,6 +5417,25 @@ impl Drop for OverrideGuard {
     }
 }
 
+#[cfg(feature = "testing")]
+static BASE_CONFIG_OVERRIDES: Mutex<Vec<Arc<OverrideFn>>> = Mutex::new(Vec::new());
+
+#[cfg(feature = "testing")]
+#[must_use]
+pub struct BaseOverrideGuard {
+    override_fn: Arc<OverrideFn>,
+}
+
+#[cfg(feature = "testing")]
+impl Drop for BaseOverrideGuard {
+    fn drop(&mut self) {
+        BASE_CONFIG_OVERRIDES
+            .lock()
+            .unwrap()
+            .retain(|f| !Arc::ptr_eq(f, &self.override_fn));
+    }
+}
+
 /// Defines which limit got crossed.
 /// The value which crossed the limit and value of the limit crossed are embedded
 #[derive(PartialEq, Eq)]
@@ -5102,6 +5466,20 @@ pub fn check_limit_in_range<T: Into<V>, U: Into<V>, V: PartialOrd + Into<u128>>(
     } else {
         LimitThresholdCrossed::Soft(x.into(), soft_limit.into())
     }
+}
+
+#[macro_export]
+macro_rules! assert_set {
+    ($protocol_config:expr, $($flag:ident),+ $(,)?) => {{
+        let protocol_config = $protocol_config;
+        $(
+            assert!(
+                protocol_config.$flag(),
+                "protocol config flag `{}` must be set",
+                stringify!($flag),
+            );
+        )+
+    }};
 }
 
 #[macro_export]
@@ -5142,30 +5520,56 @@ macro_rules! check_limit_by_meter {
     }};
 }
 
+// Amendments tables
+
 pub type Amendments = BTreeMap<AccountAddress, BTreeMap<AccountAddress, AccountAddress>>;
+
+static MAINNET_LINKAGE_AMENDMENTS: LazyLock<Arc<Amendments>> =
+    LazyLock::new(|| parse_amendments(include_str!("mainnet_amendments.json")));
+
+static TESTNET_LINKAGE_AMENDMENTS: LazyLock<Arc<Amendments>> =
+    LazyLock::new(|| parse_amendments(include_str!("testnet_amendments.json")));
+
+fn parse_amendments(json: &str) -> Arc<Amendments> {
+    #[derive(serde::Deserialize)]
+    struct AmendmentEntry {
+        root: String,
+        deps: Vec<DepEntry>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct DepEntry {
+        original_id: String,
+        version_id: String,
+    }
+
+    let entries: Vec<AmendmentEntry> =
+        serde_json::from_str(json).expect("Failed to parse amendments JSON");
+    let mut amendments = BTreeMap::new();
+    for entry in entries {
+        let root_id = AccountAddress::from_hex_literal(&entry.root).unwrap();
+        let mut dep_ids = BTreeMap::new();
+        for dep in entry.deps {
+            let orig_id = AccountAddress::from_hex_literal(&dep.original_id).unwrap();
+            let upgraded_id = AccountAddress::from_hex_literal(&dep.version_id).unwrap();
+            assert!(
+                dep_ids.insert(orig_id, upgraded_id).is_none(),
+                "Duplicate original ID in amendments table"
+            );
+        }
+        assert!(
+            amendments.insert(root_id, dep_ids).is_none(),
+            "Duplicate root ID in amendments table"
+        );
+    }
+    Arc::new(amendments)
+}
 
 #[cfg(all(test, not(msim)))]
 mod test {
     use insta::assert_yaml_snapshot;
 
     use super::*;
-
-    #[tokio::test]
-    async fn periodic_checkpoint_drains_are_new_devnet_only() {
-        for chain in [Chain::Unknown, Chain::Mainnet, Chain::Testnet] {
-            for version in MIN_PROTOCOL_VERSION..139 {
-                assert!(
-                    !ProtocolConfig::get_for_version(ProtocolVersion::new(version), chain)
-                        .periodic_checkpoint_commit_drains()
-                );
-            }
-            assert_eq!(
-                ProtocolConfig::get_for_version(ProtocolVersion::new(139), chain)
-                    .periodic_checkpoint_commit_drains(),
-                chain == Chain::Unknown,
-            );
-        }
-    }
 
     #[test]
     fn snapshot_tests() {
@@ -5193,6 +5597,21 @@ mod test {
     }
 
     #[test]
+    fn binary_format_limits_profile_matches_protocol_version() {
+        let v141 = ProtocolConfig::get_for_version(ProtocolVersion::new(141), Chain::Unknown);
+        assert_eq!(
+            v141.binary_format_limits(),
+            BinaryFormatLimitsProfile::LEGACY.limits()
+        );
+
+        let v142 = ProtocolConfig::get_for_version(ProtocolVersion::new(142), Chain::Unknown);
+        assert_eq!(
+            v142.binary_format_limits(),
+            BinaryFormatLimitsProfile::V1.limits()
+        );
+    }
+
+    #[test]
     fn test_getters() {
         let prot: ProtocolConfig =
             ProtocolConfig::get_for_version(ProtocolVersion::new(1), Chain::Unknown);
@@ -5200,6 +5619,46 @@ mod test {
             prot.max_arguments(),
             prot.max_arguments_as_option().unwrap()
         );
+    }
+
+    #[test]
+    fn vector_bulk_native_gas_costs_start_at_version_140() {
+        for chain in [Chain::Unknown, Chain::Mainnet, Chain::Testnet] {
+            let before = ProtocolConfig::get_for_version(ProtocolVersion::new(139), chain);
+            assert_eq!(before.vector_reverse_base_cost_as_option(), None);
+            assert_eq!(before.vector_reverse_per_elem_cost_as_option(), None);
+            assert_eq!(before.vector_keep_range_base_cost_as_option(), None);
+            assert_eq!(
+                before.vector_keep_range_per_dropped_elem_cost_as_option(),
+                None
+            );
+            assert_eq!(
+                before.vector_keep_range_per_moved_elem_cost_as_option(),
+                None
+            );
+            assert_eq!(before.vector_copy_range_base_cost_as_option(), None);
+            assert_eq!(before.vector_replace_range_base_cost_as_option(), None);
+            assert_eq!(before.vector_replace_range_per_elem_cost_as_option(), None);
+
+            let active = ProtocolConfig::get_for_version(ProtocolVersion::new(140), chain);
+            assert_eq!(active.vector_reverse_base_cost_as_option(), Some(52));
+            assert_eq!(active.vector_reverse_per_elem_cost_as_option(), Some(8));
+            assert_eq!(active.vector_keep_range_base_cost_as_option(), Some(52));
+            assert_eq!(
+                active.vector_keep_range_per_dropped_elem_cost_as_option(),
+                Some(1)
+            );
+            assert_eq!(
+                active.vector_keep_range_per_moved_elem_cost_as_option(),
+                Some(8)
+            );
+            assert_eq!(active.vector_copy_range_base_cost_as_option(), Some(52));
+            assert_eq!(active.vector_replace_range_base_cost_as_option(), Some(52));
+            assert_eq!(
+                active.vector_replace_range_per_elem_cost_as_option(),
+                Some(8)
+            );
+        }
     }
 
     #[test]
@@ -5412,16 +5871,11 @@ mod test {
     }
 
     #[test]
-    fn new_chain_has_no_upstream_gas_tokens_or_package_amendments() {
-        for chain in [Chain::Mainnet, Chain::Testnet, Chain::Unknown] {
-            let config = ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain);
-            assert!(config.gasless_allowed_token_types().is_empty());
-            assert!(
-                config
-                    .include_special_package_amendments_as_option()
-                    .is_none()
-            );
-        }
+    fn linkage_amendments_load() {
+        let mainnet = LazyLock::force(&MAINNET_LINKAGE_AMENDMENTS);
+        let testnet = LazyLock::force(&TESTNET_LINKAGE_AMENDMENTS);
+        assert!(!mainnet.is_empty(), "mainnet amendments must not be empty");
+        assert!(!testnet.is_empty(), "testnet amendments must not be empty");
     }
 
     #[test]

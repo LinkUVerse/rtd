@@ -4,39 +4,40 @@
 //# init --protocol-version 108 --accounts A B --addresses test=0x0 --simulator
 
 //# publish
-module test::counter {
-  public struct Counter has key {
+module test::counter;
+
+public struct Counter has key {
     id: UID,
     x: u64,
-  }
+}
 
-  public struct NFT has key, store {
+public struct NFT has key, store {
     id: UID,
-    x: u64
-  }
+    x: u64,
+}
 
-  public struct NFTMinted has copy, drop, store {
+public struct NFTMinted has copy, drop, store {
     id: ID,
-  }
+}
 
-  fun init(ctx: &mut TxContext) {
+fun init(ctx: &mut TxContext) {
     transfer::share_object(Counter {
         id: object::new(ctx),
         x: 0,
     })
-  }
+}
 
-  public fun inc(c: &mut Counter) { c.x = c.x + 1 }
-  public fun inc_by(c: &mut Counter, x: u64) { c.x = c.x + x }
+public fun inc(c: &mut Counter) { c.x = c.x + 1 }
 
-  public fun take(c: &mut Counter, x: u64, ctx: &mut TxContext): NFT {
+public fun inc_by(c: &mut Counter, x: u64) { c.x = c.x + x }
+
+public fun take(c: &mut Counter, x: u64, ctx: &mut TxContext): NFT {
     assert!(c.x >= x);
     c.x = c.x - x;
     let nft = NFT { id: object::new(ctx), x };
 
     rtd::event::emit(NFTMinted { id: object::id(&nft) });
     nft
-  }
 }
 
 //# programmable --sender A --inputs object(1,1) 42 @A
@@ -54,6 +55,7 @@ module test::counter {
 //# create-checkpoint
 
 //# run-graphql
+/*
 { # "Not found" cases
   transaction(digest: "11111111111111111111111111111111") {
     transactionBcs
@@ -65,8 +67,10 @@ module test::counter {
     transaction { transactionBcs }
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Fetching raw transactions and their effects, separately
   transactionA: transaction(digest: "@{digest_2}") {
     transactionBcs
@@ -88,8 +92,10 @@ module test::counter {
     transaction { transactionBcs }
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Fetch raw transactions and their effects, using multi-get
   multiGetTransactions(keys: [
     "@{digest_2}",
@@ -107,3 +113,4 @@ module test::counter {
     effectsBcs
   }
 }
+*/

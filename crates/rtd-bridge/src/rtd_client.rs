@@ -13,11 +13,15 @@ use crate::types::{BridgeAction, BridgeAuthority, BridgeCommittee};
 use async_trait::async_trait;
 use core::panic;
 use fastcrypto::traits::ToFromBytes;
+use std::collections::HashMap;
+use std::str::from_utf8;
+use std::sync::Arc;
+use std::time::Duration;
 use rtd_json_rpc_types::BcsEvent;
 use rtd_json_rpc_types::RtdEvent;
 use rtd_json_rpc_types::RtdExecutionStatus;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Checkpoint, ExecuteTransactionRequest, ExecutedTransaction, GetCheckpointRequest,
     GetObjectRequest, GetServiceInfoRequest, GetTransactionRequest, Object,
     Transaction as ProtoTransaction, UserSignature as ProtoUserSignature,
@@ -47,10 +51,6 @@ use rtd_types::parse_rtd_type_tag;
 use rtd_types::transaction::ObjectArg;
 use rtd_types::transaction::SharedObjectMutability;
 use rtd_types::transaction::Transaction;
-use std::collections::HashMap;
-use std::str::from_utf8;
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::OnceCell;
 use tracing::{error, warn};
 
@@ -684,7 +684,7 @@ impl RtdClientInner for rtd_rpc_api::Client {
         tx: Transaction,
     ) -> Result<ExecuteTransactionResult, BridgeError> {
         use move_core_types::language_storage::StructTag;
-        use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction as ProtoExecutedTransaction;
+        use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction as ProtoExecutedTransaction;
         use rtd_sdk_types::SignedTransaction;
 
         let signed_tx: SignedTransaction = tx.try_into().map_err(|e| {
@@ -1091,12 +1091,12 @@ mod tests {
     };
     use alloy::primitives::Address as EthAddress;
     use move_core_types::account_address::AccountAddress;
+    use serde::{Deserialize, Serialize};
+    use std::str::FromStr;
     use rtd_json_rpc_types::BcsEvent;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::bridge::{BridgeChainId, TOKEN_ID_RTD, TOKEN_ID_USDC};
     use rtd_types::crypto::get_key_pair;
-    use serde::{Deserialize, Serialize};
-    use std::str::FromStr;
 
     use super::*;
     use crate::events::{RtdToEthTokenBridgeV1, init_all_struct_tags};

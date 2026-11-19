@@ -7,16 +7,20 @@ use crate::epoch::committee_store::CommitteeStore;
 use crate::execution_cache::ExecutionCacheTraitPointers;
 use move_core_types::language_storage::StructTag;
 use parking_lot::Mutex;
+use std::sync::Arc;
 use rtd_rpc_store::RpcStoreReader;
+use rtd_types::base_types::ExecutionData;
+use rtd_types::base_types::ExecutionDigests;
 use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::RtdAddress;
 use rtd_types::base_types::SequenceNumber;
+use rtd_types::base_types::RtdAddress;
 use rtd_types::base_types::TransactionDigest;
+use rtd_types::base_types::VerifiedExecutionData;
 use rtd_types::committee::Committee;
 use rtd_types::committee::EpochId;
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
 use rtd_types::error::{RtdErrorKind, RtdResult};
-use rtd_types::full_checkpoint_content::ObjectSet;
+use rtd_types::messages_checkpoint::CheckpointContents;
 use rtd_types::messages_checkpoint::CheckpointContentsDigest;
 use rtd_types::messages_checkpoint::CheckpointDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
@@ -42,9 +46,8 @@ use rtd_types::storage::WriteStore;
 use rtd_types::storage::error::Error as StorageError;
 use rtd_types::storage::error::Result;
 use rtd_types::storage::{BackingPackageStore, PackageObject};
-use rtd_types::storage::{ObjectKey, OverlayBackingPackageStore, ReadStore};
+use rtd_types::storage::{ObjectKey, ReadStore};
 use rtd_types::transaction::VerifiedTransaction;
-use std::sync::Arc;
 use tap::TapFallible;
 use tracing::error;
 use typed_store::TypedStoreError;
@@ -257,6 +260,16 @@ impl ReadStore for RocksDbStore {
             .multi_get_executed_effects(digests)
     }
 
+    fn get_execution_data(&self, digests: &ExecutionDigests) -> Option<ExecutionData> {
+        let reader = &self.cache_traits.transaction_cache_reader;
+        let transaction = reader.get_transaction_block(&digests.transaction)?;
+        let effects = reader.get_effects(&digests.effects)?;
+        Some(ExecutionData::new(
+            (*transaction).clone().into_inner(),
+            effects,
+        ))
+    }
+
     fn get_events(&self, digest: &TransactionDigest) -> Option<TransactionEvents> {
         self.cache_traits
             .transaction_cache_reader
@@ -409,6 +422,33 @@ impl WriteStore for RocksDbStore {
             .multi_insert_transaction_and_effects(contents.transactions());
         self.checkpoint_store
             .insert_verified_checkpoint_contents(checkpoint, contents)
+            .map_err(Into::into)
+    }
+
+    fn insert_transactions_and_effects(
+        &self,
+        data: &[VerifiedExecutionData],
+    ) -> Result<(), rtd_types::storage::error::Error> {
+        self.cache_traits
+            .state_sync_store
+            .multi_insert_transaction_and_effects(data);
+        Ok(())
+    }
+
+    fn insert_checkpoint_contents_digests(
+        &self,
+        checkpoint: &VerifiedCheckpoint,
+        contents: CheckpointContents,
+    ) -> Result<(), rtd_types::storage::error::Error> {
+        debug_assert!(
+            contents
+                .iter()
+                .all(|digests| self.get_execution_data(digests).is_some()),
+            "checkpoint {} contents inserted before its transactions and effects",
+            checkpoint.sequence_number()
+        );
+        self.checkpoint_store
+            .insert_checkpoint_contents_digests(checkpoint, &contents)
             .map_err(Into::into)
     }
 
@@ -592,14 +632,9 @@ impl RuntimeObjectResolver for RestReadStore {
         child: &ObjectID,
         child_version_upper_bound: SequenceNumber,
     ) -> RtdResult<Option<Object>> {
-        Ok(self.get_object(child).and_then(|o| {
-            if o.version() <= child_version_upper_bound
+        Ok(self.get_object(child).filter(|o| {
+            o.version() <= child_version_upper_bound
                 && o.owner == Owner::ObjectOwner((*parent).into())
-            {
-                Some(o)
-            } else {
-                None
-            }
         }))
     }
 
@@ -618,6 +653,23 @@ impl RuntimeObjectResolver for RestReadStore {
 }
 
 impl RpcStateReader for RestReadStore {
+    fn get_struct_layout_with_overlay(
+        &self,
+        struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &rtd_types::full_checkpoint_content::ObjectSet,
+    ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
+        let backing_store = self.state.get_backing_package_store();
+        let overlay_store = rtd_types::storage::OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
+        let resolver = rtd_package_resolver::SyncResolver::new(overlay_store);
+        match resolver.type_layout(move_core_types::language_storage::TypeTag::Struct(
+            Box::new(struct_tag.clone()),
+        )) {
+            Ok(layout) => Ok(Some(layout)),
+            Err(e) => Err(StorageError::custom(e)),
+        }
+    }
+
+
     fn get_lowest_available_checkpoint_objects(
         &self,
     ) -> rtd_types::storage::error::Result<CheckpointSequenceNumber> {
@@ -640,22 +692,8 @@ impl RpcStateReader for RestReadStore {
         None
     }
 
-    fn get_struct_layout_with_overlay(
-        &self,
-        struct_tag: &move_core_types::language_storage::StructTag,
-        overlay: &ObjectSet,
-    ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
-        let backing_store = self.state.get_backing_package_store();
-        let overlay_store = OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        epoch_store
-            .executor()
-            // TODO(cache) - must read through cache
-            .type_layout_resolver(epoch_store.protocol_config(), Box::new(overlay_store))
-            .get_annotated_layout(struct_tag)
-            .map(|layout| layout.into_layout())
-            .map(Some)
-            .map_err(StorageError::custom)
+    fn layout_package_store(&self) -> Box<dyn BackingPackageStore + Send + Sync + '_> {
+        Box::new(self.state.get_backing_package_store().as_ref())
     }
 }
 
@@ -878,14 +916,9 @@ impl RuntimeObjectResolver for RpcStoreReadStore {
         child: &ObjectID,
         child_version_upper_bound: SequenceNumber,
     ) -> RtdResult<Option<Object>> {
-        Ok(self.get_object(child).and_then(|o| {
-            if o.version() <= child_version_upper_bound
+        Ok(self.get_object(child).filter(|o| {
+            o.version() <= child_version_upper_bound
                 && o.owner == Owner::ObjectOwner((*parent).into())
-            {
-                Some(o)
-            } else {
-                None
-            }
         }))
     }
 
@@ -904,6 +937,23 @@ impl RuntimeObjectResolver for RpcStoreReadStore {
 }
 
 impl RpcStateReader for RpcStoreReadStore {
+    fn get_struct_layout_with_overlay(
+        &self,
+        struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &rtd_types::full_checkpoint_content::ObjectSet,
+    ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
+        let backing_store = self.state.get_backing_package_store();
+        let overlay_store = rtd_types::storage::OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
+        let resolver = rtd_package_resolver::SyncResolver::new(overlay_store);
+        match resolver.type_layout(move_core_types::language_storage::TypeTag::Struct(
+            Box::new(struct_tag.clone()),
+        )) {
+            Ok(layout) => Ok(Some(layout)),
+            Err(e) => Err(StorageError::custom(e)),
+        }
+    }
+
+
     fn get_lowest_available_checkpoint_objects(&self) -> Result<CheckpointSequenceNumber> {
         let perpetual = self
             .state
@@ -931,25 +981,8 @@ impl RpcStateReader for RpcStoreReadStore {
         Ok(*self.rocks.get_latest_checkpoint()?.sequence_number())
     }
 
-    fn get_struct_layout_with_overlay(
-        &self,
-        struct_tag: &move_core_types::language_storage::StructTag,
-        overlay: &ObjectSet,
-    ) -> Result<Option<move_core_types::annotated_value::MoveTypeLayout>> {
-        // Resolve through the authority's live executor and backing
-        // package store, matching `RestReadStore`: the perpetual store
-        // backs the package reads and the loaded epoch store carries
-        // the current protocol config.
-        let backing_store = self.state.get_backing_package_store();
-        let overlay_store = OverlayBackingPackageStore::new(overlay, backing_store.as_ref());
-        let epoch_store = self.state.load_epoch_store_one_call_per_task();
-        epoch_store
-            .executor()
-            .type_layout_resolver(epoch_store.protocol_config(), Box::new(overlay_store))
-            .get_annotated_layout(struct_tag)
-            .map(|layout| layout.into_layout())
-            .map(Some)
-            .map_err(StorageError::custom)
+    fn layout_package_store(&self) -> Box<dyn BackingPackageStore + Send + Sync + '_> {
+        Box::new(self.state.get_backing_package_store().as_ref())
     }
 }
 
@@ -1001,6 +1034,24 @@ impl RpcIndexes for RpcStoreReadStore {
         cursor: Option<u64>,
     ) -> Result<Box<dyn Iterator<Item = Result<(u64, ObjectID), TypedStoreError>> + '_>> {
         self.reader.package_versions_iter(original_id, cursor)
+    }
+
+    fn get_package_version_storage_id(
+        &self,
+        original_id: ObjectID,
+        version: u64,
+    ) -> Result<Option<ObjectID>> {
+        self.reader
+            .get_package_version_storage_id(original_id, version)
+    }
+
+    fn get_package_at_checkpoint(
+        &self,
+        original_id: ObjectID,
+        checkpoint: CheckpointSequenceNumber,
+    ) -> Result<Option<(u64, ObjectID)>> {
+        self.reader
+            .get_package_at_checkpoint(original_id, checkpoint)
     }
 
     fn get_highest_indexed_checkpoint_seq_number(

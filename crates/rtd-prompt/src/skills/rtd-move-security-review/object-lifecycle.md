@@ -15,7 +15,7 @@ _Absence rule:_ walk every `object::delete` / by-value unpack site; DF/collectio
 calls *elsewhere* do not clear it — they must precede *this* delete on the same path.
 Exploit: child objects/funds become permanently inaccessible (no recovery) — asset loss or locked
 collateral. Deleting a *shared* parent makes its dynamic fields permanently unreachable.
-Source: `historical upstream skills → object-model/dynamic-fields-and-collections.md`, `historical upstream skills → rtd-move/move.md`.
+Source: `LinkUVerse/skills → object-model/dynamic-fields-and-collections.md`, `LinkUVerse/skills → rtd-move/move.md`.
 
 ### SM-C2 — Accidental / irreversible sharing   [High]
 Invariant: `share_object` / `public_share_object` is intentional; owner-only or sensitive state
@@ -24,7 +24,7 @@ Detect: `transfer::share_object` / `public_share_object` on objects that hold ow
 or that grant write access to state meant to be single-owner.
 Exploit: state becomes world-mutable forever (anyone can pass it `&mut` to any public fn that
 accepts it), or private data becomes permanently readable.
-Source: `historical upstream skills → object-model/ownership.md`.
+Source: `LinkUVerse/skills → object-model/ownership.md`.
 
 ### SM-C3 — Ungated by-value shared-object deletion   [High]
 Invariant: a function that takes a shared object **by value** (the only form that can delete it)
@@ -35,7 +35,7 @@ _Absence rule:_ walk every `public`/`entry` fn taking a shared-object type *by v
 (no `&`/`&mut`); authorization on *other* fns does not clear an unauthorized by-value site.
 Exploit: any caller destroys core protocol state and orphans its dynamic fields (DoS + asset
 lock).
-Source: `historical upstream skills → rtd-move/move.md`.
+Source: `LinkUVerse/skills → rtd-move/move.md`.
 
 ### SM-C4 — Unvalidated `Receiving<T>` acceptance   [Medium]
 Invariant: `transfer::receive` / `public_receive` validates the received object's type and/or
@@ -45,7 +45,7 @@ _Absence rule:_ walk every `transfer::receive`/`public_receive` call site; a sin
 unchecked receive is the finding.
 Exploit: spam an account/object with crafted objects → inventory pollution, type-handling
 confusion, or storage griefing.
-Source: `historical upstream skills → object-model/transfers.md`.
+Source: `LinkUVerse/skills → object-model/transfers.md`.
 
 ### SM-D1 — Invariants trusted from the caller instead of enforced on-chain   [Critical]
 Invariant: slippage / minimum-output / deadline / price / amount bounds are asserted **in Move**,
@@ -57,12 +57,13 @@ flowing to transfer/mint/swap; an `assert!` over a *different* value (or against
 caller-supplied input, not on-chain state) does not clear it.
 Exploit: submit a PTB with `min_out = 0` (or crafted price) and sandwich/drain the pool;
 front-run a shared-object write.
-Source: `historical upstream skills → object-model/`, `historical upstream skills → ptbs/fundamentals.md` (PTBs are adversarial).
+Source: `LinkUVerse/skills → object-model/`, `LinkUVerse/skills → ptbs/fundamentals.md` (PTBs are adversarial).
 
-### SM-D2 — Shared-object contention / equivocation DoS   [Medium]
-Invariant: hot shared objects on a common write path are sharded or contention-aware; the design
-tolerates competing transactions on the same version.
+### SM-D2 — Shared-object congestion DoS   [Medium]
+Invariant: hot shared objects on a common write path are sharded or contention-aware, so one
+object's write budget does not gate every user action.
 Detect: a single global shared object mutated by every user action.
-Exploit: flood concurrent txns on the same shared-object version; split validator reservations →
-the object is unavailable until the next epoch (liveness DoS).
-Source: `historical upstream skills → ptbs/troubleshooting.md`.
+Exploit: flood transactions that write the same shared object; congestion control defers
+transactions over that object's per-commit budget and eventually cancels them, so honest users
+of the object are delayed or cancelled (liveness DoS).
+Source: `crates/rtd-core/src/authority/shared_object_congestion_tracker.rs`.

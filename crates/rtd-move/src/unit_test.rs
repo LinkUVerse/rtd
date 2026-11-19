@@ -6,11 +6,18 @@ use move_cli::base::{
     self,
     test::{self, UnitTestResult},
 };
-use move_package_alt_compilation::build_config::BuildConfig;
+use move_package_compilation::build_config::BuildConfig;
 use move_unit_test::{UnitTestingConfig, vm_test_setup::VMTestSetup};
 use move_vm_config::runtime::VMConfig;
 use move_vm_runtime::natives::extensions::NativeContextExtensions;
-use rtd_adapter::gas_meter::RtdGasMeter;
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    path::Path,
+    rc::Rc,
+    sync::{Arc, LazyLock},
+};
+use rtd_adapter::metering::gas_meter::RtdGasMeter;
 use rtd_move_build::decorate_warnings;
 use rtd_move_natives::{
     NativesCostTable, object_runtime::ObjectRuntime, scratch::ScratchRuntime,
@@ -22,17 +29,8 @@ use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::{
     base_types::{RtdAddress, TxContext},
     digests::TransactionDigest,
-    gas::{RtdGasStatus, RtdGasStatusAPI},
-    gas_model::{tables::GasStatus, units_types::Gas},
+    gas_model::{gas_predicates::cost_table_for_version, tables::GasStatus, units_types::Gas},
     metrics::ExecutionMetrics,
-};
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    ops::{Deref, DerefMut},
-    path::Path,
-    rc::Rc,
-    sync::{Arc, LazyLock},
 };
 
 // Move unit tests will halt after executing this many steps. This is a protection to avoid divergence
@@ -141,7 +139,6 @@ pub async fn run_move_unit_tests(
 
 pub struct RtdVMTestSetup {
     gas_price: u64,
-    reference_gas_price: u64,
     protocol_config: ProtocolConfig,
     native_function_table: move_vm_runtime::natives::functions::NativeFunctionTable,
 }
@@ -159,7 +156,6 @@ impl RtdVMTestSetup {
             rtd_move_natives::all_natives(/* silent */ false, &protocol_config);
         Self {
             gas_price: TEST_GAS_PRICE,
-            reference_gas_price: TEST_GAS_PRICE,
             protocol_config,
             native_function_table,
         }
@@ -178,25 +174,24 @@ pub struct RtdExtensionsBuilder<'a> {
 }
 
 impl VMTestSetup for RtdVMTestSetup {
-    type Meter<'a> = RtdGasMeter<RtdGasStatusTestWrapper>;
+    type Meter<'a> = RtdGasMeter<Box<GasStatus>>;
     type ExtensionsBuilder<'a> = RtdExtensionsBuilder<'a>;
 
     fn new_meter<'a>(&'a self, execution_bound: Option<u64>) -> Self::Meter<'a> {
-        RtdGasMeter(RtdGasStatusTestWrapper(
-            RtdGasStatus::new(
-                execution_bound.unwrap_or(*MAX_UNIT_TEST_INSTRUCTIONS),
-                self.gas_price,
-                self.reference_gas_price,
-                &self.protocol_config,
-            )
-            .unwrap(),
-        ))
+        let config = &self.protocol_config;
+        let budget = execution_bound.unwrap_or(*MAX_UNIT_TEST_INSTRUCTIONS);
+        let computation_budget = budget.min(config.max_gas_computation_bucket() * self.gas_price);
+        RtdGasMeter(Box::new(GasStatus::new(
+            cost_table_for_version(config.gas_model_version()),
+            computation_budget,
+            self.gas_price,
+            config.gas_model_version(),
+        )))
     }
 
     fn used_gas<'a>(&'a self, execution_bound: u64, meter: Self::Meter<'a>) -> u64 {
-        let gas_status = &meter.0;
         Gas::new(execution_bound)
-            .checked_sub(gas_status.remaining_gas())
+            .checked_sub(meter.0.remaining_gas())
             .unwrap()
             .into()
     }
@@ -253,22 +248,5 @@ impl VMTestSetup for RtdVMTestSetup {
         ))));
         ext.add(&builder.store);
         ext
-    }
-}
-
-// Massaging to get traits to line up.
-pub struct RtdGasStatusTestWrapper(RtdGasStatus);
-
-impl Deref for RtdGasStatusTestWrapper {
-    type Target = GasStatus;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.move_gas_status()
-    }
-}
-
-impl DerefMut for RtdGasStatusTestWrapper {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0.move_gas_status_mut()
     }
 }

@@ -7,14 +7,14 @@ use async_graphql::InputObject;
 use async_graphql::InputValueError;
 
 use rtd_indexer_alt_reader::kv_loader::TransactionContents;
-use rtd_rpc::proto::rtd::rpc::v2::AffectedAddressFilter;
-use rtd_rpc::proto::rtd::rpc::v2::AffectedObjectFilter;
-use rtd_rpc::proto::rtd::rpc::v2::MoveCallFilter;
-use rtd_rpc::proto::rtd::rpc::v2::SenderFilter;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionFilter as GrpcTransactionFilter;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionLiteral;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionTerm;
-use rtd_rpc::proto::rtd::rpc::v2::transaction_literal::Predicate;
+use rtd_rpc::proto::sui::rpc::v2::AffectedAddressFilter;
+use rtd_rpc::proto::sui::rpc::v2::AffectedObjectFilter;
+use rtd_rpc::proto::sui::rpc::v2::MoveCallFilter;
+use rtd_rpc::proto::sui::rpc::v2::SenderFilter;
+use rtd_rpc::proto::sui::rpc::v2::TransactionFilter as GrpcTransactionFilter;
+use rtd_rpc::proto::sui::rpc::v2::TransactionLiteral;
+use rtd_rpc::proto::sui::rpc::v2::TransactionTerm;
+use rtd_rpc::proto::sui::rpc::v2::transaction_literal::Predicate;
 use rtd_types::transaction::TransactionDataAPI;
 
 use crate::api::scalars::fq_name_filter::FqNameFilter;

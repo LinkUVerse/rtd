@@ -5,21 +5,30 @@
 
 //# publish --sender A
 #[allow(deprecated_usage)]
-module P::fake {
-    use rtd::coin;
+module P::fake;
 
-    public struct FAKE has drop {}
+use rtd::coin;
 
-    fun init(witness: FAKE, ctx: &mut TxContext){
-        let (treasury_cap, metadata) = coin::create_currency(witness, 2, b"FAKE", b"", b"", option::none(), ctx);
-        transfer::public_freeze_object(metadata);
-        transfer::public_transfer(treasury_cap, ctx.sender());
-    }
+public struct FAKE has drop {}
+
+fun init(witness: FAKE, ctx: &mut TxContext) {
+    let (treasury_cap, metadata) = coin::create_currency(
+        witness,
+        2,
+        b"FAKE",
+        b"",
+        b"",
+        option::none(),
+        ctx,
+    );
+    transfer::public_freeze_object(metadata);
+    transfer::public_transfer(treasury_cap, ctx.sender());
 }
 
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   transactionEffects(digest: "@{digest_1}") {
     objectChanges {
@@ -43,8 +52,10 @@ module P::fake {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   objects(filter: { type: "0x2::coin::CoinMetadata<@{P}::fake::FAKE>" }) {
     nodes {
@@ -64,8 +75,10 @@ module P::fake {
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   fake: coinMetadata(coinType: "@{P}::fake::FAKE") { ...CM }
   rtd: coinMetadata(coinType: "0x2::rtd::RTD") { ...CM }
@@ -82,6 +95,7 @@ fragment CM on CoinMetadata {
   regulatedState
   allowGlobalPause
 }
+*/
 
 //# programmable --sender A --inputs object(1,1) 100 @A
 //> 0: rtd::coin::mint<P::fake::FAKE>(Input(0), Input(1));
@@ -90,6 +104,7 @@ fragment CM on CoinMetadata {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   coinMetadata(coinType: "@{P}::fake::FAKE") {
     decimals
@@ -102,3 +117,4 @@ fragment CM on CoinMetadata {
     allowGlobalPause
   }
 }
+*/

@@ -30,12 +30,12 @@
 
 use fastcrypto::encoding::Hex;
 use prost::Message;
-use rtd_rpc::proto::rtd::rpc::v2::Transaction as ProtoTransaction;
+use serde::{Deserialize, Serialize};
+use rtd_rpc::proto::sui::rpc::v2::Transaction as ProtoTransaction;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::ToFromBytes;
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::TransactionData;
-use serde::{Deserialize, Serialize};
 
 use crate::Currency;
 use crate::errors::Error;
@@ -168,7 +168,7 @@ pub fn decode(hex: &Hex) -> Result<RosettaTransaction, Error> {
 mod tests {
     use super::*;
     use crate::RTD;
-    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{TEST_ONLY_GAS_UNIT_FOR_TRANSFER, TransactionData};
 
@@ -248,9 +248,8 @@ mod tests {
     /// representations — `TransactionData` ↔ proto `Transaction` ↔
     /// `rtd_sdk_types::Transaction` — through four hand-written conversions.
     /// Nothing compiler-checks that they agree, and they have drifted before:
-    /// the `ValidDuring` ms-vs-seconds mismatch pinned by
-    /// `test_ab_gas_valid_during_timestamps_are_none` is exactly a case where
-    /// the encode and decode directions disagree. Two extra wrinkles specific
+    /// the `ValidDuring` timestamps were once encoded as ms and decoded as
+    /// seconds. Two extra wrinkles specific
     /// to our usage: `encode_inner_proto` clears the opaque `bcs` blob, so this
     /// also proves the *structured* fields alone are lossless; and proto3
     /// elides default/empty values, so an absent-vs-zero mapping bug only
@@ -383,13 +382,9 @@ mod tests {
         assert_canonical(&data, "ab_gas_valid_during");
     }
 
-    /// §10.5 / §13.6 pin: rosetta-built address-balance-gas transactions must
-    /// keep the `ValidDuring` `min/max_timestamp` fields `None`. The proto
-    /// round-trip for those timestamps has a latent ms-vs-seconds mismatch
-    /// (encode treats the value as ms via `ms_to_timestamp`, decode reads
-    /// `.seconds`); it is inert only while both stay `None`. Do not start
-    /// populating them — if this test ever needs changing, fix the conversion
-    /// first.
+    /// §10.5 / §13.6 pin: rosetta-built address-balance-gas transactions keep
+    /// the `ValidDuring` `min/max_timestamp` fields `None`. Validators reject
+    /// timestamps unless `enable_timestamp_transaction_expiration` is set.
     #[test]
     fn test_ab_gas_valid_during_timestamps_are_none() {
         use crate::types::internal_operation::pay_rtd_pt_ab_gas;
@@ -578,7 +573,7 @@ mod tests {
     /// decode time closes that bypass.
     #[test]
     fn test_decode_inner_proto_rejects_populated_bcs() {
-        use rtd_rpc::proto::rtd::rpc::v2::Bcs;
+        use rtd_rpc::proto::sui::rpc::v2::Bcs;
         // Build a valid proto, then re-attach a `bcs` field. The structured
         // fields stay valid; only the `bcs` presence is the violation.
         let data = sample_pay_rtd_data();

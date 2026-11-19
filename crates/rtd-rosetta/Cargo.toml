@@ -1,7 +1,7 @@
 [package]
 name = "rtd-rosetta"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -50,7 +50,6 @@ enum_dispatch.workspace = true
 [dev-dependencies]
 rtd-types = { workspace = true, features = ["testing"] }
 rtd-swarm-config.workspace = true
-rtd-sdk.workspace = true
 rtd-move-build.workspace = true
 rtd-test-transaction-builder.workspace = true
 test-cluster.workspace = true

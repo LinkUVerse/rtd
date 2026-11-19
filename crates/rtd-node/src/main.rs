@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::{ArgGroup, Parser};
-use rtd_rpc_api::ServerVersion;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use rtd_rpc_api::ServerVersion;
 use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tracing::{error, info};
 
 use linku_common::sync::async_once_cell::AsyncOnceCell;
+use rtd_config::NodeConfig;
 use rtd_config::node::RunWithRange;
-use rtd_config::{Config, NodeConfig};
 use rtd_core::runtime::RtdRuntimes;
 use rtd_telemetry::send_telemetry_event;
 use rtd_types::committee::EpochId;
@@ -56,7 +56,7 @@ fn main() {
     // TODO: re-enable after we figure out how to eliminate crashes in prod because of this.
     // ProtocolConfig::poison_get_for_min_version();
     let args = Args::parse();
-    let mut config = NodeConfig::load(&args.config_path).unwrap();
+    let mut config = NodeConfig::load_from_path(&args.config_path).unwrap();
     assert!(
         config.supported_protocol_versions.is_none(),
         "supported_protocol_versions cannot be read from the config file"

@@ -4,19 +4,19 @@
 use super::{
     Handle, PeerHeights, StateSyncEventLoop, StateSyncMessage, StateSyncServer,
     metrics::Metrics,
-    server::{CheckpointContentsDownloadLimitLayer, Server, SizeLimitLayer},
+    server::{self, CheckpointContentsDownloadLimitLayer, Server, SizeLimitLayer},
 };
 use crate::discovery;
 use anemo::codegen::InboundRequestLayer;
 use anemo_tower::{inflight_limit, rate_limit};
-use rtd_config::node::ArchiveReaderConfig;
-use rtd_config::p2p::StateSyncConfig;
-use rtd_types::messages_checkpoint::VerifiedCheckpoint;
-use rtd_types::storage::WriteStore;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
+use rtd_config::node::ArchiveReaderConfig;
+use rtd_config::p2p::StateSyncConfig;
+use rtd_types::messages_checkpoint::VerifiedCheckpoint;
+use rtd_types::storage::WriteStore;
 use tap::Pipe;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -179,6 +179,9 @@ where
             peer_heights: peer_heights.clone(),
             sender: weak_sender,
             max_checkpoint_lookahead: config.max_checkpoint_lookahead(),
+            max_full_contents_response_size: server::MAX_FULL_CHECKPOINT_CONTENTS_RESPONSE_SIZE,
+            checkpoint_transactions_response_budget:
+                server::CHECKPOINT_TRANSACTIONS_RESPONSE_BUDGET,
         };
 
         (

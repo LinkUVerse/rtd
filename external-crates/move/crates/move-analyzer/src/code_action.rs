@@ -35,11 +35,11 @@ use vfs::VfsPath;
 use move_compiler::{
     editions::Flavor,
     expansion::ast::ModuleIdent,
-    linters::LintLevel,
+    linters::LintSelection,
     parser::ast::{LeadingNameAccess_, NameAccessChain_},
     shared::{Identifier, Name},
 };
-use move_package_alt::MoveFlavor;
+use move_package::MoveFlavor;
 
 // The following reflects prefixes of error messages for
 // problems with a single-element access chain that are
@@ -147,7 +147,7 @@ fn access_chain_autofix_actions<F: MoveFlavor>(
         pkg_dependencies.clone(),
         ide_files_root,
         &pkg_path,
-        LintLevel::None,
+        LintSelection::None,
         move_flavor,
         flavor,
         Some(&file_path),

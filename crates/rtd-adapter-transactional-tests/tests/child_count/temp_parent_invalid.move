@@ -8,17 +8,17 @@
 
 //# publish
 
-module test::m {
-    public struct S has key, store {
-        id: rtd::object::UID,
-    }
+module test::m;
 
-    public entry fun t(ctx: &mut TxContext) {
-        let mut parent = rtd::object::new(ctx);
-        let child = S { id: rtd::object::new(ctx) };
-        rtd::dynamic_object_field::add(&mut parent, 0u64, child);
-        rtd::object::delete(parent);
-    }
+public struct S has key, store {
+    id: rtd::object::UID,
+}
+
+public entry fun t(ctx: &mut TxContext) {
+    let mut parent = rtd::object::new(ctx);
+    let child = S { id: rtd::object::new(ctx) };
+    rtd::dynamic_object_field::add(&mut parent, 0u64, child);
+    rtd::object::delete(parent);
 }
 
 //# run test::m::t --sender A

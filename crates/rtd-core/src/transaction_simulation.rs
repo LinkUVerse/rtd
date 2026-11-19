@@ -21,7 +21,6 @@ use rtd_types::{
     execution_params::{ExecutionOrEarlyError, FundsWithdrawStatus, get_early_execution_error},
     execution_status::ExecutionErrorKind,
     full_checkpoint_content::ObjectSet,
-    gas::RtdGasStatus,
     messages_checkpoint::CheckpointTimestamp,
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     object::{MoveObject, OBJECT_START_VERSION, Object, Owner},
@@ -159,7 +158,7 @@ pub fn simulate_transaction(
         id
     });
 
-    let (gas_status, checked_input_objects) = if dev_inspect {
+    let checked_input_objects = if dev_inspect {
         check_dev_inspect_input(
             protocol_config,
             &transaction,
@@ -192,6 +191,9 @@ pub fn simulate_transaction(
         &checked_input_objects,
         certificate_deny_set,
         &FundsWithdrawStatus::MaybeSufficient,
+        transaction.expiration(),
+        // Simulation does not check the timestamp window.
+        None,
     );
     // Dev-inspect/simulation path (not committed): no assigned accumulator version here, so the
     // IFFW short-circuit applies unconditionally (`None`), matching non-mainnet execution.
@@ -207,7 +209,10 @@ pub fn simulate_transaction(
     let cloned_gas = gas_data.clone();
     let cloned_kind = kind.clone();
     let tx_digest = transaction_digest;
-    let system_object_versions = SystemObjectVersions::from_latest_in_store(backing_store);
+    let system_object_versions = SystemObjectVersions::from_inputs_or_latest_in_store(
+        checked_input_objects.inner(),
+        backing_store,
+    );
     let (inner_temp_store, _, effects, execution_result) = executor.dev_inspect_transaction(
         &tracking_store,
         protocol_config,
@@ -217,9 +222,9 @@ pub fn simulate_transaction(
         &execution_epoch_id,
         epoch_timestamp_ms,
         checked_input_objects,
-        system_object_versions,
+        system_object_versions.clone(),
         gas_data,
-        gas_status,
+        validity_check_context.reference_gas_price,
         kind,
         rewritten_inputs.clone(),
         signer,
@@ -244,12 +249,6 @@ pub fn simulate_transaction(
             });
 
         if has_insufficient_object_funds {
-            let retry_gas_status = RtdGasStatus::new(
-                cloned_gas.budget,
-                cloned_gas.price,
-                validity_check_context.reference_gas_price,
-                protocol_config,
-            )?;
             let (store, _, effects, result) = executor.dev_inspect_transaction(
                 &tracking_store,
                 protocol_config,
@@ -264,7 +263,7 @@ pub fn simulate_transaction(
                 cloned_input_objects,
                 system_object_versions,
                 cloned_gas,
-                retry_gas_status,
+                validity_check_context.reference_gas_price,
                 cloned_kind,
                 rewritten_inputs,
                 signer,

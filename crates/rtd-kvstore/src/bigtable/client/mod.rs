@@ -1,14 +1,18 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+mod auth_channel;
 pub mod bitmap_query;
 mod channel_pool;
 mod flow_control;
-mod metadata_channel;
+#[cfg(test)]
+mod raw_h2_server;
+mod read_rows_retry;
 
 use std::collections::HashMap;
 use std::future::Future;
 use std::ops::Range;
+use std::ops::RangeInclusive;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,11 +24,13 @@ use anyhow::bail;
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::StreamExt;
+use gcp_auth::TokenProvider;
 use prometheus::Registry;
 use rtd_futures::task::TaskGuard;
 use rtd_inverted_index::ScanDirection;
 use rtd_types::base_types::EpochId;
 use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::SequenceNumber;
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
@@ -34,23 +40,29 @@ use tonic::Code;
 use tonic::transport::Certificate;
 use tonic::transport::Channel;
 use tonic::transport::ClientTlsConfig;
-use tonic::transport::Identity;
 
+use auth_channel::AuthChannel;
+use auth_channel::bigtable_features_header;
+pub use channel_pool::ChannelHealthConfig;
 use channel_pool::ChannelPool;
 use channel_pool::ChannelPrimer;
 pub use channel_pool::PoolConfig;
+use channel_pool::is_quarantine_cancellation;
 use flow_control::BatchWriteFlowController;
+use flow_control::WriteAdmission;
 use flow_control::is_overload_error;
-use metadata_channel::MetadataChannel;
-use metadata_channel::bigtable_features_header;
+pub use read_rows_retry::ReadRowsRetryConfig;
+use read_rows_retry::ResumableReadRows;
 
 use crate::CheckpointData;
 use crate::EpochData;
 use crate::KeyValueStoreReader;
 use crate::PackageData;
 use crate::ProtocolConfigData;
+use crate::ProtocolConfigV2Data;
 use crate::TransactionData;
 use crate::TransactionEventsData;
+use crate::TxCheckpointPosition;
 use crate::TxSeqDigestData;
 use crate::WatermarkV0;
 use crate::WatermarkV1;
@@ -72,11 +84,14 @@ use crate::bigtable::proto::bigtable::v2::mutation::SetCell;
 use crate::bigtable::proto::bigtable::v2::read_rows_response::cell_chunk::RowStatus;
 use crate::bigtable::proto::bigtable::v2::request_stats::StatsView;
 use crate::bigtable::proto::bigtable::v2::row_filter::Chain;
+use crate::bigtable::proto::bigtable::v2::row_filter::Condition;
 use crate::bigtable::proto::bigtable::v2::row_filter::Filter;
 use crate::bigtable::proto::bigtable::v2::row_range::EndKey;
 use crate::bigtable::proto::bigtable::v2::row_range::StartKey;
 use crate::bigtable::proto::bigtable::v2::value_range;
+use crate::object_status::ObjectStatus;
 use crate::tables;
+use crate::tables::objects::ObjectRow;
 use crate::tables::tx_seq_digest;
 
 const DEFAULT_MAX_DECODING_MESSAGE_SIZE: usize = 32 * 1024 * 1024;
@@ -146,6 +161,8 @@ pub struct MutationError {
 
 struct BigtablePrimer {
     instance_name: String,
+    policy: String,
+    token_provider: Option<Arc<dyn TokenProvider>>,
 }
 
 impl ChannelPrimer for BigtablePrimer {
@@ -154,9 +171,13 @@ impl ChannelPrimer for BigtablePrimer {
         channel: &'a Channel,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            let metadata_channel =
-                MetadataChannel::new(channel.clone(), bigtable_features_header(false));
-            let mut client = BigtableInternalClient::new(metadata_channel);
+            let auth_channel = AuthChannel::new(
+                channel.clone(),
+                self.policy.clone(),
+                self.token_provider.clone(),
+                bigtable_features_header(false),
+            );
+            let mut client = BigtableInternalClient::new(auth_channel);
             client
                 .ping_and_warm(PingAndWarmRequest {
                     name: self.instance_name.clone(),
@@ -166,17 +187,27 @@ impl ChannelPrimer for BigtablePrimer {
             Ok(())
         })
     }
+
+    fn fetch_credentials<'a>(&'a self) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+        Box::pin(async move {
+            if let Some(token_provider) = &self.token_provider {
+                token_provider.token(&[self.policy.as_str()]).await?;
+            }
+            Ok(())
+        })
+    }
 }
 
 #[derive(Clone)]
 pub struct BigTableClient {
     table_prefix: String,
-    client: BigtableInternalClient<MetadataChannel<ChannelPool>>,
+    client: BigtableInternalClient<AuthChannel<ChannelPool>>,
     batch_write_flow_control: BatchWriteFlowControl,
     client_name: String,
     metrics: Option<Arc<KvMetrics>>,
     flow_controller: Option<Arc<BatchWriteFlowController>>,
     app_profile_id: Option<String>,
+    read_rows_retry: ReadRowsRetryConfig,
 }
 
 impl BigTableClient {
@@ -195,20 +226,40 @@ impl BigTableClient {
         let endpoint = Channel::from_shared(format!("http://{host}"))?;
         let pool =
             ChannelPool::new_connected(endpoint, PoolConfig::singleton(), None, None).await?;
-        let metadata_channel =
-            MetadataChannel::new(pool, bigtable_features_header(batch_write_flow_control));
+        Ok(Self::for_local_pool(
+            pool,
+            &instance_id,
+            client_name,
+            batch_write_flow_control,
+        ))
+    }
+
+    /// Client over a connected pool, addressing tables of an emulator-style instance.
+    fn for_local_pool(
+        pool: ChannelPool,
+        instance_id: &str,
+        client_name: &str,
+        batch_write_flow_control: bool,
+    ) -> Self {
+        let auth_channel = AuthChannel::new(
+            pool,
+            "https://www.googleapis.com/auth/bigtable.data".to_string(),
+            None,
+            bigtable_features_header(batch_write_flow_control),
+        );
         let client_name = client_name.to_string();
         let flow_controller = batch_write_flow_control
             .then(|| BatchWriteFlowController::new(client_name.clone(), None));
-        Ok(Self {
+        Self {
             table_prefix: format!("projects/emulator/instances/{}/tables/", instance_id),
-            client: BigtableInternalClient::new(metadata_channel),
+            client: BigtableInternalClient::new(auth_channel),
             batch_write_flow_control: BatchWriteFlowControl::Disabled,
             client_name,
             metrics: None,
             flow_controller,
             app_profile_id: None,
-        })
+            read_rows_retry: ReadRowsRetryConfig::default(),
+        }
     }
 
     pub async fn new_remote(
@@ -242,7 +293,7 @@ impl BigTableClient {
     pub async fn new_remote_with_credentials(
         instance_id: String,
         project_id: Option<String>,
-        _is_read_only: bool,
+        is_read_only: bool,
         timeout: Option<Duration>,
         max_decoding_message_size: Option<usize>,
         client_name: String,
@@ -252,72 +303,48 @@ impl BigTableClient {
         credentials_path: Option<String>,
         batch_write_flow_control: bool,
     ) -> Result<Self> {
-        if credentials_path.is_some() {
-            bail!(
-                "Google service-account credentials are not supported by the self-hosted RTD archive"
-            );
-        }
-        let gateway_url = std::env::var("RTD_HBASE_GATEWAY_ENDPOINT")
-            .context("RTD_HBASE_GATEWAY_ENDPOINT must point to the self-hosted HBase gateway")?;
-        if gateway_url.contains("googleapis.com")
-            || gateway_url.contains("amazonaws.com")
-            || gateway_url.contains("blob.core.windows.net")
-        {
-            bail!("RTD_HBASE_GATEWAY_ENDPOINT must not point to a proprietary cloud service");
-        }
-        let mut endpoint = Channel::from_shared(gateway_url.clone())?
+        let config = pool_config;
+        let policy = if is_read_only {
+            "https://www.googleapis.com/auth/bigtable.data.readonly"
+        } else {
+            "https://www.googleapis.com/auth/bigtable.data"
+        };
+        let token_provider: Arc<dyn TokenProvider> = match credentials_path {
+            Some(path) => Arc::new(gcp_auth::CustomServiceAccount::from_file(&path)?),
+            None => gcp_auth::provider().await?,
+        };
+        let tls_config = ClientTlsConfig::new()
+            .ca_certificate(Certificate::from_pem(include_bytes!("../proto/google.pem")))
+            .domain_name("bigtable.googleapis.com");
+        let mut endpoint = Channel::from_static("https://bigtable.googleapis.com")
             .http2_keep_alive_interval(Duration::from_secs(30))
             .keep_alive_timeout(Duration::from_secs(10))
-            .keep_alive_while_idle(true);
-        if gateway_url.starts_with("https://") {
-            let ca_path = std::env::var("RTD_HBASE_GATEWAY_CA_CERT")
-                .context("RTD_HBASE_GATEWAY_CA_CERT is required for mTLS")?;
-            let cert_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_CERT")
-                .context("RTD_HBASE_GATEWAY_CLIENT_CERT is required for mTLS")?;
-            let key_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_KEY")
-                .context("RTD_HBASE_GATEWAY_CLIENT_KEY is required for mTLS")?;
-            let mut tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(std::fs::read(ca_path)?))
-                .identity(Identity::from_pem(
-                    std::fs::read(cert_path)?,
-                    std::fs::read(key_path)?,
-                ));
-            if let Ok(server_name) = std::env::var("RTD_HBASE_GATEWAY_SERVER_NAME") {
-                tls_config = tls_config.domain_name(server_name);
-            }
-            endpoint = endpoint.tls_config(tls_config)?;
-        } else if gateway_url.starts_with("http://") {
-            if std::env::var("RTD_HBASE_GATEWAY_ALLOW_INSECURE_DEV").as_deref() != Ok("1") {
-                bail!("Plaintext HBase gateway connections are restricted to local development");
-            }
-        } else {
-            bail!(
-                "RTD_HBASE_GATEWAY_ENDPOINT must use https://, or http:// only for local development"
-            );
-        }
+            .keep_alive_while_idle(true)
+            .tls_config(tls_config)?;
         endpoint = endpoint.timeout(timeout.unwrap_or(DEFAULT_CHANNEL_TIMEOUT));
-        let project_id = project_id.unwrap_or_else(|| "rtd".to_string());
-        if !project_id
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
-            || !instance_id
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
-        {
-            bail!("RTD archive project and instance IDs must be ASCII path components");
-        }
+        let project_id = match project_id {
+            Some(p) => p,
+            None => token_provider.project_id().await?.to_string(),
+        };
         let instance_name = format!("projects/{}/instances/{}", project_id, instance_id);
         let table_prefix = format!("{}/tables/", instance_name);
-        let primer = BigtablePrimer { instance_name };
+        let primer = BigtablePrimer {
+            instance_name,
+            policy: policy.to_string(),
+            token_provider: Some(token_provider.clone()),
+        };
         let pool =
-            ChannelPool::new_connected(endpoint, pool_config, Some(Box::new(primer)), registry)
-                .await?;
+            ChannelPool::new_connected(endpoint, config, Some(Box::new(primer)), registry).await?;
         let metrics = registry.map(KvMetrics::new);
-        let metadata_channel =
-            MetadataChannel::new(pool, bigtable_features_header(batch_write_flow_control));
+        let auth_channel = AuthChannel::new(
+            pool,
+            policy.to_string(),
+            Some(token_provider),
+            bigtable_features_header(batch_write_flow_control),
+        );
         let max_decoding_message_size =
             max_decoding_message_size.unwrap_or(DEFAULT_MAX_DECODING_MESSAGE_SIZE);
-        let client = BigtableInternalClient::new(metadata_channel)
+        let client = BigtableInternalClient::new(auth_channel)
             .max_decoding_message_size(max_decoding_message_size);
         let flow_controller = batch_write_flow_control
             .then(|| BatchWriteFlowController::new(client_name.clone(), metrics.clone()));
@@ -329,7 +356,14 @@ impl BigTableClient {
             metrics,
             flow_controller,
             app_profile_id,
+            read_rows_retry: ReadRowsRetryConfig::default(),
         })
+    }
+
+    /// Override the gap timeout and attempt budget of ReadRows calls.
+    pub fn with_read_rows_retry(mut self, config: ReadRowsRetryConfig) -> Self {
+        self.read_rows_retry = config;
+        self
     }
 
     pub(crate) fn with_backfill_through(mut self, checkpoint: u64) -> Self {
@@ -337,108 +371,6 @@ impl BigTableClient {
             self.batch_write_flow_control = BatchWriteFlowControl::BackfillThrough(checkpoint);
         }
         self
-    }
-
-    /// Select a materialized object version whose producing transaction is admitted.
-    pub async fn get_object_at_checkpoint(
-        &mut self,
-        id: ObjectID,
-        version: Option<u64>,
-        height: u64,
-    ) -> Result<Option<Object>> {
-        if let Some(version) = version {
-            let Some(object) = self
-                .get_objects(&[ObjectKey(id, version.into())])
-                .await?
-                .pop()
-            else {
-                return Ok(None);
-            };
-            anyhow::ensure!(
-                object.id() == id && object.version().value() == version,
-                "object key/content mismatch"
-            );
-            return Ok(
-                (self.object_producing_checkpoint(&object).await? <= height).then_some(object)
-            );
-        }
-        let rows = self
-            .range_scan_stream(
-                tables::objects::NAME,
-                Some(Bytes::from(Self::raw_object_key(&ObjectKey::min_for_id(
-                    &id,
-                )))),
-                Some(Bytes::from(Self::raw_object_key(&ObjectKey::max_for_id(
-                    &id,
-                )))),
-                0,
-                true,
-                None,
-            )
-            .await?;
-        futures::pin_mut!(rows);
-        while let Some(row) = rows.next().await {
-            let (key, cells) = row?;
-            let object = tables::objects::decode(&cells)?;
-            anyhow::ensure!(
-                object.id() == id
-                    && key.as_ref()
-                        == Self::raw_object_key(&ObjectKey(id, object.version())).as_slice(),
-                "object key/content mismatch"
-            );
-            if self.object_producing_checkpoint(&object).await? <= height {
-                return Ok(Some(object));
-            }
-        }
-        Ok(None)
-    }
-
-    async fn object_producing_checkpoint(&mut self, object: &Object) -> Result<u64> {
-        let genesis = object.previous_transaction == TransactionDigest::genesis_marker();
-        let digests = if genesis {
-            let checkpoint = self
-                .get_checkpoints(&[0])
-                .await?
-                .pop()
-                .context("genesis checkpoint unavailable")?;
-            checkpoint
-                .contents
-                .context("genesis contents unavailable")?
-                .iter()
-                .map(|entry| entry.transaction)
-                .collect()
-        } else {
-            vec![object.previous_transaction]
-        };
-        let rows = self
-            .get_transactions_stream(
-                digests,
-                Some(Self::column_filter(&[
-                    tables::transactions::col::CHECKPOINT_NUMBER,
-                    tables::transactions::col::EFFECTS,
-                ])),
-            )
-            .await?;
-        futures::pin_mut!(rows);
-        let reference = object.compute_object_reference();
-        while let Some(row) = rows.next().await {
-            let (_, transaction) = row?;
-            let effects = transaction
-                .effects
-                .context("object producing effects unavailable")?;
-            if effects
-                .all_changed_objects()
-                .iter()
-                .any(|(changed, _, _)| *changed == reference)
-            {
-                anyhow::ensure!(
-                    !genesis || transaction.checkpoint_number == 0,
-                    "genesis object transaction is not in checkpoint zero"
-                );
-                return Ok(transaction.checkpoint_number);
-            }
-        }
-        bail!("object is not certified by its producing transaction effects")
     }
 
     /// Fetch transactions with an optional column filter for partial reads.
@@ -816,6 +748,39 @@ impl BigTableClient {
         Ok(None)
     }
 
+    /// Read the v1 watermark row of every pipeline in `pipelines` with one batched read,
+    /// keyed by pipeline name. Pipelines whose row is missing or lacks the v1 schema are
+    /// absent from the map. Hidden rows (`checkpoint_hi_inclusive == None` or below
+    /// `reader_lo`) are returned as-is so callers decide how to treat them.
+    pub async fn get_pipeline_watermarks(
+        &mut self,
+        pipelines: &[&str],
+    ) -> Result<HashMap<String, WatermarkV1>> {
+        if pipelines.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let pipeline_by_key: HashMap<Vec<u8>, &str> = pipelines
+            .iter()
+            .map(|name| (tables::watermarks::encode_key(name), *name))
+            .collect();
+        let keys: Vec<Vec<u8>> = pipeline_by_key.keys().cloned().collect();
+
+        let rows = self.multi_get(tables::watermarks::NAME, keys, None).await?;
+
+        let mut watermarks = HashMap::with_capacity(rows.len());
+        for (key, row) in rows {
+            let Some(pipeline) = pipeline_by_key.get(&key[..]) else {
+                continue;
+            };
+            if let Some(watermark) = tables::watermarks::decode_v1(&row)? {
+                watermarks.insert(pipeline.to_string(), watermark);
+            }
+        }
+
+        Ok(watermarks)
+    }
+
     /// Write pre-built entries to BigTable.
     ///
     /// On partial failure (some entries succeed, some fail), returns a `PartialWriteError`
@@ -857,9 +822,7 @@ impl BigTableClient {
         let mut response = match self.client.clone().mutate_rows(request).await {
             Ok(response) => response.into_inner(),
             Err(status) => {
-                if let Some(write_admission) = write_admission {
-                    write_admission.fail(status.code());
-                }
+                report_write_failure(write_admission, &status);
                 return Err(status.into());
             }
         };
@@ -895,9 +858,7 @@ impl BigTableClient {
                 }
                 Ok(None) => break,
                 Err(status) => {
-                    if let Some(write_admission) = write_admission {
-                        write_admission.fail(status.code());
-                    }
+                    report_write_failure(write_admission, &status);
                     return Err(status.into());
                 }
             }
@@ -938,6 +899,12 @@ impl BigTableClient {
 
     /// Streaming variant of `read_rows`. Returns rows as they arrive from the
     /// underlying gRPC stream rather than collecting into a Vec.
+    ///
+    /// Each attempt is bounded by the client's [`ReadRowsRetryConfig`] gap timeout
+    /// (except the final attempt). An attempt that times out, is cancelled by a channel
+    /// quarantine, fails with `Unavailable`, is refused by a GOAWAY from BigTable, is cut off by
+    /// its connection failing, or is never sent because its connection closed is retried on
+    /// another channel, resuming after the last row this stream yielded.
     pub async fn read_rows_stream(
         &mut self,
         mut request: ReadRowsRequest,
@@ -953,10 +920,15 @@ impl BigTableClient {
                 .with_label_values(&labels)
                 .inc();
         }
-        let response = self.client.clone().read_rows(request).await?.into_inner();
-        let metrics = self.metrics.clone();
-        let client_name = self.client_name.clone();
-        let table_name = table_name.to_owned();
+        let mut read = ResumableReadRows::new(
+            self.client.clone(),
+            request,
+            self.read_rows_retry,
+            self.metrics.clone(),
+            self.client_name.clone(),
+            table_name.to_owned(),
+        );
+        let response = read.open().await?;
 
         Ok(async_stream::try_stream! {
             // Zero-copy accumulator for cell values. BigTable streams cell data
@@ -1002,53 +974,66 @@ impl BigTableClient {
             }
 
             let mut response = response;
-            let mut row_key: Option<Bytes> = None;
-            let mut row = vec![];
-            let mut cell_value = CellValue::Empty;
-            let mut cell_name: Option<Bytes> = None;
-            let mut timestamp = 0i64;
+            // Each pass reads one attempt. A failed attempt is replaced by one that resumes
+            // after the last yielded row, discarding any partially assembled row.
+            while let Some(mut attempt) = response.take() {
+                let mut row_key: Option<Bytes> = None;
+                let mut row = vec![];
+                let mut cell_value = CellValue::Empty;
+                let mut cell_name: Option<Bytes> = None;
+                let mut timestamp = 0i64;
 
-            while let Some(message) = response.message().await? {
-                if let Some(ref metrics) = metrics {
-                    report_bt_stats_inner(metrics, &client_name, &table_name, &message.request_stats);
-                }
-                for chunk in message.chunks.into_iter() {
-                    if !chunk.row_key.is_empty() {
-                        row_key = Some(chunk.row_key);
-                    }
-                    match chunk.qualifier {
-                        Some(qualifier) => {
-                            if let Some(name) = cell_name.take() {
-                                row.push((name, cell_value.into_bytes()));
-                                cell_value = CellValue::Empty;
-                            }
-                            cell_name = Some(Bytes::from(qualifier));
-                            timestamp = chunk.timestamp_micros;
-                            cell_value.extend(chunk.value);
+                let failure = loop {
+                    let message = match read.next_message(&mut attempt).await {
+                        Ok(Some(message)) => message,
+                        Ok(None) => break None,
+                        Err(failure) => break Some(failure),
+                    };
+                    read.report_stats(&message.request_stats);
+                    for chunk in message.chunks.into_iter() {
+                        if !chunk.row_key.is_empty() {
+                            row_key = Some(chunk.row_key);
                         }
-                        None => {
-                            if chunk.timestamp_micros == 0 {
-                                cell_value.extend(chunk.value);
-                            } else if chunk.timestamp_micros >= timestamp {
+                        match chunk.qualifier {
+                            Some(qualifier) => {
+                                if let Some(name) = cell_name.take() {
+                                    row.push((name, cell_value.into_bytes()));
+                                    cell_value = CellValue::Empty;
+                                }
+                                cell_name = Some(Bytes::from(qualifier));
                                 timestamp = chunk.timestamp_micros;
-                                cell_value.replace(chunk.value);
+                                cell_value.extend(chunk.value);
+                            }
+                            None => {
+                                if chunk.timestamp_micros == 0 {
+                                    cell_value.extend(chunk.value);
+                                } else if chunk.timestamp_micros >= timestamp {
+                                    timestamp = chunk.timestamp_micros;
+                                    cell_value.replace(chunk.value);
+                                }
                             }
                         }
-                    }
-                    if chunk.row_status.is_some() {
-                        if let Some(RowStatus::CommitRow(_)) = chunk.row_status {
-                            if let Some(name) = cell_name.take() {
-                                row.push((name, cell_value.into_bytes()));
+                        if chunk.row_status.is_some() {
+                            if let Some(RowStatus::CommitRow(_)) = chunk.row_status {
+                                if let Some(name) = cell_name.take() {
+                                    row.push((name, cell_value.into_bytes()));
+                                }
+                                if let Some(key) = row_key.take() {
+                                    read.record_delivered(&key);
+                                    yield (key, std::mem::take(&mut row));
+                                }
                             }
-                            if let Some(key) = row_key.take() {
-                                yield (key, std::mem::take(&mut row));
-                            }
+                            row_key = None;
+                            row = vec![];
+                            cell_value = CellValue::Empty;
+                            cell_name = None;
                         }
-                        row_key = None;
-                        row = vec![];
-                        cell_value = CellValue::Empty;
-                        cell_name = None;
                     }
+                };
+                // Drop the failed attempt's stream before starting the next attempt.
+                drop(attempt);
+                if let Some(failure) = failure {
+                    response = read.resume(failure).await?;
                 }
             }
         })
@@ -1272,9 +1257,9 @@ impl futures::Stream for MultiGetStreamPollWait {
 impl BigTableClient {
     /// Streaming variant of `multi_get`. Rows arrive on the stream as soon as
     /// BigTable writes them on the wire, so downstream stages in a pipeline
-    /// can start work before the full batch completes. Emits rows in arrival
-    /// order, which is not necessarily key order — callers that need stable
-    /// ordering should sort at the end.
+    /// can start work before the full batch completes. Emits rows in the order
+    /// BigTable returns them, which is row-key order rather than the order of
+    /// `keys` — callers that need request order should reorder at the end.
     pub async fn multi_get_stream(
         &mut self,
         table_name: &str,
@@ -1470,6 +1455,35 @@ impl BigTableClient {
             .collect())
     }
 
+    /// Resolve one tx_sequence_number to its checkpoint and offset within
+    /// that checkpoint, reading only the `tx_offset` and checkpoint-number
+    /// columns of `tx_seq_digest`. `None` when the transaction has no row
+    /// (e.g. not yet indexed).
+    pub async fn resolve_tx_checkpoint_position(
+        &mut self,
+        tx_sequence_number: u64,
+    ) -> Result<Option<TxCheckpointPosition>> {
+        let filter = Some(Self::column_filter(&[
+            tx_seq_digest::col::TX_OFFSET,
+            tx_seq_digest::col::CHECKPOINT_NUMBER,
+        ]));
+        let rows = self
+            .multi_get(
+                tx_seq_digest::NAME,
+                vec![tx_seq_digest::encode_key(tx_sequence_number)],
+                filter,
+            )
+            .await?;
+        let Some((_, cells)) = rows.first() else {
+            return Ok(None);
+        };
+        let (tx_offset, checkpoint_number) = tx_seq_digest::decode_checkpoint_position(cells)?;
+        Ok(Some(TxCheckpointPosition {
+            checkpoint_number,
+            tx_offset,
+        }))
+    }
+
     /// Streaming variant of `resolve_tx_digests`. Emits each resolved row as
     /// it arrives from BigTable. Rows missing from the table are silently
     /// dropped (same contract as the non-streaming version, minus the
@@ -1565,29 +1579,11 @@ impl BigTableClient {
         .boxed())
     }
 
-    /// Resolve tx_sequence_numbers to their containing checkpoint numbers.
-    /// Reads only the checkpoint-number column from `tx_seq_digest`.
-    pub async fn resolve_tx_checkpoints(
-        &mut self,
-        tx_sequence_numbers: &[u64],
-    ) -> Result<Vec<(u64, CheckpointSequenceNumber)>> {
-        if tx_sequence_numbers.is_empty() {
-            return Ok(Vec::new());
-        }
-        let rows = self
-            .resolve_tx_checkpoints_stream(tx_sequence_numbers.to_vec())
-            .await?;
-        futures::pin_mut!(rows);
-        let mut result = Vec::with_capacity(tx_sequence_numbers.len());
-        while let Some(row) = rows.next().await {
-            result.push(row?);
-        }
-        Ok(result)
-    }
-
-    /// Streaming variant of `resolve_tx_checkpoints`. Yields
-    /// `(tx_sequence_number, checkpoint_number)` per row as it arrives (arrival
-    /// order, not key order — callers needing a stable order must reorder).
+    /// Resolve tx_sequence_numbers to their containing checkpoint numbers, reading only the
+    /// checkpoint-number column from `tx_seq_digest`. Yields
+    /// `(tx_sequence_number, checkpoint_number)` per row as it arrives (row-key
+    /// order, not the order of `tx_sequence_numbers` — callers needing that
+    /// order must reorder).
     pub async fn resolve_tx_checkpoints_stream(
         &mut self,
         tx_sequence_numbers: Vec<u64>,
@@ -1648,14 +1644,15 @@ impl BigTableClient {
                         <[u8; 32]>::try_from(key.as_ref())
                             .context("invalid transaction digest key length")?,
                     );
-                    let tx = tables::transactions::decode_with_checkpoint(digest, &cells)?;
+                    let tx = tables::transactions::decode(digest, &cells)?;
                     yield (digest, tx);
                 }
             }
         })
     }
 
-    /// Streaming variant of `get_objects`. Yields each `Object` as it arrives.
+    /// Streaming variant of `get_objects`. Yields each live `Object` as it arrives; keys with no
+    /// row or a tombstone row yield nothing.
     pub async fn get_objects_stream(
         &mut self,
         object_keys: Vec<ObjectKey>,
@@ -1669,7 +1666,9 @@ impl BigTableClient {
             futures::pin_mut!(rows);
             while let Some(row) = rows.next().await {
                 let (_key, cells) = row?;
-                yield tables::objects::decode(&cells)?;
+                if let Some(object) = tables::objects::decode(&cells)?.into_live() {
+                    yield object;
+                }
             }
         })
     }
@@ -1681,35 +1680,52 @@ impl BigTableClient {
         &mut self,
         checkpoint_range: Range<u64>,
     ) -> Result<Range<u64>> {
-        use crate::tables::checkpoints;
+        let boundaries = self
+            .checkpoint_tx_boundaries(&[checkpoint_range.start, checkpoint_range.end])
+            .await?;
+        Ok(boundaries[&checkpoint_range.start]..boundaries[&checkpoint_range.end])
+    }
 
-        let mut keys: Vec<u64> = [checkpoint_range.start, checkpoint_range.end]
-            .into_iter()
-            .filter(|&cp| cp > 0)
+    /// Resolve each of `checkpoints` to the tx_sequence_number of its first transaction, one past
+    /// the last transaction of the checkpoint before it, in one read. Checkpoint 0 resolves to
+    /// tx_sequence_number 0.
+    pub async fn checkpoint_tx_boundaries(
+        &mut self,
+        checkpoints: &[u64],
+    ) -> Result<HashMap<u64, u64>> {
+        let mut keys: Vec<u64> = checkpoints
+            .iter()
+            .filter(|&&cp| cp > 0)
             .map(|cp| cp - 1)
             .collect();
+        keys.sort_unstable();
         keys.dedup();
 
         let rows = if keys.is_empty() {
             vec![]
         } else {
-            self.get_checkpoints_filtered(&keys, Some(&[checkpoints::col::SUMMARY]))
+            self.get_checkpoints_filtered(&keys, Some(&[tables::checkpoints::col::SUMMARY]))
                 .await?
         };
+        let network_totals: HashMap<u64, u64> = rows
+            .iter()
+            .filter_map(|row| row.summary.as_ref())
+            .map(|summary| (summary.sequence_number, summary.network_total_transactions))
+            .collect();
 
-        let boundary = |cp: u64| -> Result<u64> {
-            if cp == 0 {
-                return Ok(0);
-            }
-            let lookup_cp = cp - 1;
-            rows.iter()
-                .filter_map(|row| row.summary.as_ref())
-                .find(|summary| summary.sequence_number == lookup_cp)
-                .map(|summary| summary.network_total_transactions)
-                .with_context(|| format!("checkpoint summary {} not found", lookup_cp))
-        };
-
-        Ok(boundary(checkpoint_range.start)?..boundary(checkpoint_range.end)?)
+        checkpoints
+            .iter()
+            .map(|&cp| {
+                if cp == 0 {
+                    return Ok((cp, 0));
+                }
+                let lookup_cp = cp - 1;
+                network_totals
+                    .get(&lookup_cp)
+                    .map(|total| (cp, *total))
+                    .with_context(|| format!("checkpoint summary {} not found", lookup_cp))
+            })
+            .collect()
     }
 
     /// Resolve `tx_sequence_number`s to fully-populated transaction rows in
@@ -1897,6 +1913,16 @@ fn decode_tx_seq_digest_scan_row(
     ))
 }
 
+/// Report a failed MutateRows to batch-write flow control. A quarantine cancellation is decided
+/// locally and says nothing about BigTable's load, so it is not reported.
+fn report_write_failure(write_admission: Option<WriteAdmission<'_>>, status: &tonic::Status) {
+    if let Some(write_admission) = write_admission
+        && !is_quarantine_cancellation(status)
+    {
+        write_admission.fail(status.code());
+    }
+}
+
 fn report_bt_stats_inner(
     metrics: &KvMetrics,
     client_name: &str,
@@ -1956,7 +1982,7 @@ impl KeyValueStoreReader for BigTableClient {
         let keys: Vec<Vec<u8>> = object_keys.iter().map(Self::raw_object_key).collect();
         let mut objects = vec![];
         for (_, row) in self.multi_get(tables::objects::NAME, keys, None).await? {
-            objects.push(tables::objects::decode(&row)?);
+            objects.extend(tables::objects::decode(&row)?.into_live());
         }
         Ok(objects)
     }
@@ -1990,25 +2016,19 @@ impl KeyValueStoreReader for BigTableClient {
             bail!("at least one watermark pipeline must be provided");
         }
 
-        let keys: Vec<Vec<u8>> = pipelines
-            .iter()
-            .map(|name| tables::watermarks::encode_key(name))
-            .collect();
+        let watermarks = self.get_pipeline_watermarks(pipelines).await?;
 
-        let rows = self.multi_get(tables::watermarks::NAME, keys, None).await?;
-
-        if rows.len() != pipelines.len() {
+        // A pipeline whose row is missing or lacks the v1 schema is absent from `watermarks`. A
+        // row is hidden if `checkpoint_hi_inclusive == None` or
+        // `checkpoint_hi_inclusive < reader_lo`. If any pipeline is absent or hidden, every
+        // consumer of this method (RPC/graphql) treats the whole result as missing, resulting
+        // in `Ok(None)`.
+        if watermarks.len() != pipelines.len() {
             return Ok(None);
         }
 
-        // A row is hidden if `checkpoint_hi_inclusive == None` or
-        // `checkpoint_hi_inclusive < reader_lo`. If any pipeline is hidden, every consumer
-        // of this method (RPC/graphql) treats the whole result as missing, resulting in `Ok(None)`.
         let mut min_wm: Option<(u64, WatermarkV1)> = None;
-        for (_, row) in &rows {
-            let Some(wm) = tables::watermarks::decode_v1(row)? else {
-                return Ok(None);
-            };
+        for wm in watermarks.into_values() {
             let Some(cp) = wm.checkpoint_hi_inclusive.filter(|cp| *cp >= wm.reader_lo) else {
                 return Ok(None);
             };
@@ -2021,43 +2041,119 @@ impl KeyValueStoreReader for BigTableClient {
     }
 
     async fn get_latest_object(&mut self, object_id: &ObjectID) -> Result<Option<Object>> {
-        let lower_limit = Bytes::from(Self::raw_object_key(&ObjectKey::min_for_id(object_id)));
-        let upper_limit = Bytes::from(Self::raw_object_key(&ObjectKey::max_for_id(object_id)));
+        self.get_object_lt_or_eq_version(*object_id, SequenceNumber::MAX)
+            .await
+    }
 
-        tracing::debug!(
-            ?object_id,
-            "get_latest_object: scanning range from ObjectKey::min_for_id to ObjectKey::max_for_id"
-        );
-
-        if let Some((row_key, row)) = self
+    async fn get_object_lt_or_eq_version(
+        &mut self,
+        object_id: ObjectID,
+        version: SequenceNumber,
+    ) -> Result<Option<Object>> {
+        // The newest row in `[(id, 0), (id, version)]`, live or tombstone, is the object's state
+        // at `version`.
+        let start_key = Bytes::from(Self::raw_object_key(&ObjectKey::min_for_id(&object_id)));
+        let end_key = Bytes::from(Self::raw_object_key(&ObjectKey(object_id, version)));
+        let Some((_, row)) = self
             .range_scan(
                 tables::objects::NAME,
-                Some(lower_limit),
-                Some(upper_limit),
+                Some(start_key),
+                Some(end_key),
                 1,
                 true,
                 None,
             )
             .await?
             .pop()
-        {
-            let object = tables::objects::decode(&row)?;
-            let row_key_hex = row_key
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect::<String>();
-            tracing::debug!(
-                ?object_id,
-                found_id = ?object.id(),
-                found_version = %object.version(),
-                row_key = %row_key_hex,
-                "get_latest_object: found object"
-            );
-            return Ok(Some(object));
-        }
+        else {
+            return Ok(None);
+        };
+        Ok(tables::objects::decode(&row)?.into_live())
+    }
 
-        tracing::debug!(?object_id, "get_latest_object: object not found in range");
-        Ok(None)
+    async fn get_live_object_versions(
+        &mut self,
+        object_id: ObjectID,
+        versions: RangeInclusive<SequenceNumber>,
+        limit: usize,
+        descending: bool,
+    ) -> Result<Vec<Object>> {
+        // A zero `rows_limit` means no limit to BigTable, so an empty page is answered locally.
+        if versions.is_empty() || limit == 0 {
+            return Ok(vec![]);
+        }
+        let rows_limit = i64::try_from(limit).context("object versions limit exceeds i64")?;
+        let start_key = Bytes::from(Self::raw_object_key(&ObjectKey(
+            object_id,
+            *versions.start(),
+        )));
+        let end_key = Bytes::from(Self::raw_object_key(&ObjectKey(object_id, *versions.end())));
+        // Keep only the live-object column, so tombstone rows come back empty and BigTable drops
+        // them before applying `rows_limit`.
+        let live_only = Self::column_filter(&[tables::objects::col::OBJECT]);
+        let rows = self
+            .range_scan(
+                tables::objects::NAME,
+                Some(start_key),
+                Some(end_key),
+                rows_limit,
+                descending,
+                Some(live_only),
+            )
+            .await?;
+        rows.into_iter()
+            .map(|(_, row)| match tables::objects::decode(&row)? {
+                ObjectRow::Live(object) => Ok(object),
+                ObjectRow::Tombstone(_) => bail!("live-only object scan returned a tombstone"),
+            })
+            .collect()
+    }
+
+    async fn get_object_version_at_checkpoint(
+        &mut self,
+        object_id: ObjectID,
+        checkpoint: CheckpointSequenceNumber,
+    ) -> Result<Option<(SequenceNumber, ObjectStatus)>> {
+        // Rows sort newest checkpoint first, so the first row from `(id, checkpoint)` to
+        // `(id, 0)` is the object's state at `checkpoint`.
+        let start_key = Bytes::from(tables::object_versions_by_checkpoint::encode_key(
+            &object_id, checkpoint,
+        ));
+        let end_key = Bytes::from(tables::object_versions_by_checkpoint::encode_key(
+            &object_id, 0,
+        ));
+        let Some((_, row)) = self
+            .range_scan(
+                tables::object_versions_by_checkpoint::NAME,
+                Some(start_key),
+                Some(end_key),
+                1,
+                false,
+                None,
+            )
+            .await?
+            .pop()
+        else {
+            return Ok(None);
+        };
+        Ok(Some(tables::object_versions_by_checkpoint::decode(&row)?))
+    }
+
+    async fn get_object_at_checkpoint(
+        &mut self,
+        object_id: ObjectID,
+        checkpoint: CheckpointSequenceNumber,
+    ) -> Result<Option<Object>> {
+        let Some((version, ObjectStatus::Live)) = self
+            .get_object_version_at_checkpoint(object_id, checkpoint)
+            .await?
+        else {
+            return Ok(None);
+        };
+        Ok(self
+            .get_objects(&[ObjectKey(object_id, version)])
+            .await?
+            .pop())
     }
 
     async fn get_epoch(&mut self, epoch_id: EpochId) -> Result<Option<EpochData>> {
@@ -2075,6 +2171,21 @@ impl KeyValueStoreReader for BigTableClient {
             .pop()
         {
             Some((_, row)) => Ok(Some(tables::protocol_configs::decode(&row)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_protocol_configs_v2(
+        &mut self,
+        protocol_version: u64,
+    ) -> Result<Option<ProtocolConfigV2Data>> {
+        let key = tables::protocol_configs_v2::encode_key(protocol_version);
+        match self
+            .multi_get(tables::protocol_configs_v2::NAME, vec![key], None)
+            .await?
+            .pop()
+        {
+            Some((_, row)) => Ok(Some(tables::protocol_configs_v2::decode(&row)?)),
             None => Ok(None),
         }
     }
@@ -2205,26 +2316,34 @@ impl KeyValueStoreReader for BigTableClient {
             original_id.as_ref(),
         ));
 
-        let rows = self
-            .range_scan_stream(
+        let filter = RowFilter {
+            filter: Some(Filter::Condition(Box::new(Condition {
+                predicate_filter: Some(Box::new(column_value_at_most_filter(
+                    tables::packages::col::CP,
+                    u64_be(cp_bound),
+                ))),
+                true_filter: Some(Box::new(RowFilter {
+                    filter: Some(Filter::PassAllFilter(true)),
+                })),
+                false_filter: None,
+            }))),
+        };
+
+        match self
+            .range_scan(
                 tables::packages::NAME,
                 Some(start_key),
                 Some(end_key),
-                0,
+                1,
                 true,
-                None,
+                Some(filter),
             )
-            .await?;
-
-        futures::pin_mut!(rows);
-        while let Some(row) = rows.next().await {
-            let (key, cells) = row?;
-            let pkg = tables::packages::decode(key.as_ref(), &cells)?;
-            if pkg.cp_sequence_number <= cp_bound {
-                return Ok(Some(pkg));
-            }
+            .await?
+            .pop()
+        {
+            Some((key, row)) => Ok(Some(tables::packages::decode(key.as_ref(), &row)?)),
+            None => Ok(None),
         }
-        Ok(None)
     }
 
     async fn get_package_versions(
@@ -2450,6 +2569,36 @@ fn column_value_at_least_filter(column: &str, value: Bytes) -> RowFilter {
                     filter: Some(Filter::ValueRangeFilter(ValueRange {
                         start_value: Some(value_range::StartValue::StartValueClosed(value)),
                         end_value: None,
+                    })),
+                },
+            ],
+        })),
+    }
+}
+
+/// Build a `RowFilter` matching rows whose latest `rtd:<column>` cell has a value of at most
+/// `value` (raw-byte comparison; callers pass the u64 BE encoding). Used as a Condition
+/// predicate for upper-bounded reads.
+fn column_value_at_most_filter(column: &str, value: Bytes) -> RowFilter {
+    RowFilter {
+        filter: Some(Filter::Chain(Chain {
+            filters: vec![
+                RowFilter {
+                    filter: Some(Filter::FamilyNameRegexFilter(tables::FAMILY.to_string())),
+                },
+                RowFilter {
+                    filter: Some(Filter::ColumnQualifierRegexFilter(Bytes::from(format!(
+                        "^{}$",
+                        column
+                    )))),
+                },
+                RowFilter {
+                    filter: Some(Filter::CellsPerColumnLimitFilter(1)),
+                },
+                RowFilter {
+                    filter: Some(Filter::ValueRangeFilter(ValueRange {
+                        start_value: None,
+                        end_value: Some(value_range::EndValue::EndValueClosed(value)),
                     })),
                 },
             ],
@@ -2823,6 +2972,84 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_package_latest_bounds_by_publish_checkpoint() {
+        use crate::testing::{
+            BigTableEmulator, INSTANCE_ID, create_tables, require_bigtable_emulator,
+        };
+
+        require_bigtable_emulator();
+        let emulator = tokio::task::spawn_blocking(BigTableEmulator::start)
+            .await
+            .unwrap()
+            .unwrap();
+        create_tables(emulator.host(), INSTANCE_ID).await.unwrap();
+        let mut client = BigTableClient::new_local(emulator.host().to_string(), INSTANCE_ID.into())
+            .await
+            .unwrap();
+
+        // Publish and upgrade 60 versions (just 0.0038% of all packages exceed 50 upgrades on
+        // mainnet) at increments of 10 checkpoints.
+        let original = ObjectID::from_single_byte(0xAA);
+        let storage_id = |version: u64| ObjectID::from_single_byte(version as u8);
+        let entries: Vec<_> = (1..=60u64)
+            .map(|version| {
+                tables::make_entry(
+                    Bytes::from(tables::packages::encode_key(original.as_ref(), version)),
+                    tables::packages::encode(version * 10, storage_id(version).as_ref(), false),
+                    None,
+                )
+            })
+            .collect();
+        let mut written_checkpoints = CheckpointSpan::single(10);
+        written_checkpoints.include(600);
+        client
+            .write_entries(tables::packages::NAME, entries, written_checkpoints)
+            .await
+            .unwrap();
+
+        // Unbounded resolves the newest version.
+        let latest = client
+            .get_package_latest(original, u64::MAX)
+            .await
+            .unwrap()
+            .expect("latest version");
+        assert_eq!(latest.package_version, 60);
+        assert_eq!(latest.package_id, storage_id(60).to_vec());
+
+        // The bound includes a version published exactly at it, and a bound
+        // between two publishes resolves the earlier one.
+        let at_publish = client
+            .get_package_latest(original, 190)
+            .await
+            .unwrap()
+            .expect("version at bound");
+        assert_eq!(at_publish.package_version, 19);
+        let between = client
+            .get_package_latest(original, 195)
+            .await
+            .unwrap()
+            .expect("version below bound");
+        assert_eq!(between.package_version, 19);
+
+        // Retrieve oldest package version.
+        let oldest = client
+            .get_package_latest(original, 10)
+            .await
+            .unwrap()
+            .expect("first version");
+        assert_eq!(oldest.package_version, 1);
+
+        // A bound before the first publish resolves nothing.
+        assert!(
+            client
+                .get_package_latest(original, 9)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
     async fn dense_scan_validator_accepts_ascending_rows() {
         let rows = stream::iter([row(3), row(4), row(5)]);
         let got = validate_dense_scan(
@@ -3090,6 +3317,172 @@ mod tests {
             .unwrap()
             .expect("should find version 70");
         assert_eq!(latest.package_version, 70);
+    }
+
+    /// Tombstones are filtered out by the server, so they never take a slot in a page, in either
+    /// direction, and the version-bounded point read stops at them.
+    #[tokio::test]
+    async fn object_version_reads_skip_or_stop_at_tombstones() {
+        let mock = MockBigtableServer::new();
+        let (addr, _handle) = mock.start().await.unwrap();
+        let mut client =
+            BigTableClient::new_for_host(addr.to_string(), "test".to_string(), "test", false)
+                .await
+                .unwrap();
+
+        // Versions 1, 2, 4 and 6 are live; the object is wrapped at 3 and deleted at 5.
+        let id = ObjectID::random();
+        let other = ObjectID::from_bytes([0xff; 32]).unwrap();
+        let v = SequenceNumber::from_u64;
+        for (object_id, version) in [(id, 1), (id, 2), (id, 4), (id, 6), (other, 1)] {
+            let object = Object::with_id_owner_version_for_testing(
+                object_id,
+                v(version),
+                rtd_types::object::Owner::AddressOwner(Default::default()),
+            );
+            let key = tables::objects::encode_key(&ObjectKey(object_id, v(version)));
+            mock.insert_row(
+                tables::objects::NAME,
+                key,
+                tables::objects::encode(&object).unwrap(),
+            )
+            .await;
+        }
+        for (version, status) in [(3, ObjectStatus::Wrapped), (5, ObjectStatus::Deleted)] {
+            let key = tables::objects::encode_key(&ObjectKey(id, v(version)));
+            let cells =
+                tables::objects::encode_tombstone(status, &TransactionDigest::random()).unwrap();
+            mock.insert_row(tables::objects::NAME, key, cells).await;
+        }
+
+        let mut page = async |versions: RangeInclusive<u64>, limit, descending| {
+            mock.clear_read_rows_calls().await;
+            let objects = client
+                .get_live_object_versions(
+                    id,
+                    v(*versions.start())..=v(*versions.end()),
+                    limit,
+                    descending,
+                )
+                .await
+                .unwrap();
+            let calls = mock.read_rows_calls().await;
+            assert_eq!(calls.len(), 1);
+            assert_eq!(calls[0].row_keys.len(), objects.len(), "rows sent");
+            objects
+                .into_iter()
+                .map(|o| {
+                    assert_eq!(o.id(), id);
+                    o.version().value()
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(page(0..=u64::MAX, 2, false).await, vec![1, 2]);
+        assert_eq!(page(3..=u64::MAX, 2, false).await, vec![4, 6]);
+        assert_eq!(page(0..=u64::MAX, 2, true).await, vec![6, 4]);
+        assert_eq!(page(0..=3, 2, true).await, vec![2, 1]);
+        assert_eq!(page(0..=u64::MAX, 10, true).await, vec![6, 4, 2, 1]);
+        assert_eq!(page(5..=5, 10, false).await, Vec::<u64>::new());
+
+        // Point reads at or below each version: the tombstones at 3 and 5 hide the object.
+        for (version, expected) in [
+            (0, None),
+            (1, Some(1)),
+            (2, Some(2)),
+            (3, None),
+            (4, Some(4)),
+            (5, None),
+            (6, Some(6)),
+            (u64::MAX, Some(6)),
+        ] {
+            let found = client
+                .get_object_lt_or_eq_version(id, v(version))
+                .await
+                .unwrap()
+                .map(|o| o.version().value());
+            assert_eq!(found, expected, "at version {version}");
+        }
+    }
+
+    /// The state at checkpoint `C` is the first index row from `(id, C)` to `(id, 0)`, read in one
+    /// forward request with `rows_limit` 1, and never a neighbouring object's row.
+    #[tokio::test]
+    async fn object_version_at_checkpoint_is_one_forward_row() {
+        let mock = MockBigtableServer::new();
+        let (addr, _handle) = mock.start().await.unwrap();
+        let mut client =
+            BigTableClient::new_for_host(addr.to_string(), "test".to_string(), "test", false)
+                .await
+                .unwrap();
+
+        let index = tables::object_versions_by_checkpoint::NAME;
+        let id = ObjectID::from_single_byte(0x42);
+        let neighbours = [
+            ObjectID::from_single_byte(0x41),
+            ObjectID::from_single_byte(0x43),
+        ];
+        let changes = [
+            (2, (3, ObjectStatus::Live)),
+            (5, (7, ObjectStatus::Wrapped)),
+            (9, (8, ObjectStatus::Live)),
+        ];
+        let insert = async |id: ObjectID, checkpoint: u64, version: u64, status| {
+            mock.insert_row(
+                index,
+                tables::object_versions_by_checkpoint::encode_key(&id, checkpoint),
+                tables::object_versions_by_checkpoint::encode(
+                    SequenceNumber::from_u64(version),
+                    status,
+                ),
+            )
+            .await;
+        };
+        for (checkpoint, (version, status)) in changes {
+            insert(id, checkpoint, version, status).await;
+        }
+        // Rows at the first and last checkpoints on both sides of `id`, so a read that ran past
+        // `id`'s rows in either direction would find one.
+        for neighbour in neighbours {
+            for checkpoint in [0, 1, u64::MAX] {
+                insert(neighbour, checkpoint, 1, ObjectStatus::Live).await;
+            }
+        }
+        mock.clear_read_rows_calls().await;
+
+        let model: std::collections::BTreeMap<u64, (u64, ObjectStatus)> =
+            changes.into_iter().collect();
+        for checkpoint in (0..=12).chain([u64::MAX - 1, u64::MAX]) {
+            let found = client
+                .get_object_version_at_checkpoint(id, checkpoint)
+                .await
+                .unwrap()
+                .map(|(version, status)| (version.value(), status));
+            let expected = model
+                .range(..=checkpoint)
+                .next_back()
+                .map(|(_, state)| *state);
+            assert_eq!(found, expected, "at checkpoint {checkpoint}");
+
+            let calls = mock.read_rows_calls().await;
+            mock.clear_read_rows_calls().await;
+            assert_eq!(calls.len(), 1, "one ReadRows per lookup: {calls:?}");
+            let call = &calls[0];
+            assert_eq!(call.table, index);
+            assert!(!call.reversed, "at checkpoint {checkpoint}");
+            assert_eq!(call.rows_limit, 1);
+            let key = |checkpoint| {
+                Bytes::from(tables::object_versions_by_checkpoint::encode_key(
+                    &id, checkpoint,
+                ))
+            };
+            assert_eq!(
+                call.row_ranges,
+                vec![RowRange {
+                    start_key: Some(StartKey::StartKeyClosed(key(checkpoint))),
+                    end_key: Some(EndKey::EndKeyClosed(key(0))),
+                }],
+            );
+        }
     }
 
     #[tokio::test]

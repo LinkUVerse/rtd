@@ -1,6 +1,6 @@
 [package]
 name = "rtd-kvstore"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -15,7 +15,6 @@ workspace = true
 testing = ["dep:tokio-stream"]
 
 [dependencies]
-rtd-bigtable-proto.workspace = true
 anyhow.workspace = true
 arc-swap.workspace = true
 async-stream.workspace = true
@@ -27,7 +26,11 @@ bcs.workspace = true
 clap.workspace = true
 futures.workspace = true
 governor.workspace = true
+h2.workspace = true
 http.workspace = true
+http-body.workspace = true
+hyper.workspace = true
+gcp_auth.workspace = true
 integer-encoding.workspace = true
 linku-common.workspace = true
 num_cpus.workspace = true
@@ -38,6 +41,7 @@ prost-types.workspace = true
 roaring.workspace = true
 rustc-hash.workspace = true
 rustls.workspace = true
+schemars.workspace = true
 scoped-futures.workspace = true
 serde.workspace = true
 toml.workspace = true
@@ -51,7 +55,10 @@ rtd-types.workspace = true
 telemetry-subscribers.workspace = true
 tokio = { workspace = true, features = ["full"] }
 tonic = { workspace = true, features = ["transport"] }
+tonic-health.workspace = true
 tonic-prost.workspace = true
+tonic-reflection.workspace = true
+tokio-util.workspace = true
 tokio-stream = { workspace = true, optional = true }
 tracing.workspace = true
 
@@ -61,7 +68,9 @@ rtd-indexer-alt-framework = { workspace = true, features = ["cluster"] }
 rtd-indexer-alt-framework-store-traits = { workspace = true, features = ["testing"] }
 rtd-keys.workspace = true
 rtd-rpc.workspace = true
+rtd-synthetic-ingestion.workspace = true
 rtd-test-transaction-builder.workspace = true
+tempfile.workspace = true
 test-cluster.workspace = true
 tokio-stream.workspace = true
 url.workspace = true

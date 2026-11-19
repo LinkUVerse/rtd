@@ -27,7 +27,7 @@ use rtd_types::{
     effects::{TransactionEffects, TransactionEffectsAPI},
     error::RtdResult,
     execution_params::ExecutionOrEarlyError,
-    gas::RtdGasStatus,
+    gas::GasUsageReport,
     inner_temporary_store::InnerTemporaryStore,
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     rtd_system_state::{
@@ -142,7 +142,7 @@ impl EpochState {
         transaction: &VerifiedTransaction,
     ) -> Result<(
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Result<(), rtd_types::error::ExecutionError>,
     )> {
@@ -168,7 +168,7 @@ impl EpochState {
 
         // Run the transaction input checks that would run when submitting the txn to a validator
         // for signing
-        let (gas_status, checked_input_objects) = rtd_transaction_checks::check_transaction_input(
+        let checked_input_objects = rtd_transaction_checks::check_transaction_input(
             &self.protocol_config,
             self.epoch_start_state.reference_gas_price(),
             transaction.data().transaction_data(),
@@ -181,10 +181,11 @@ impl EpochState {
         let transaction_data = transaction.data().transaction_data();
         let (kind, signer, gas_data) = transaction_data.execution_parts();
         let system_object_versions =
-            rtd_types::base_types::SystemObjectVersions::from_latest_in_store(
+            rtd_types::base_types::SystemObjectVersions::from_inputs_or_latest_in_store(
+                checked_input_objects.inner(),
                 store.backing_store(),
             );
-        let (inner_temp_store, gas_status, effects, _timings, result) = self
+        let (inner_temp_store, gas_report, effects, _timings, result) = self
             .executor
             .execute_transaction_to_effects_and_execution_error(
                 store.backing_store(),
@@ -196,10 +197,10 @@ impl EpochState {
                 &self.epoch_start_state.epoch(),
                 self.epoch_start_state.epoch_start_timestamp_ms(),
                 checked_input_objects,
-                system_object_versions,
+                system_object_versions.clone(),
                 self.unsettled_object_withdrawals.as_ref() as &dyn UnsettledObjectFundsRead,
                 gas_data,
-                gas_status,
+                self.epoch_start_state.reference_gas_price(),
                 kind,
                 None, // compat_args
                 signer,
@@ -222,7 +223,7 @@ impl EpochState {
                     self.chain_identifier,
                 );
         }
-        Ok((inner_temp_store, gas_status, effects, result))
+        Ok((inner_temp_store, gas_report, effects, result))
     }
 
     pub(crate) fn commit_accumulator_versions(

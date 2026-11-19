@@ -15,6 +15,8 @@ use passkey_types::{
         PublicKeyCredentialUserEntity, UserVerificationRequirement,
     },
 };
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::net::SocketAddr;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::sim_test;
 use rtd_test_transaction_builder::TestTransactionBuilder;
@@ -30,8 +32,6 @@ use rtd_types::{
     passkey_authenticator::{PasskeyAuthenticator, to_signing_message},
     transaction::TransactionData,
 };
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::net::SocketAddr;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use url::Url;
@@ -101,7 +101,7 @@ async fn create_credential_and_sign_test_tx(
     let store: Option<Passkey> = None;
     let my_authenticator = Authenticator::new(my_aaguid, store, user_validation_method);
     let mut my_client = Client::new(my_authenticator);
-    let origin = Url::parse("https://example.com").unwrap();
+    let origin = Url::parse("https://www.rtd.io").unwrap();
 
     // Create credential.
     let challenge_bytes_from_rp: Bytes = random_vec(32).into();

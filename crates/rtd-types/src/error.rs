@@ -745,9 +745,6 @@ pub enum RtdErrorKind {
     #[error("Missing committee information for epoch {0}")]
     MissingCommitteeAtEpoch(EpochId),
 
-    #[error("Index store not available on this Fullnode.")]
-    IndexStoreNotAvailable,
-
     #[error("Failed to read dynamic field from table in the object store: {0}")]
     DynamicFieldReadError(String),
 
@@ -844,6 +841,22 @@ pub enum RtdErrorKind {
 
     #[error("Transaction {digest} has been recently submitted to this validator.")]
     TransactionSubmitted { digest: TransactionDigest },
+
+    // Appended last: errors travel BCS-encoded in RPC status details, and older clients
+    // must keep decoding every earlier variant.
+    #[error(
+        "This validator is outside the transaction's staggered-submission proposer set; submit to one of its proposers."
+    )]
+    StaggeredSubmissionNotProposer,
+
+    // The field is the same on every validator, so that the driver aggregates the rejections.
+    #[error("Transaction is not valid until its min_timestamp {min_timestamp} (Unix seconds).")]
+    TransactionNotYetValid { min_timestamp: u64 },
+
+    #[error(
+        "Another transaction pending at this validator uses owned object {object_id} at an equal or higher gas price."
+    )]
+    OwnedObjectConflict { object_id: ObjectID },
 }
 
 #[repr(u64)]
@@ -870,6 +883,7 @@ pub enum VMMemoryLimitExceededSubStatusCode {
     OBJECT_RUNTIME_STORE_LIMIT_EXCEEDED = 6,
     TOTAL_EVENT_SIZE_LIMIT_EXCEEDED = 7,
     SCRATCH_SIZE_LIMIT_EXCEEDED = 8,
+    ACCUMULATOR_EVENT_COUNT_LIMIT_EXCEEDED = 9,
 }
 
 pub type RtdResult<T = ()> = Result<T, RtdError>;
@@ -1069,6 +1083,15 @@ impl RtdErrorKind {
             RtdErrorKind::TransactionRejectedDueToOutbiddingDuringCongestion { .. } => true,
             RtdErrorKind::ValidatorOverloadedRetryAfter { .. } => true,
 
+            // Retriable at another validator: one of the transaction's proposers.
+            RtdErrorKind::StaggeredSubmissionNotProposer => true,
+
+            // The transaction becomes valid at its `min_timestamp`.
+            RtdErrorKind::TransactionNotYetValid { .. } => true,
+
+            // Retriable at another validator, which does not hold the conflicting transaction.
+            RtdErrorKind::OwnedObjectConflict { .. } => true,
+
             // The transaction is already being processed by consensus, so a fresh
             // submission is pointless. The client should retry by waiting for effects
             // rather than resubmitting.
@@ -1171,6 +1194,15 @@ impl RtdErrorKind {
             }
 
             RtdErrorKind::TimeoutError => ErrorCategory::Unavailable,
+
+            // Not a fault of the validator: the client simply asked a non-proposer. It
+            // retries at the next target without backoff, like any aborted submission.
+            RtdErrorKind::StaggeredSubmissionNotProposer => ErrorCategory::Aborted,
+
+            RtdErrorKind::TransactionNotYetValid { .. } => ErrorCategory::Aborted,
+
+            // Not a fault of the validator: the submitter's own transactions conflict.
+            RtdErrorKind::OwnedObjectConflict { .. } => ErrorCategory::Aborted,
 
             // Other variants are assumed to be retriable with new transaction submissions.
             _ => ErrorCategory::Aborted,

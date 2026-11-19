@@ -7,12 +7,14 @@ pub use checked::*;
 
 #[rtd_macros::with_checked_arithmetic]
 mod checked {
+    use std::collections::{BTreeMap, HashSet};
+    use std::sync::Arc;
     use rtd_config::verifier_signing_config::VerifierSigningConfig;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::base_types::{ObjectID, ObjectRef};
     use rtd_types::error::{RtdResult, UserInputError, UserInputResult};
     use rtd_types::executable_transaction::VerifiedExecutableTransaction;
-    use rtd_types::gas::RtdGasStatusAPI;
+    use rtd_types::gas::{check_gas_budget_and_balance, check_gas_price};
     use rtd_types::metrics::BytecodeVerifierMetrics;
     use rtd_types::object::ObjectPermission;
     use rtd_types::transaction::{
@@ -23,18 +25,16 @@ mod checked {
     use rtd_types::{
         RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_BRIDGE_OBJECT_ID,
         RTD_CLOCK_OBJECT_ID, RTD_COIN_REGISTRY_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
-        RTD_DISPLAY_REGISTRY_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
+        RTD_DISPLAY_REGISTRY_OBJECT_ID, RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID,
+        RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
     };
     use rtd_types::{
-        base_types::{RtdAddress, SequenceNumber},
+        base_types::{SequenceNumber, RtdAddress},
         coin_reservation::ParsedDigest,
         error::RtdError,
         fp_bail, fp_ensure,
-        gas::RtdGasStatus,
         object::{Object, Owner},
     };
-    use std::collections::{BTreeMap, HashSet};
-    use std::sync::Arc;
     use tracing::error;
     use tracing::instrument;
 
@@ -48,35 +48,6 @@ mod checked {
         }
     }
 
-    // Entry point for all checks related to gas.
-    // Called on both signing and execution.
-    // On success the gas part of the transaction (gas data and gas coins)
-    // is verified and good to go
-    fn get_gas_status(
-        objects: &InputObjects,
-        gas: &[ObjectRef],
-        protocol_config: &ProtocolConfig,
-        reference_gas_price: u64,
-        transaction: &TransactionData,
-        gas_ownership_checks: bool,
-    ) -> RtdResult<RtdGasStatus> {
-        if transaction.kind().is_system_tx() {
-            Ok(RtdGasStatus::new_unmetered(protocol_config))
-        } else {
-            let is_gasless =
-                protocol_config.enable_gasless() && transaction.is_gasless_transaction();
-            check_gas(
-                objects,
-                protocol_config,
-                reference_gas_price,
-                gas,
-                transaction,
-                gas_ownership_checks,
-                is_gasless,
-            )
-        }
-    }
-
     #[instrument(level = "trace", skip_all)]
     pub fn check_transaction_input(
         protocol_config: &ProtocolConfig,
@@ -86,8 +57,8 @@ mod checked {
         receiving_objects: &ReceivingObjects,
         metrics: &Arc<BytecodeVerifierMetrics>,
         verifier_signing_config: &VerifierSigningConfig,
-    ) -> RtdResult<(RtdGasStatus, CheckedInputObjects)> {
-        let gas_status = check_transaction_input_inner(
+    ) -> RtdResult<CheckedInputObjects> {
+        check_transaction_input_inner(
             protocol_config,
             reference_gas_price,
             transaction,
@@ -104,7 +75,7 @@ mod checked {
             verifier_signing_config,
         )?;
 
-        Ok((gas_status, input_objects.into_checked()))
+        Ok(input_objects.into_checked())
     }
 
     // Since the purpose of this function is to audit certified transactions,
@@ -117,9 +88,9 @@ mod checked {
         input_objects: InputObjects,
         protocol_config: &ProtocolConfig,
         reference_gas_price: u64,
-    ) -> RtdResult<(RtdGasStatus, CheckedInputObjects)> {
+    ) -> RtdResult<CheckedInputObjects> {
         let transaction = cert.data().transaction_data();
-        let gas_status = check_transaction_input_inner(
+        check_transaction_input_inner(
             protocol_config,
             reference_gas_price,
             transaction,
@@ -131,7 +102,7 @@ mod checked {
         // NB: allowance withdrawal declarations are only validated at signing; at execution
         // the allowance's own Move checks enforce policy on consensus-sequenced state.
 
-        Ok((gas_status, input_objects.into_checked()))
+        Ok(input_objects.into_checked())
     }
 
     /// WARNING! This should only be used for the dev-inspect transaction. This transaction type
@@ -143,7 +114,7 @@ mod checked {
         // TODO: check ReceivingObjects for dev inspect?
         _receiving_objects: ReceivingObjects,
         reference_gas_price: u64,
-    ) -> RtdResult<(RtdGasStatus, CheckedInputObjects)> {
+    ) -> RtdResult<CheckedInputObjects> {
         let kind = transaction.kind();
         kind.validity_check(config)?;
         if kind.is_system_tx() {
@@ -171,16 +142,15 @@ mod checked {
             }
         }
 
-        let gas_status = get_gas_status(
+        check_gas(
             &input_objects,
-            &transaction.gas_data().payment, //gas,
             config,
             reference_gas_price,
+            &transaction.gas_data().payment,
             transaction,
-            false, // gas_ownership_checks - false means mostly transaction level checks
         )?;
 
-        Ok((gas_status, input_objects.into_checked()))
+        Ok(input_objects.into_checked())
     }
 
     // Common checks performed for transactions and certificates.
@@ -191,20 +161,19 @@ mod checked {
         input_objects: &InputObjects,
         // Overrides the gas objects in the transaction.
         gas_override: &[ObjectRef],
-    ) -> RtdResult<RtdGasStatus> {
+    ) -> RtdResult {
         let gas = if gas_override.is_empty() {
             transaction.gas()
         } else {
             gas_override
         };
 
-        let gas_status = get_gas_status(
+        check_gas(
             input_objects,
-            gas,
             protocol_config,
             reference_gas_price,
+            gas,
             transaction,
-            true, // gas_ownership_checks
         )?;
         check_objects(transaction, input_objects, protocol_config)?;
         check_replay_protection(transaction, input_objects)?;
@@ -213,7 +182,7 @@ mod checked {
             check_gasless_object_inputs(input_objects, protocol_config)?;
         }
 
-        Ok(gas_status)
+        Ok(())
     }
 
     /// All transactions must have replay protection, which can come from:
@@ -227,13 +196,7 @@ mod checked {
         transaction: &TransactionData,
         input_objects: &InputObjects,
     ) -> UserInputResult<()> {
-        let has_replay_protection = transaction.expiration().is_replay_protected()
-            || !transaction.gas_data().payment.is_empty()
-            || input_objects
-                .iter()
-                .any(|obj| obj.is_replay_protected_input());
-
-        if !has_replay_protection {
+        if !transaction.has_replay_protection(input_objects.iter()) {
             return Err(UserInputError::InvalidExpiration {
                 error: "Transactions must either have address-owned inputs, or a ValidDuring expiration with at most two epochs of validity"
                     .to_string(),
@@ -364,8 +327,10 @@ mod checked {
         Ok(())
     }
 
-    /// Check transaction gas data/info and gas coins consistency.
-    /// Return the gas status to be used for the lifecycle of the transaction.
+    /// Check the gas data and the gas coins of a user transaction. Called on both signing and
+    /// execution; on success the gas part of the transaction is good to go. System transactions
+    /// are unmetered and gasless ones are metered at the reference price up to the computation
+    /// cap, so neither has anything to check here.
     #[instrument(level = "trace", skip_all)]
     fn check_gas(
         objects: &InputObjects,
@@ -373,21 +338,18 @@ mod checked {
         reference_gas_price: u64,
         gas: &[ObjectRef],
         transaction: &TransactionData,
-        gas_ownership_checks: bool,
-        is_gasless: bool,
-    ) -> RtdResult<RtdGasStatus> {
+    ) -> RtdResult {
+        if transaction.kind().is_system_tx() {
+            return Ok(());
+        }
+        if protocol_config.enable_gasless() && transaction.is_gasless_transaction() {
+            debug_assert_ne!(reference_gas_price, 0);
+            return Ok(());
+        }
         let gas_budget = transaction.gas_budget();
         let gas_price = transaction.gas_price();
         let gas_paid_from_address_balance = transaction.is_gas_paid_from_address_balance();
-
-        let gas_status = if is_gasless {
-            debug_assert_ne!(reference_gas_price, 0);
-            let rgp = reference_gas_price.max(1);
-            let compute_cap = protocol_config.gasless_max_computation_units() * rgp;
-            RtdGasStatus::new(compute_cap, rgp, reference_gas_price, protocol_config)?
-        } else {
-            RtdGasStatus::new(gas_budget, gas_price, reference_gas_price, protocol_config)?
-        };
+        check_gas_price(gas_price, reference_gas_price, protocol_config)?;
 
         // check balance and coins consistency
         // load all gas coins (skip coin reservations - they're not loaded as input objects)
@@ -418,17 +380,14 @@ mod checked {
             (gas_objects, available_address_balance_gas)
         };
 
-        if !is_gasless {
-            if gas_ownership_checks {
-                gas_status.check_gas_objects(&gas_objects)?;
-            }
-            gas_status.check_gas_balance(
-                &gas_objects,
-                gas_budget,
-                available_address_balance_gas,
-            )?;
-        }
-        Ok(gas_status)
+        check_gas_budget_and_balance(
+            &gas_objects,
+            gas_budget,
+            gas_price,
+            available_address_balance_gas,
+            protocol_config,
+        )?;
+        Ok(())
     }
 
     /// Check all the objects used in the transaction against the database, and ensure
@@ -489,6 +448,7 @@ mod checked {
                         input_object_kind,
                         object,
                         system_transaction,
+                        protocol_config,
                     )?;
                 }
                 // We skip checking a removed consensus object because it no longer exists.
@@ -507,6 +467,7 @@ mod checked {
         object_kind: InputObjectKind,
         object: &Object,
         system_transaction: bool,
+        protocol_config: &ProtocolConfig,
     ) -> UserInputResult {
         // Defense-in-depth: Owner::Party is not yet supported.
         if matches!(object.owner, Owner::Party { .. }) {
@@ -603,6 +564,8 @@ mod checked {
 
                     match (object_id, mutability) {
                         // System objects that can be taken mutably
+                        (RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID, _)
+                            if protocol_config.enable_forwarding_addresses() => (),
                         (RTD_SYSTEM_STATE_OBJECT_ID, _)
                         | (RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, _)
                         | (RTD_COIN_REGISTRY_OBJECT_ID, _)

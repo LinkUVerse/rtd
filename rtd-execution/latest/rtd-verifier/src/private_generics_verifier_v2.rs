@@ -3,7 +3,6 @@
 
 use std::borrow::Cow;
 
-use linku_common::ZipDebugEqIteratorExt;
 use move_binary_format::{
     CompiledModule,
     file_format::{Bytecode, FunctionDefinition, FunctionHandle, SignatureToken, Visibility},
@@ -11,6 +10,7 @@ use move_binary_format::{
 use move_bytecode_utils::format_signature_token;
 use move_core_types::{account_address::AccountAddress, ident_str, identifier::IdentStr};
 use move_vm_config::verifier::VerifierConfig;
+use linku_common::ZipDebugEqIteratorExt;
 use rtd_types::{
     MOVE_STDLIB_ADDRESS, RTD_FRAMEWORK_ADDRESS, error::ExecutionError, make_invariant_violation,
 };

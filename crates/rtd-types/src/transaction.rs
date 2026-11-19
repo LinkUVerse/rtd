@@ -20,16 +20,16 @@ use crate::coin_reservation::{
 use crate::committee::{Committee, EpochId, ProtocolVersion};
 use crate::crypto::{
     AuthoritySignInfo, AuthoritySignInfoTrait, AuthoritySignature, AuthorityStrongQuorumSignInfo,
-    DefaultHash, Ed25519RtdSignature, EmptySignInfo, RandomnessRound, RtdSignatureInner, Signature,
-    Signer, ToFromBytes, default_hash,
+    DefaultHash, Ed25519RtdSignature, EmptySignInfo, RandomnessRound, Signature, Signer,
+    RtdSignatureInner, ToFromBytes, default_hash,
 };
 use crate::digests::{AdditionalConsensusStateDigest, SenderSignedDataDigest};
 use crate::digests::{ChainIdentifier, ConsensusCommitDigest};
 use crate::execution::{ExecutionTimeObservationKey, SharedInput};
 use crate::funds_accumulator::{FUNDS_ACCUMULATOR_MODULE_NAME, WITHDRAWAL_SPLIT_FUNC_NAME};
+use crate::gas::minimum_gas_budget;
 use crate::gas_coin::GAS;
 use crate::gas_model::gas_predicates::check_for_gas_price_too_high;
-use crate::gas_model::gas_v2::RtdCostTable;
 use crate::message_envelope::{Envelope, Message, TrustedEnvelope, VerifiedEnvelope};
 use crate::messages_checkpoint::CheckpointTimestamp;
 use crate::messages_consensus::{
@@ -52,13 +52,12 @@ use crate::{
 use enum_dispatch::enum_dispatch;
 use fastcrypto::{encoding::Base64, hash::HashFunction};
 use itertools::{Either, Itertools};
-use linku_common::{ZipDebugEqIteratorExt, assert_reachable, debug_fatal};
 use move_core_types::account_address::AccountAddress;
 use move_core_types::identifier::IdentStr;
 use move_core_types::{ident_str, identifier};
 use move_core_types::{identifier::Identifier, language_storage::TypeTag};
+use linku_common::{ZipDebugEqIteratorExt, assert_reachable, debug_fatal};
 use nonempty::{NonEmpty, nonempty};
-use rtd_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use serde::{Deserialize, Serialize};
 use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
 use std::collections::btree_map::Entry;
@@ -73,6 +72,7 @@ use std::{
     iter,
 };
 use strum::IntoStaticStr;
+use rtd_protocol_config::{PerObjectCongestionControlMode, ProtocolConfig};
 use tap::Pipe;
 use tracing::trace;
 
@@ -82,7 +82,10 @@ mod transaction_serialization_tests;
 
 pub const TEST_ONLY_GAS_UNIT_FOR_TRANSFER: u64 = 10_000;
 pub const TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS: u64 = 50_000;
-pub const TEST_ONLY_GAS_UNIT_FOR_PUBLISH: u64 = 70_000;
+// Multiplied by the reference gas price, this must cover the MIST-denominated publish charge on
+// top of the execution and storage costs of the fixture packages. At a reference gas price of 100
+// the budget is 2 RTD, and at 1000 it is 20 RTD, under the maximum budget.
+pub const TEST_ONLY_GAS_UNIT_FOR_PUBLISH: u64 = 20_000_000;
 pub const TEST_ONLY_GAS_UNIT_FOR_STAKING: u64 = 50_000;
 pub const TEST_ONLY_GAS_UNIT_FOR_GENERIC: u64 = 50_000;
 pub const TEST_ONLY_GAS_UNIT_FOR_SPLIT_COIN: u64 = 10_000;
@@ -1699,6 +1702,13 @@ impl ProgrammableTransaction {
                 value: config.max_input_objects().to_string()
             }
         );
+        fp_ensure!(
+            inputs.len() <= u16::MAX as usize,
+            UserInputError::SizeLimitExceeded {
+                limit: "maximum inputs in a programmable transaction".to_string(),
+                value: u16::MAX.to_string()
+            }
+        );
         for input in inputs {
             input.validity_check(config)?
         }
@@ -1968,17 +1978,23 @@ impl TransactionKind {
         )
     }
 
-    pub fn mutates_implicitly_read_system_object(&self) -> bool {
-        self.shared_input_objects()
-            .any(|obj| obj.may_mutate() && obj.id.is_implicitly_read_system_object())
-    }
-
     pub fn is_accumulator_barrier_settle_tx(&self) -> bool {
         matches!(self, TransactionKind::ProgrammableSystemTransaction(_))
             && self.shared_input_objects().any(|obj| {
                 obj.id == RTD_ACCUMULATOR_ROOT_OBJECT_ID
                     && obj.mutability == SharedObjectMutability::Mutable
             })
+    }
+
+    /// Whether this is any accumulator settlement transaction (a settlement chunk or
+    /// the barrier); every one declares the accumulator root object as a shared input.
+    pub fn is_accumulator_settle_tx(&self) -> bool {
+        if let TransactionKind::ProgrammableSystemTransaction(pt) = self {
+            pt.shared_input_objects()
+                .any(|obj| obj.id == RTD_ACCUMULATOR_ROOT_OBJECT_ID)
+        } else {
+            false
+        }
     }
 
     /// If this is an accumulator barrier settlement transaction, returns its
@@ -2410,6 +2426,9 @@ pub fn is_gasless_transaction(gas_data: &GasData, transaction_kind: &Transaction
     is_gas_paid_from_address_balance(gas_data, transaction_kind) && gas_data.price == 0
 }
 
+/// The largest `min_timestamp` or `max_timestamp` (Unix seconds), 9999-12-31T23:59:59Z.
+pub const MAX_EXPIRATION_TIMESTAMP_SECS: u64 = 253_402_300_799;
+
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
 pub enum TransactionExpiration {
     /// The transaction has no expiration
@@ -2431,9 +2450,13 @@ pub enum TransactionExpiration {
         min_epoch: Option<EpochId>,
         /// Transaction expires after this epoch. Must equal current epoch
         max_epoch: Option<EpochId>,
-        /// Future support for sub-epoch timing (not yet implemented)
+        /// Earliest time (Unix seconds, inclusive) at which the transaction is valid. A quorum
+        /// must vote to accept the transaction at or after this time by their local clocks, so
+        /// the commit timestamp can be slightly earlier. A rejected transaction can be submitted
+        /// again.
         min_timestamp: Option<u64>,
-        /// Future support for sub-epoch timing (not yet implemented)
+        /// Latest consensus commit time (Unix seconds, inclusive) at which the transaction is
+        /// valid. A transaction scheduled by a later commit fails with `TransactionExpired`.
         max_timestamp: Option<u64>,
         /// Network identifier to prevent cross-chain replay
         chain: ChainIdentifier,
@@ -2447,9 +2470,13 @@ pub enum TransactionExpiration {
         min_epoch: Option<EpochId>,
         /// Transaction expires after this epoch. Must equal current epoch
         max_epoch: Option<EpochId>,
-        /// Future support for sub-epoch timing (not yet implemented)
+        /// Earliest time (Unix seconds, inclusive) at which the transaction is valid. A quorum
+        /// must vote to accept the transaction at or after this time by their local clocks, so
+        /// the commit timestamp can be slightly earlier. A rejected transaction can be submitted
+        /// again.
         min_timestamp: Option<u64>,
-        /// Future support for sub-epoch timing (not yet implemented)
+        /// Latest consensus commit time (Unix seconds, inclusive) at which the transaction is
+        /// valid. A transaction scheduled by a later commit fails with `TransactionExpired`.
         max_timestamp: Option<u64>,
         /// Network identifier to prevent cross-chain replay
         chain: ChainIdentifier,
@@ -2483,6 +2510,14 @@ pub struct AllowedProposers {
 /// offline, so this is a floor as much as it is an allowance.
 pub const MAX_UNPAID_ALLOWED_PROPOSERS: u64 = 3;
 
+/// SIP-45: the number of consensus submissions a gas price pays for. Every transaction may
+/// be proposed by `MAX_UNPAID_ALLOWED_PROPOSERS` validators; a gas price of `n` times the
+/// reference price buys `n`. The single definition behind sizing an explicit proposer set,
+/// the immediate slots of staggered submission, and the deferral of unpaid duplicates.
+pub fn paid_proposer_count(gas_price: u64, reference_gas_price: u64) -> u64 {
+    MAX_UNPAID_ALLOWED_PROPOSERS.max(gas_price / reference_gas_price.max(1))
+}
+
 impl TransactionExpiration {
     /// Validators remember all executed transaction digests from the current and previous
     /// epoch. Therefore, a one or two epoch validity window provides replay protection.
@@ -2502,6 +2537,53 @@ impl TransactionExpiration {
                 ..
             } if *max_epoch == *min_epoch || *max_epoch == min_epoch.saturating_add(1)
         )
+    }
+
+    /// Whether `timestamp_ms` is before `min_timestamp`, which is in seconds. The transaction can
+    /// become valid later.
+    pub fn is_not_yet_valid_at(&self, timestamp_ms: u64) -> bool {
+        match self {
+            TransactionExpiration::None | TransactionExpiration::Epoch(_) => false,
+            TransactionExpiration::ValidDuring { min_timestamp, .. }
+            | TransactionExpiration::Validity { min_timestamp, .. } => {
+                min_timestamp.is_some_and(|min| timestamp_ms / 1000 < min)
+            }
+        }
+    }
+
+    /// Whether `timestamp_ms` is after `max_timestamp`, which is in seconds. The bound covers
+    /// the whole second it names. The transaction can never become valid.
+    pub fn is_expired_at(&self, timestamp_ms: u64) -> bool {
+        // Defined through `first_expired_timestamp_ms`, so that checkpoint execution, which
+        // uses that timestamp, reproduces the expiry by construction.
+        self.first_expired_timestamp_ms()
+            .is_some_and(|first_expired_ms| timestamp_ms >= first_expired_ms)
+    }
+
+    /// The `min_timestamp` (Unix seconds), if there is one.
+    pub fn min_timestamp(&self) -> Option<u64> {
+        match self {
+            TransactionExpiration::None | TransactionExpiration::Epoch(_) => None,
+            TransactionExpiration::ValidDuring { min_timestamp, .. }
+            | TransactionExpiration::Validity { min_timestamp, .. } => *min_timestamp,
+        }
+    }
+
+    /// The earliest timestamp (Unix ms) at which `is_not_yet_valid_at` is false, if there is a
+    /// `min_timestamp`.
+    pub fn first_valid_timestamp_ms(&self) -> Option<u64> {
+        self.min_timestamp().and_then(|min| min.checked_mul(1000))
+    }
+
+    /// The earliest timestamp (Unix ms) at which `is_expired_at` is true, if there is one.
+    pub fn first_expired_timestamp_ms(&self) -> Option<u64> {
+        match self {
+            TransactionExpiration::None | TransactionExpiration::Epoch(_) => None,
+            TransactionExpiration::ValidDuring { max_timestamp, .. }
+            | TransactionExpiration::Validity { max_timestamp, .. } => max_timestamp
+                .and_then(|max| max.checked_add(1))
+                .and_then(|secs| secs.checked_mul(1000)),
+        }
     }
 
     /// The validators allowed to propose this transaction in consensus during `epoch`.
@@ -2564,6 +2646,21 @@ impl TransactionData {
         match self {
             TransactionData::V1(v1) => v1,
         }
+    }
+
+    /// Whether the transaction is protected against replay, given its loaded `input_objects`:
+    /// it has a `ValidDuring` expiration of at most two epochs, a gas payment object, or an
+    /// address-owned input or coin reservation among `input_objects`. `input_objects` is only
+    /// consumed when the expiration and gas payment do not already protect the transaction.
+    pub fn has_replay_protection(
+        &self,
+        input_objects: impl IntoIterator<Item = impl std::borrow::Borrow<ObjectReadResult>>,
+    ) -> bool {
+        self.expiration().is_replay_protected()
+            || !self.gas_data().payment.is_empty()
+            || input_objects
+                .into_iter()
+                .any(|object| object.borrow().is_replay_protected_input())
     }
     fn new_system_transaction(kind: TransactionKind) -> Self {
         // assert transaction kind if a system transaction
@@ -3440,9 +3537,9 @@ impl TransactionDataAPI for TransactionDataV1 {
                     // No gas price buys more proposers than there are validators.
                     //
                     // Checked first, so that everything below walks a bounded list.
-                    let max_proposers = MAX_UNPAID_ALLOWED_PROPOSERS
-                        .max(self.gas_data.price / context.reference_gas_price.max(1))
-                        .min(context.committee_size as u64);
+                    let max_proposers =
+                        paid_proposer_count(self.gas_data.price, context.reference_gas_price)
+                            .min(context.committee_size as u64);
                     fp_ensure!(
                         proposers.len() as u64 <= max_proposers,
                         UserInputError::InvalidExpiration {
@@ -3486,10 +3583,38 @@ impl TransactionDataAPI for TransactionDataV1 {
                 }
 
                 if min_timestamp.is_some() || max_timestamp.is_some() {
-                    return Err(UserInputError::Unsupported(
-                        "Timestamp-based transaction expiration is not yet supported".to_string(),
-                    )
-                    .into());
+                    fp_ensure!(
+                        config.enable_timestamp_transaction_expiration(),
+                        UserInputError::Unsupported(
+                            "Timestamp-based transaction expiration is not yet supported"
+                                .to_string(),
+                        )
+                        .into()
+                    );
+                    // gRPC carries the bounds as protobuf `Timestamp` seconds, which end at
+                    // 9999-12-31T23:59:59Z. The bound also rejects millisecond values.
+                    for timestamp in [min_timestamp, max_timestamp].into_iter().flatten() {
+                        fp_ensure!(
+                            *timestamp <= MAX_EXPIRATION_TIMESTAMP_SECS,
+                            UserInputError::InvalidExpiration {
+                                error: format!(
+                                    "timestamp {timestamp} is greater than {MAX_EXPIRATION_TIMESTAMP_SECS}"
+                                ),
+                            }
+                            .into()
+                        );
+                    }
+                    if let (Some(min), Some(max)) = (min_timestamp, max_timestamp) {
+                        fp_ensure!(
+                            min <= max,
+                            UserInputError::InvalidExpiration {
+                                error: format!(
+                                    "min_timestamp {min} is greater than max_timestamp {max}"
+                                ),
+                            }
+                            .into()
+                        );
+                    }
                 }
 
                 // Legacy behavior: If a validity window is present, it must have either one- or
@@ -3662,8 +3787,8 @@ impl TransactionDataAPI for TransactionDataV1 {
 
             // Legacy behavior: when paying gas from address balance, we require ValidDuring expiration
             // even if the transaction has other replay-protected inputs.
-            // New behavior: the check is done in `check_address_balance_replay_protection`, which only
-            // requires two-epoch ValidDuring if there are no replay-protected inputs.
+            // New behavior: the check is done in `check_replay_protection` in rtd-transaction-checks,
+            // which only requires two-epoch ValidDuring if there are no replay-protected inputs.
             if !config.relax_valid_during_for_owned_inputs() {
                 if matches!(self.expiration(), TransactionExpiration::None) {
                     // To avoid changing error behavior unnecessarily, we flag this as a missing gas payment error
@@ -3754,13 +3879,11 @@ impl TransactionDataAPI for TransactionDataV1 {
                 }
                 .into()
             );
-            let cost_table = RtdCostTable::new(config, self.gas_data.price);
-
             fp_ensure!(
-                self.gas_data.budget <= cost_table.max_gas_budget,
+                self.gas_data.budget <= config.max_tx_gas(),
                 UserInputError::GasBudgetTooHigh {
                     gas_budget: self.gas_data().budget,
-                    max_budget: cost_table.max_gas_budget,
+                    max_budget: config.max_tx_gas(),
                 }
                 .into()
             );
@@ -3774,11 +3897,12 @@ impl TransactionDataAPI for TransactionDataV1 {
                     .into()
                 );
             } else {
+                let min_budget = minimum_gas_budget(config, self.gas_data.price);
                 fp_ensure!(
-                    self.gas_data.budget >= cost_table.min_transaction_cost,
+                    self.gas_data.budget >= min_budget,
                     UserInputError::GasBudgetTooLow {
                         gas_budget: self.gas_data.budget,
-                        min_budget: cost_table.min_transaction_cost,
+                        min_budget,
                     }
                     .into()
                 );
@@ -4078,6 +4202,18 @@ impl SenderSignedTransaction {
     }
 }
 
+/// Any ML-DSA-65 part of a multisig is a BCS variant older binaries cannot
+/// decode, so it stays out of blocks until the flag is on, even when only
+/// classical members signed.
+fn mldsa65_multisig_unsupported() -> RtdError {
+    RtdErrorKind::UserInputError {
+        error: UserInputError::Unsupported(
+            "ML-DSA-65 multisig members are not enabled on this network".to_string(),
+        ),
+    }
+    .into()
+}
+
 impl SenderSignedData {
     pub fn new(tx_data: TransactionData, tx_signatures: Vec<GenericSignature>) -> Self {
         Self(SizeOneVec::new(SenderSignedTransaction {
@@ -4175,7 +4311,7 @@ impl SenderSignedData {
     fn check_user_signature_protocol_compatibility(&self, config: &ProtocolConfig) -> RtdResult {
         for sig in &self.inner().tx_signatures {
             match sig {
-                GenericSignature::MultiSig(_) => {
+                GenericSignature::MultiSig(multisig) => {
                     if !config.upgraded_multisig_supported() {
                         return Err(RtdErrorKind::UserInputError {
                             error: UserInputError::Unsupported(
@@ -4183,6 +4319,9 @@ impl SenderSignedData {
                             ),
                         }
                         .into());
+                    }
+                    if multisig.uses_mldsa65() && !config.mldsa65_auth() {
+                        return Err(mldsa65_multisig_unsupported());
                     }
                 }
                 GenericSignature::ZkLoginAuthenticator(_) => {
@@ -4205,7 +4344,22 @@ impl SenderSignedData {
                         .into());
                     }
                 }
-                GenericSignature::Signature(_) | GenericSignature::MultiSigLegacy(_) => (),
+                GenericSignature::Signature(_) => {
+                    // Only ML-DSA-65 is gated; the classical schemes predate feature flags.
+                    if sig.is_mldsa65() && !config.mldsa65_auth() {
+                        return Err(RtdErrorKind::UserInputError {
+                            error: UserInputError::Unsupported(
+                                "ML-DSA-65 signatures are not enabled on this network".to_string(),
+                            ),
+                        }
+                        .into());
+                    }
+                }
+                GenericSignature::MultiSigLegacy(multisig) => {
+                    if multisig.uses_mldsa65() && !config.mldsa65_auth() {
+                        return Err(mldsa65_multisig_unsupported());
+                    }
+                }
             }
         }
 
@@ -5609,7 +5763,7 @@ impl Display for CertifiedTransaction {
             "Signed Authorities Bitmap : {:?}",
             self.auth_sig().signers_map
         )?;
-        write!(writer, "{}", &self.data().intent_message().value.kind())?;
+        write!(writer, "{}", self.data().intent_message().value.kind())?;
         write!(f, "{}", writer)
     }
 }

@@ -4,22 +4,24 @@
 use anyhow::{Result, anyhow};
 use prost_types::FieldMask;
 use rosetta_client::start_rosetta_test_server;
-use rtd_keys::keystore::AccountKeystore;
-use rtd_rosetta::CoinMetadataCache;
-use rtd_rosetta::operations::Operations;
-use rtd_rosetta::types::{
-    AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, Currency, NetworkIdentifier,
-    RtdEnv, SubAccount, SubAccountType,
-};
-use rtd_rosetta::types::{Currencies, OperationType, TransactionIdentifierResponse};
-use rtd_rpc::client::Client as GrpcClient;
-use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{GetCheckpointRequest, GetEpochRequest, GetTransactionRequest};
 use serde_json::json;
 use shared_crypto::intent::Intent;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
+use rtd_keys::keystore::AccountKeystore;
+use rtd_rosetta::CoinMetadataCache;
+use rtd_rosetta::operations::Operations;
+use rtd_rosetta::types::{
+    AccountBalanceRequest, AccountBalanceResponse, AccountIdentifier, ConstructionMetadataRequest,
+    ConstructionMetadataResponse, ConstructionPayloadsRequest, ConstructionPayloadsResponse,
+    ConstructionPreprocessRequest, ConstructionPreprocessResponse, Currency, NetworkIdentifier,
+    PreprocessMetadata, SubAccount, SubAccountType, RtdEnv,
+};
+use rtd_rosetta::types::{Currencies, OperationType, TransactionIdentifierResponse};
+use rtd_rpc::client::Client as GrpcClient;
+use rtd_rpc::field::FieldMaskUtil;
+use rtd_rpc::proto::sui::rpc::v2::{GetCheckpointRequest, GetEpochRequest, GetTransactionRequest};
 
 mod test_utils;
 use rtd_swarm_config::genesis_config::{DEFAULT_GAS_AMOUNT, DEFAULT_NUMBER_OF_OBJECT_PER_ACCOUNT};
@@ -36,7 +38,8 @@ use rtd_types::utils::to_sender_signed_transaction;
 use rtd_types::{Identifier, RTD_SYSTEM_PACKAGE_ID};
 use test_cluster::TestClusterBuilder;
 use test_utils::{
-    execute_transaction, get_all_coins, get_object_ref, get_random_rtd, wait_for_transaction,
+    execute_transaction, get_all_coins, get_object_ref, get_random_rtd, get_rtd_balance,
+    send_all_rtd_coins, send_rtd_coin, wait_for_transaction,
 };
 
 use crate::rosetta_client::RosettaEndpoint;
@@ -558,6 +561,289 @@ async fn test_withdraw_stake() {
 }
 
 #[tokio::test]
+async fn test_withdraw_stake_estimate_only() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_epoch_duration_ms(60000)
+        .build()
+        .await;
+    let staker = test_cluster.get_address_1();
+    let funder = test_cluster.get_address_0();
+    let keystore = &test_cluster.wallet.config.keystore;
+
+    let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
+    let (rosetta_client, _handle) = start_rosetta_test_server(client.clone()).await;
+
+    let validator = first_validator(&mut client).await;
+    stake_via_rosetta(
+        &rosetta_client,
+        &mut client,
+        keystore,
+        staker,
+        validator,
+        1_000_000_000,
+    )
+    .await;
+
+    // Trigger epoch change so the stake becomes active and withdrawable.
+    test_cluster.trigger_reconfiguration().await;
+
+    // Leave the staker holding only its StakedRtd: no RTD coins and no RTD address balance.
+    send_all_rtd_coins(&mut client, keystore, staker, funder)
+        .await
+        .unwrap();
+    assert_eq!(0, get_rtd_balance(&mut client, staker).await);
+
+    let ops: Operations = serde_json::from_value(json!(
+        [{
+            "operation_identifier":{"index":0},
+            "type":"WithdrawStake",
+            "account": { "address" : staker.to_string() }
+        }]
+    ))
+    .unwrap();
+
+    // An estimate-only quote succeeds for the unfunded staker and carries the required budget.
+    let quote = rosetta_client
+        .estimate_gas(&ops)
+        .await
+        .expect("estimate_only metadata must succeed for an account without RTD");
+    assert!(quote.metadata.estimate_only);
+    assert!(quote.metadata.gas_coins.is_empty());
+    let fee = quote.metadata.budget;
+    assert!(fee > 0);
+    assert_eq!(i128::from(fee), quote.suggested_fee[0].value);
+
+    // An estimate-only quote cannot be turned into a signable transaction.
+    let payloads_error = rosetta_client
+        .call::<_, ConstructionPayloadsResponse>(
+            RosettaEndpoint::Payloads,
+            &ConstructionPayloadsRequest {
+                network_identifier: NetworkIdentifier {
+                    blockchain: "rtd".to_string(),
+                    network: RtdEnv::LocalNet,
+                },
+                operations: ops.clone(),
+                metadata: Some(quote.metadata),
+                public_keys: vec![],
+            },
+        )
+        .await
+        .expect_err("payloads must reject estimate_only metadata");
+    assert_eq!(
+        2, payloads_error.code,
+        "Unexpected payloads error: {payloads_error:?}"
+    );
+    let payloads_details = payloads_error
+        .details
+        .as_ref()
+        .expect("payloads error must carry details");
+    assert!(
+        payloads_details["error"]
+            .as_str()
+            .unwrap()
+            .contains("estimate_only"),
+        "Unexpected payloads error: {payloads_error:?}"
+    );
+
+    // `estimate_only` quotes the budget the fullnode estimates, so preprocess and metadata reject
+    // it alongside a caller-supplied budget.
+    let network_identifier = NetworkIdentifier {
+        blockchain: "rtd".to_string(),
+        network: RtdEnv::LocalNet,
+    };
+    // Every field of a preprocess response is optional, so `call` would read an error body as an
+    // empty response. Read the raw body and require a Rosetta error instead.
+    let preprocess_body: serde_json::Value = rosetta_client
+        .call(
+            RosettaEndpoint::Preprocess,
+            &ConstructionPreprocessRequest {
+                network_identifier: network_identifier.clone(),
+                operations: ops.clone(),
+                metadata: Some(PreprocessMetadata {
+                    budget: Some(fee),
+                    estimate_only: true,
+                }),
+            },
+        )
+        .await
+        .unwrap();
+    let preprocess_error: rosetta_client::RosettaError =
+        serde_json::from_value(preprocess_body.clone()).unwrap_or_else(|_| {
+            panic!("preprocess must reject estimate_only with a budget, got {preprocess_body}")
+        });
+    assert_eq!(
+        2, preprocess_error.code,
+        "Unexpected preprocess error: {preprocess_error:?}"
+    );
+
+    let mut options = rosetta_client
+        .call::<_, ConstructionPreprocessResponse>(
+            RosettaEndpoint::Preprocess,
+            &ConstructionPreprocessRequest {
+                network_identifier: network_identifier.clone(),
+                operations: ops.clone(),
+                metadata: Some(PreprocessMetadata {
+                    budget: None,
+                    estimate_only: true,
+                }),
+            },
+        )
+        .await
+        .unwrap()
+        .options
+        .unwrap();
+    options.budget = Some(fee);
+    let metadata_error = rosetta_client
+        .call::<_, ConstructionMetadataResponse>(
+            RosettaEndpoint::Metadata,
+            &ConstructionMetadataRequest {
+                network_identifier,
+                options: Some(options),
+                public_keys: vec![],
+            },
+        )
+        .await
+        .expect_err("metadata must reject estimate_only with a budget");
+    assert_eq!(
+        2, metadata_error.code,
+        "Unexpected metadata error: {metadata_error:?}"
+    );
+
+    // Without estimate_only, metadata fails for the unfunded staker.
+    let error = rosetta_client
+        .rosetta_flow(&ops, keystore, None)
+        .await
+        .metadata
+        .unwrap()
+        .expect_err("metadata must fail for an account without RTD");
+    assert_eq!(16, error.code, "Unexpected metadata error: {error:?}");
+    let details = error
+        .details
+        .as_ref()
+        .expect("gas selection error must carry details");
+    assert!(
+        details["error"]
+            .as_str()
+            .unwrap()
+            .contains("Unable to perform gas selection"),
+        "Unexpected metadata error: {error:?}"
+    );
+    // The error carries the same budget as the quote, plus the balances gas selection saw.
+    assert_eq!(
+        Some(fee.to_string().as_str()),
+        details["required_budget"].as_str()
+    );
+    assert_eq!(Some("0"), details["coin_balance"].as_str());
+    assert_eq!(Some("0"), details["address_balance"].as_str());
+
+    // With no other RTD, a single coin worth the quoted fee pays exactly the quoted budget.
+    send_rtd_coin(&mut client, keystore, funder, staker, fee)
+        .await
+        .unwrap();
+
+    let flow = rosetta_client.rosetta_flow(&ops, keystore, None).await;
+    assert_eq!(fee, flow.metadata.unwrap().unwrap().metadata.budget);
+    assert_submitted_transaction_succeeded(&mut client, &flow.submit.unwrap().unwrap()).await;
+}
+
+/// A staker holding a dust RTD coin gets a quote for that coin alone. Prefunding a new coin adds
+/// that coin's loading cost to the budget, which the dust coin covers, so a new coin worth the whole
+/// quote pays for the withdrawal.
+#[tokio::test]
+async fn test_withdraw_stake_estimate_only_with_dust_coin() {
+    // More than the cost of loading one more gas coin (1000 gas units at the reference gas price),
+    // and less than the budget of a withdrawal.
+    const DUST_COIN_VALUE: u64 = 2_000_000;
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_epoch_duration_ms(60000)
+        .build()
+        .await;
+    let staker = test_cluster.get_address_1();
+    let funder = test_cluster.get_address_0();
+    let keystore = &test_cluster.wallet.config.keystore;
+
+    let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
+    let (rosetta_client, _handle) = start_rosetta_test_server(client.clone()).await;
+
+    let validator = first_validator(&mut client).await;
+    stake_via_rosetta(
+        &rosetta_client,
+        &mut client,
+        keystore,
+        staker,
+        validator,
+        1_000_000_000,
+    )
+    .await;
+    test_cluster.trigger_reconfiguration().await;
+
+    // Leave the staker holding its StakedRtd and a single dust coin.
+    send_all_rtd_coins(&mut client, keystore, staker, funder)
+        .await
+        .unwrap();
+    send_rtd_coin(&mut client, keystore, funder, staker, DUST_COIN_VALUE)
+        .await
+        .unwrap();
+
+    let ops: Operations = serde_json::from_value(json!(
+        [{
+            "operation_identifier":{"index":0},
+            "type":"WithdrawStake",
+            "account": { "address" : staker.to_string() }
+        }]
+    ))
+    .unwrap();
+
+    let quote = rosetta_client
+        .estimate_gas(&ops)
+        .await
+        .expect("estimate_only metadata must succeed for an account that can't pay for gas");
+    assert!(quote.metadata.gas_coins.is_empty());
+    let fee = quote.metadata.budget;
+
+    send_rtd_coin(&mut client, keystore, funder, staker, fee)
+        .await
+        .unwrap();
+
+    // Paying with two coins needs more than the quote, which covered the dust coin alone, so a
+    // new coin worth only the quote minus the dust coin would not have been enough.
+    let flow = rosetta_client.rosetta_flow(&ops, keystore, None).await;
+    let budget = flow.metadata.unwrap().unwrap().metadata.budget;
+    assert!(
+        budget > fee,
+        "budget {budget} should exceed the quote {fee}"
+    );
+    assert_submitted_transaction_succeeded(&mut client, &flow.submit.unwrap().unwrap()).await;
+}
+
+/// Wait for the transaction Rosetta submitted and assert that it executed successfully.
+async fn assert_submitted_transaction_succeeded(
+    client: &mut GrpcClient,
+    response: &TransactionIdentifierResponse,
+) {
+    let digest = response.transaction_identifier.hash.to_string();
+    wait_for_transaction(client, &digest).await.unwrap();
+
+    let request = GetTransactionRequest::default()
+        .with_digest(digest)
+        .with_read_mask(FieldMask::from_paths(["effects"]));
+    let transaction = client
+        .ledger_client()
+        .get_transaction(request)
+        .await
+        .unwrap()
+        .into_inner()
+        .transaction
+        .expect("Response transaction should not be empty");
+    assert!(
+        transaction.effects().status().success(),
+        "Transaction failed: {:?}",
+        transaction.effects().status().error()
+    );
+}
+
+#[tokio::test]
 async fn test_pay_rtd() {
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -859,7 +1145,7 @@ async fn test_balance_from_obj_paid_eq_gas() {
     const AMOUNT: i128 = 2999180;
     let client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
 
-    use rtd_rpc::proto::rtd::rpc::v2::{
+    use rtd_rpc::proto::sui::rpc::v2::{
         BalanceChange, Bcs, ExecutedTransaction, GetTransactionResponse, Transaction,
         TransactionEffects,
     };
@@ -1866,7 +2152,7 @@ async fn test_consolidate_all_staked_rtd_to_fungible() {
 
     // Verify: StakedRtd should be gone, FungibleStakedRtd should exist
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let staked_rtd_request = ListOwnedObjectsRequest::default()
         .with_owner(sender.to_string())
@@ -1909,7 +2195,7 @@ async fn test_consolidate_all_staked_rtd_to_fungible() {
 #[tokio::test]
 async fn test_consolidate_multiple_staked_rtd() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -2051,7 +2337,7 @@ async fn test_consolidate_multiple_staked_rtd() {
 #[tokio::test]
 async fn test_consolidate_with_preexisting_fss() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -2264,7 +2550,7 @@ async fn test_consolidate_with_preexisting_fss() {
 #[tokio::test]
 async fn test_consolidate_fss_only_merge() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -2443,9 +2729,12 @@ async fn test_consolidate_fss_only_merge() {
 #[tokio::test]
 async fn test_consolidate_multi_validator_isolation() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
 
@@ -2669,7 +2958,7 @@ async fn test_consolidate_noop_no_stakes() {
 #[tokio::test]
 async fn test_consolidate_noop_single_fss() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -3078,7 +3367,7 @@ async fn test_fungible_staked_rtd_value() -> Result<()> {
     // Convert StakedRtd to FungibleStakedRtd
     // First, find the StakedRtd object
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let list_request = ListOwnedObjectsRequest::default()
         .with_owner(address.to_string())
@@ -3257,7 +3546,7 @@ async fn test_merge_and_redeem_fungible_staked_rtd() {
 
     // Convert StakedRtd -> FSS
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let list_request = ListOwnedObjectsRequest::default()
         .with_owner(sender.to_string())
@@ -3393,7 +3682,7 @@ async fn setup_fss_for_validator(
     Vec<tokio::task::JoinHandle<()>>,
 ) {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let test_cluster = TestClusterBuilder::new().build().await;
     let sender = test_cluster.get_address_0();
@@ -3572,7 +3861,7 @@ async fn run_redeem_flow(
 
 async fn count_fss_objects(client: &mut GrpcClient, owner: RtdAddress) -> (usize, u64) {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let fss_request = ListOwnedObjectsRequest::default()
         .with_owner(owner.to_string())
@@ -3602,26 +3891,6 @@ async fn count_fss_objects(client: &mut GrpcClient, owner: RtdAddress) -> (usize
         }
     }
     (objects.len(), total_value)
-}
-
-async fn get_rtd_balance(client: &mut GrpcClient, address: RtdAddress) -> u64 {
-    use rtd_rpc::proto::rtd::rpc::v2::GetBalanceRequest;
-
-    let request = GetBalanceRequest::default()
-        .with_owner(address.to_string())
-        .with_coin_type(
-            "0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD"
-                .to_string(),
-        );
-    client
-        .state_client()
-        .get_balance(request)
-        .await
-        .unwrap()
-        .into_inner()
-        .balance
-        .and_then(|b| b.balance)
-        .unwrap_or(0)
 }
 
 #[tokio::test]
@@ -3744,7 +4013,7 @@ async fn test_redeem_single_fss_partial() {
 #[tokio::test]
 async fn test_redeem_fss_from_inactive_validator() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
     use rtd_test_transaction_builder::TestTransactionBuilder;
 
     let test_cluster = TestClusterBuilder::new()
@@ -3912,9 +4181,12 @@ async fn transaction_net_gas_cost(client: &mut GrpcClient, tx_hash: &str) -> i12
 #[tokio::test]
 async fn test_redeem_multi_validator_isolation() {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
@@ -4275,7 +4547,7 @@ async fn convert_all_staked_to_fss_directly(
     sender: RtdAddress,
 ) {
     use futures::TryStreamExt;
-    use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
+    use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
 
     let staked_req = ListOwnedObjectsRequest::default()
         .with_owner(sender.to_string())
@@ -4913,7 +5185,10 @@ async fn test_e2e_parse_consolidate_2_stakes_2_fss() {
 /// objects appear in the parse output.
 #[tokio::test]
 async fn test_e2e_parse_consolidate_multi_validator_isolation() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
@@ -5262,7 +5537,10 @@ async fn test_e2e_block_consolidate_2_stakes_2_fss() {
 
 #[tokio::test]
 async fn test_e2e_block_consolidate_multi_validator_isolation() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
@@ -5635,7 +5913,10 @@ async fn test_e2e_parse_merge_redeem_three_fss_atmost() {
 /// Multi-validator: FSS on both A and B; redeem only from A.
 #[tokio::test]
 async fn test_e2e_parse_merge_redeem_multi_validator_isolation() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();
@@ -5989,7 +6270,10 @@ async fn test_e2e_block_merge_redeem_three_fss_atmost() {
 
 #[tokio::test]
 async fn test_e2e_block_merge_redeem_multi_validator_isolation() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(2)
+        .build()
+        .await;
     let sender = test_cluster.get_address_0();
     let keystore = &test_cluster.wallet.config.keystore;
     let mut client = GrpcClient::new(test_cluster.rpc_url()).unwrap();

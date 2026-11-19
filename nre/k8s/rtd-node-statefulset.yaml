@@ -59,7 +59,7 @@ spec:
         - name: RUST_BACKTRACE
           value: "1"
         - name: RUST_LOG
-          value: info,rtd_core=debug,rtd_network=debug,consensus=debug,jsonrpsee=error
+          value: info,rtd_core=debug,rtd_network=debug,consensus=debug
         image: x
         imagePullPolicy: Always
         name: rtd-node

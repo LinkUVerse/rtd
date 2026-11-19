@@ -7,12 +7,12 @@ use axum_extra::extract::WithRejection;
 use futures::{TryStreamExt, future::join_all};
 
 use prost_types::FieldMask;
+use std::str::FromStr;
 use rtd_rpc::client::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{GetBalanceRequest, GetEpochRequest, ListOwnedObjectsRequest};
+use rtd_rpc::proto::sui::rpc::v2::{GetBalanceRequest, GetEpochRequest, ListOwnedObjectsRequest};
 use rtd_sdk_types::{Address, StructTag};
 use rtd_types::base_types::RtdAddress;
-use std::str::FromStr;
 
 use crate::errors::Error;
 use crate::types::{
@@ -218,7 +218,7 @@ pub(crate) async fn get_validator_set_snapshot(
         rates.insert(
             pool_id,
             PoolRateInfo {
-                rtd_balance: pool.rtd_balance(),
+                rtd_balance: pool.sui_balance(),
                 pool_token_balance: pool.pool_token_balance(),
                 validator_address,
                 pool_extra_fields_id,
@@ -252,7 +252,7 @@ async fn get_sub_account_balances(
             .into_iter()
             .filter(|stake| current_epoch >= stake.activation_epoch)
             .map(|stake| SubBalance {
-                stake_id: stake.staked_rtd_id,
+                stake_id: stake.staked_sui_id,
                 validator: stake.validator_address,
                 value: stake.principal as i128,
                 activation_epoch: Some(stake.activation_epoch),
@@ -262,7 +262,7 @@ async fn get_sub_account_balances(
             .into_iter()
             .filter(|stake| current_epoch < stake.activation_epoch)
             .map(|stake| SubBalance {
-                stake_id: stake.staked_rtd_id,
+                stake_id: stake.staked_sui_id,
                 validator: stake.validator_address,
                 value: stake.principal as i128,
                 activation_epoch: Some(stake.activation_epoch),
@@ -272,7 +272,7 @@ async fn get_sub_account_balances(
             .into_iter()
             .filter(|stake| current_epoch >= stake.activation_epoch)
             .map(|stake| SubBalance {
-                stake_id: stake.staked_rtd_id,
+                stake_id: stake.staked_sui_id,
                 validator: stake.validator_address,
                 value: stake.rewards as i128,
                 activation_epoch: None,

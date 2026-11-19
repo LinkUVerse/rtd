@@ -3,13 +3,19 @@
 
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use futures::future::join_all;
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::fatal;
 use rand::{Rng, distributions::*, rngs::OsRng, seq::SliceRandom};
+use std::net::SocketAddr;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use rtd_config::genesis::Genesis;
 use rtd_config::node::FundsWithdrawSchedulerType;
-use rtd_config::node::{AuthorityOverloadConfig, DBCheckpointConfig, RunWithRange};
+use rtd_config::node::{
+    AuthorityOverloadConfig, ConsensusTransactionPoolConfig, DBCheckpointConfig, RunWithRange,
+};
 use rtd_config::{Config, ExecutionCacheConfig, RTD_CLIENT_CONFIG, RTD_NETWORK_CONFIG};
 use rtd_config::{NodeConfig, PersistedConfig, RTD_KEYSTORE_FILENAME};
 use rtd_core::authority_aggregator::AuthorityAggregator;
@@ -17,12 +23,11 @@ use rtd_core::authority_client::NetworkAuthorityClient;
 use rtd_core::transaction_driver::SubmitTransactionOptions;
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
 use rtd_node::RtdNodeHandle;
-use rtd_protocol_config::{Chain, ProtocolVersion};
+use rtd_protocol_config::{BaseOverrideGuard, Chain, ProtocolConfig, ProtocolVersion};
 use rtd_rpc_api::Client;
 use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_sdk::rtd_client_config::{RtdClientConfig, RtdEnv};
 use rtd_sdk::wallet_context::WalletContext;
-use rtd_sdk::{RtdClient, RtdClientBuilder};
 use rtd_swarm::memory::{Swarm, SwarmBuilder};
 use rtd_swarm_config::genesis_config::{
     AccountConfig, DEFAULT_GAS_AMOUNT, GenesisConfig, ValidatorGenesisConfig,
@@ -55,13 +60,7 @@ use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
-use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
 use rtd_types::transaction::{Transaction, TransactionData};
-use std::net::SocketAddr;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::{Instant, timeout};
 use tokio::{task::JoinHandle, time::sleep};
@@ -70,34 +69,23 @@ use tracing::{error, info};
 
 pub mod addr_balance_test_env;
 
-const NUM_VALIDATOR: usize = 4;
+const NUM_VALIDATOR: usize = 1;
 // Keep direct test submissions bounded like the production TransactionOrchestrator.
 const TRANSACTION_FINALITY_TIMEOUT: Duration = Duration::from_secs(90);
 
 pub struct FullNodeHandle {
     pub rtd_node: RtdNodeHandle,
-    #[deprecated = "use grpc_client"]
-    pub rtd_client: RtdClient,
-    #[deprecated = "use grpc_client"]
-    pub rpc_client: HttpClient,
     pub grpc_client: Client,
     pub rpc_url: String,
 }
 
 impl FullNodeHandle {
-    pub async fn new(rtd_node: RtdNodeHandle, json_rpc_address: SocketAddr) -> Self {
-        let rpc_url = format!("http://{}", json_rpc_address);
-        let rpc_client = HttpClientBuilder::default().build(&rpc_url).unwrap();
-
-        let rtd_client = RtdClientBuilder::default().build(&rpc_url).await.unwrap();
+    pub async fn new(rtd_node: RtdNodeHandle, rpc_address: SocketAddr) -> Self {
+        let rpc_url = format!("http://{}", rpc_address);
         let grpc_client = Client::new(&rpc_url).unwrap();
 
         Self {
             rtd_node,
-            #[allow(deprecated)]
-            rtd_client,
-            #[allow(deprecated)]
-            rpc_client,
             grpc_client,
             rpc_url,
         }
@@ -108,21 +96,10 @@ pub struct TestCluster {
     pub swarm: Swarm,
     pub wallet: WalletContext,
     pub fullnode_handle: FullNodeHandle,
+    _test_speed_overrides: Option<BaseOverrideGuard>,
 }
 
 impl TestCluster {
-    #[deprecated = "use grpc_client()"]
-    pub fn rpc_client(&self) -> &HttpClient {
-        #[allow(deprecated)]
-        &self.fullnode_handle.rpc_client
-    }
-
-    #[deprecated = "use grpc_client()"]
-    pub fn rtd_client(&self) -> &RtdClient {
-        #[allow(deprecated)]
-        &self.fullnode_handle.rtd_client
-    }
-
     pub fn grpc_client(&self) -> Client {
         self.fullnode_handle.grpc_client.clone()
     }
@@ -226,6 +203,21 @@ impl TestCluster {
         self.swarm.node(name).unwrap().stop();
     }
 
+    /// See `rtd_swarm::memory::Node::graceful_stop`.
+    #[cfg(msim)]
+    pub async fn graceful_stop_node(
+        &self,
+        name: &AuthorityName,
+        poll_budget: usize,
+        max_duration: Duration,
+    ) {
+        self.swarm
+            .node(name)
+            .unwrap()
+            .graceful_stop(poll_budget, max_duration)
+            .await;
+    }
+
     pub async fn stop_all_validators(&self) {
         info!("Stopping all validators in the cluster");
         self.swarm.active_validators().for_each(|v| v.stop());
@@ -261,6 +253,11 @@ impl TestCluster {
     }
 
     pub fn random_node_restarter(self: &Arc<Self>) -> RandomNodeRestarter {
+        let committee_size = self.get_validator_pubkeys().len();
+        assert!(
+            committee_size >= 4,
+            "stopping one of {committee_size} committee members loses quorum; a committee of at least 4 is needed"
+        );
         RandomNodeRestarter::new(self.clone())
     }
 
@@ -949,8 +946,7 @@ impl TestCluster {
                     let checkpoint_seqs = state
                         .epoch_store_for_testing()
                         .transactions_executed_in_checkpoint_notify(digests.to_vec())
-                        .await
-                        .unwrap();
+                        .await;
 
                     // then wait until the highest of those checkpoints is executed on this node
                     let max_checkpoint_seq = checkpoint_seqs.into_iter().max().unwrap();
@@ -1148,6 +1144,8 @@ pub struct RandomNodeRestarter {
     kill_interval: Uniform<Duration>,
     // How long should we wait before restarting them.
     restart_delay: Uniform<Duration>,
+    // Stop nodes as SIGTERM would instead of killing them.
+    graceful: bool,
 
     task_handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -1158,6 +1156,7 @@ impl RandomNodeRestarter {
             test_cluster,
             kill_interval: Uniform::new(Duration::from_secs(10), Duration::from_secs(11)),
             restart_delay: Uniform::new(Duration::from_secs(1), Duration::from_secs(2)),
+            graceful: false,
             task_handle: Default::default(),
         }
     }
@@ -1172,10 +1171,17 @@ impl RandomNodeRestarter {
         self
     }
 
+    #[cfg(msim)]
+    pub fn with_graceful_shutdown(mut self) -> Self {
+        self.graceful = true;
+        self
+    }
+
     pub fn run(&self) {
         let test_cluster = self.test_cluster.clone();
         let kill_interval = self.kill_interval;
         let restart_delay = self.restart_delay;
+        let graceful = self.graceful;
         let validators = self.test_cluster.get_validator_pubkeys();
         let mut task_handle = self.task_handle.lock().unwrap();
         assert!(task_handle.is_none());
@@ -1186,8 +1192,13 @@ impl RandomNodeRestarter {
                 sleep(delay).await;
 
                 let validator = validators.choose(&mut OsRng).unwrap();
-                info!("Killing validator {:?}", validator.concise());
-                test_cluster.stop_node(validator);
+                if graceful {
+                    info!("Gracefully stopping validator {:?}", validator.concise());
+                    Self::graceful_stop(&test_cluster, validator).await;
+                } else {
+                    info!("Killing validator {:?}", validator.concise());
+                    test_cluster.stop_node(validator);
+                }
 
                 let delay = restart_delay.sample(&mut OsRng);
                 info!("Sleeping {delay:?} before restarting");
@@ -1199,6 +1210,24 @@ impl RandomNodeRestarter {
     }
 }
 
+impl RandomNodeRestarter {
+    #[cfg(msim)]
+    async fn graceful_stop(test_cluster: &TestCluster, validator: &AuthorityName) {
+        // A busy tokio worker checks for runtime shutdown once every 61 task polls (the default
+        // `event_interval`), so after shutdown begins it may poll up to 61 more tasks. The budget
+        // covers the polls that 8 busy workers can make before all of them stop.
+        let poll_budget = OsRng.gen_range(0..=61 * 8);
+        test_cluster
+            .graceful_stop_node(validator, poll_budget, Duration::from_secs(1))
+            .await;
+    }
+
+    #[cfg(not(msim))]
+    async fn graceful_stop(_: &TestCluster, _: &AuthorityName) {
+        unreachable!("graceful shutdown is only available in simtests");
+    }
+}
+
 impl Drop for RandomNodeRestarter {
     fn drop(&mut self) {
         if let Some(handle) = self.task_handle.lock().unwrap().take() {
@@ -1207,7 +1236,56 @@ impl Drop for RandomNodeRestarter {
     }
 }
 
+/// TestSpeedOverrides holds replacement protocol config values. Each value replaces the protocol
+/// config value only in versions where that value is set.
+#[derive(Clone, Copy, Debug)]
+pub struct TestSpeedOverrides {
+    /// Fewer threshold BLS shares make each randomness round cheaper. The reduction divides
+    /// voting power by at most 40, so any bound below about 250 gives about 250 shares.
+    pub random_beacon_reduction_lower_bound: Option<u32>,
+    pub random_beacon_min_round_interval_ms: Option<u64>,
+    pub min_checkpoint_interval_ms: Option<u64>,
+}
+
+impl TestSpeedOverrides {
+    fn apply(&self, mut cfg: ProtocolConfig) -> ProtocolConfig {
+        fn replace<T>(current: Option<T>, value: Option<T>, set: impl FnOnce(T)) {
+            if let (Some(_), Some(value)) = (current, value) {
+                set(value);
+            }
+        }
+        replace(
+            cfg.random_beacon_reduction_lower_bound_as_option(),
+            self.random_beacon_reduction_lower_bound,
+            |v| cfg.set_random_beacon_reduction_lower_bound_for_testing(v),
+        );
+        replace(
+            cfg.random_beacon_min_round_interval_ms_as_option(),
+            self.random_beacon_min_round_interval_ms,
+            |v| cfg.set_random_beacon_min_round_interval_ms_for_testing(v),
+        );
+        replace(
+            cfg.min_checkpoint_interval_ms_as_option(),
+            self.min_checkpoint_interval_ms,
+            |v| cfg.set_min_checkpoint_interval_ms_for_testing(v),
+        );
+        cfg
+    }
+}
+
+/// Protocol config overrides that `TestClusterBuilder` applies under msim unless
+/// `with_production_config` is called. They cut the CPU cost of randomness and of
+/// checkpoint signature verification, which dominate idle simulated networks. The checkpoint
+/// interval is also the congestion budget period consensus uses before it has measured the
+/// commit rate, so the first commit of each epoch gets a larger budget than in production.
+pub const DEFAULT_TEST_SPEED_OVERRIDES: TestSpeedOverrides = TestSpeedOverrides {
+    random_beacon_reduction_lower_bound: Some(100),
+    random_beacon_min_round_interval_ms: Some(2000),
+    min_checkpoint_interval_ms: Some(1000),
+};
+
 pub struct TestClusterBuilder {
+    test_speed_overrides: Option<TestSpeedOverrides>,
     genesis_config: Option<GenesisConfig>,
     network_config: Option<NetworkConfig>,
     additional_objects: Vec<Object>,
@@ -1226,11 +1304,10 @@ pub struct TestClusterBuilder {
     config_dir: Option<PathBuf>,
     default_jwks: bool,
     authority_overload_config: Option<AuthorityOverloadConfig>,
+    consensus_transaction_pool_config: Option<ConsensusTransactionPoolConfig>,
     execution_cache_config: Option<ExecutionCacheConfig>,
     data_ingestion_dir: Option<PathBuf>,
     fullnode_run_with_range: Option<RunWithRange>,
-    fullnode_policy_config: Option<PolicyConfig>,
-    fullnode_fw_config: Option<RemoteFirewallConfig>,
 
     validator_global_state_hash_v2_enabled_config: GlobalStateHashV2EnabledConfig,
     validator_funds_withdraw_scheduler_type_config: FundsWithdrawSchedulerTypeConfig,
@@ -1257,6 +1334,8 @@ pub struct TestClusterBuilder {
 impl TestClusterBuilder {
     pub fn new() -> Self {
         TestClusterBuilder {
+            // Real-time tests keep production timing.
+            test_speed_overrides: cfg!(msim).then_some(DEFAULT_TEST_SPEED_OVERRIDES),
             genesis_config: None,
             network_config: None,
             chain_override: None,
@@ -1275,11 +1354,10 @@ impl TestClusterBuilder {
             config_dir: None,
             default_jwks: false,
             authority_overload_config: None,
+            consensus_transaction_pool_config: None,
             execution_cache_config: None,
             data_ingestion_dir: None,
             fullnode_run_with_range: None,
-            fullnode_policy_config: None,
-            fullnode_fw_config: None,
             validator_global_state_hash_v2_enabled_config: GlobalStateHashV2EnabledConfig::Global(
                 true,
             ),
@@ -1354,16 +1432,6 @@ impl TestClusterBuilder {
         self
     }
 
-    pub fn with_fullnode_policy_config(mut self, config: Option<PolicyConfig>) -> Self {
-        self.fullnode_policy_config = config;
-        self
-    }
-
-    pub fn with_fullnode_fw_config(mut self, config: Option<RemoteFirewallConfig>) -> Self {
-        self.fullnode_fw_config = config;
-        self
-    }
-
     pub fn with_fullnode_rpc_port(mut self, rpc_port: u16) -> Self {
         self.fullnode_rpc_port = Some(rpc_port);
         self
@@ -1386,8 +1454,21 @@ impl TestClusterBuilder {
         self
     }
 
+    /// Run with the unmodified protocol config instead of `DEFAULT_TEST_SPEED_OVERRIDES`.
+    pub fn with_production_config(mut self) -> Self {
+        self.test_speed_overrides = None;
+        self
+    }
+
+    pub fn with_test_speed_overrides(mut self, overrides: TestSpeedOverrides) -> Self {
+        self.test_speed_overrides = Some(overrides);
+        self
+    }
+
     /// Set the number of default validators to spawn. Can be overridden by `with_validators`, if
     /// you need to provide more specific genesis configs for each validator.
+    /// The default is 1. Use more only to test multi-validator behavior, such as consensus,
+    /// reconfiguration, quorum aggregation, or cross-validator fork detection.
     pub fn with_num_validators(mut self, num: usize) -> Self {
         self.num_validators = Some(num);
         self
@@ -1414,7 +1495,6 @@ impl TestClusterBuilder {
             perform_db_checkpoints_at_epoch_end: true,
             checkpoint_path: None,
             object_store_config: None,
-            perform_index_db_checkpoints_at_epoch_end: None,
             prune_and_compact_before_upload: None,
         };
         self
@@ -1425,7 +1505,6 @@ impl TestClusterBuilder {
             perform_db_checkpoints_at_epoch_end: true,
             checkpoint_path: None,
             object_store_config: None,
-            perform_index_db_checkpoints_at_epoch_end: None,
             prune_and_compact_before_upload: Some(true),
         };
         self
@@ -1536,6 +1615,15 @@ impl TestClusterBuilder {
         self
     }
 
+    pub fn with_consensus_transaction_pool_config(
+        mut self,
+        config: ConsensusTransactionPoolConfig,
+    ) -> Self {
+        assert!(self.network_config.is_none());
+        self.consensus_transaction_pool_config = Some(config);
+        self
+    }
+
     pub fn with_execution_cache_config(mut self, config: ExecutionCacheConfig) -> Self {
         assert!(self.network_config.is_none());
         self.execution_cache_config = Some(config);
@@ -1564,6 +1652,11 @@ impl TestClusterBuilder {
     }
 
     pub async fn build(mut self) -> TestCluster {
+        // Installed before any node starts so that every node sees the same config.
+        let test_speed_overrides = self.test_speed_overrides.map(|overrides| {
+            ProtocolConfig::apply_base_overrides_for_testing(move |_, cfg| overrides.apply(cfg))
+        });
+
         // All test clusters receive a continuous stream of random JWKs.
         // If we later use zklogin authenticated transactions in tests we will need to supply
         // valid JWKs as well.
@@ -1679,6 +1772,7 @@ impl TestClusterBuilder {
             swarm,
             wallet,
             fullnode_handle,
+            _test_speed_overrides: test_speed_overrides,
         };
 
         // The embedded rpc-store indexes the tip asynchronously, so genesis
@@ -1710,9 +1804,7 @@ impl TestClusterBuilder {
                     .unwrap_or(self.validator_supported_protocol_versions_config.clone()),
             )
             .with_db_checkpoint_config(self.db_checkpoint_config_fullnodes.clone())
-            .with_fullnode_run_with_range(self.fullnode_run_with_range)
-            .with_fullnode_policy_config(self.fullnode_policy_config.clone())
-            .with_fullnode_fw_config(self.fullnode_fw_config.clone());
+            .with_fullnode_run_with_range(self.fullnode_run_with_range);
 
         if let Some(validators) = self.validators.take() {
             builder = builder.with_validators(validators);
@@ -1736,6 +1828,10 @@ impl TestClusterBuilder {
 
         if let Some(authority_overload_config) = self.authority_overload_config.take() {
             builder = builder.with_authority_overload_config(authority_overload_config);
+        }
+
+        if let Some(config) = self.consensus_transaction_pool_config.take() {
+            builder = builder.with_consensus_transaction_pool_config(config);
         }
 
         if let Some(execution_cache_config) = self.execution_cache_config.take() {

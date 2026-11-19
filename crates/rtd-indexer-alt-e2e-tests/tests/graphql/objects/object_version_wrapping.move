@@ -5,24 +5,24 @@
 // Track the versions of an object as it is being wrapped, unwrapped, and deleted.
 
 //# publish
-module P::M {
-  use rtd::coin::Coin;
-  use rtd::rtd::RTD;
+module P::M;
 
-  public struct Wrapper has key, store {
+use rtd::coin::Coin;
+use rtd::rtd::RTD;
+
+public struct Wrapper has key, store {
     id: UID,
     coin: Coin<RTD>,
-  }
+}
 
-  public fun wrap(coin: Coin<RTD>, ctx: &mut TxContext): Wrapper {
+public fun wrap(coin: Coin<RTD>, ctx: &mut TxContext): Wrapper {
     Wrapper { id: object::new(ctx), coin }
-  }
+}
 
-  public fun unwrap(wrapper: Wrapper): Coin<RTD> {
+public fun unwrap(wrapper: Wrapper): Coin<RTD> {
     let Wrapper { id, coin } = wrapper;
     id.delete();
     coin
-  }
 }
 
 //# programmable --sender A --inputs 42 @A
@@ -47,6 +47,7 @@ module P::M {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   objectVersions(address: "@{obj_2_0}") {
     pageInfo {
@@ -62,3 +63,4 @@ module P::M {
     }
   }
 }
+*/

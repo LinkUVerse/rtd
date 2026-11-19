@@ -12,7 +12,7 @@ use move_binary_format::file_format::{
     Visibility as MoveVisibility,
 };
 use rtd_package_resolver::{DataDef, FunctionDef, MoveData, VariantDef};
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Ability, DatatypeDescriptor, FieldDescriptor, FunctionDescriptor, Module, OpenSignature,
     OpenSignatureBody, TypeParameter, VariantDescriptor, datatype_descriptor::DatatypeKind,
     function_descriptor::Visibility, open_signature::Reference,

@@ -4,17 +4,16 @@
 use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use anyhow::Context;
 use reqwest::Client;
 use reqwest::header::HeaderName;
+use serde_json::Value;
+use serde_json::json;
 use rtd_indexer_alt::config::IndexerConfig;
 use rtd_indexer_alt_framework::ingestion::ClientArgs;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
-use rtd_indexer_alt_jsonrpc::NodeArgs;
 use rtd_transactional_test_runner::create_adapter_and_taskify;
 use rtd_transactional_test_runner::offchain_state::OffchainStateReader;
 use rtd_transactional_test_runner::offchain_state::TestResponse;
@@ -22,8 +21,6 @@ use rtd_transactional_test_runner::run_tasks_with_adapter;
 use rtd_transactional_test_runner::test_adapter::OffChainConfig;
 use rtd_transactional_test_runner::test_adapter::PRE_COMPILED;
 use rtd_transactional_test_runner::test_adapter::RtdTestAdapter;
-use serde_json::Value;
-use serde_json::json;
 use tokio::join;
 
 use rtd_indexer_alt_e2e_tests::OffchainCluster;
@@ -32,7 +29,6 @@ use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
 struct OffchainReader {
     cluster: Arc<OffchainCluster>,
     client: Client,
-    queries: AtomicUsize,
 }
 
 impl OffchainReader {
@@ -40,7 +36,6 @@ impl OffchainReader {
         Self {
             cluster,
             client: Client::new(),
-            queries: AtomicUsize::new(0),
         }
     }
 }
@@ -98,38 +93,6 @@ impl OffchainStateReader for OffchainReader {
             service_version: version,
         })
     }
-
-    async fn execute_jsonrpc(&self, method: String, params: Value) -> anyhow::Result<TestResponse> {
-        let query = json!({
-            "jsonrpc": "2.0",
-            "id": self.queries.fetch_add(1, Ordering::SeqCst),
-            "method": method,
-            "params": params,
-        });
-
-        let response = self
-            .client
-            .post(self.cluster.jsonrpc_url())
-            .json(&query)
-            .send()
-            .await
-            .context("Request to JSON-RPC server failed")?;
-
-        // Extract headers but remove the ones that will change from run to run.
-        let mut headers = response.headers().clone();
-        headers.remove("date");
-
-        let body: Value = response
-            .json()
-            .await
-            .context("Failed to parse JSON-RPC response")?;
-
-        Ok(TestResponse {
-            response_body: serde_json::to_string_pretty(&body)?,
-            http_headers: Some(headers),
-            service_version: None,
-        })
-    }
 }
 
 async fn cluster(config: &OffChainConfig) -> Arc<OffchainCluster> {
@@ -148,10 +111,6 @@ async fn cluster(config: &OffChainConfig) -> Arc<OffchainCluster> {
             client_args,
             OffchainClusterConfig {
                 indexer_config,
-                // TODO: dummy value until simulacrum exposes grpc
-                jsonrpc_node_args: NodeArgs {
-                    fullnode_grpc_url: Some("http://127.0.0.1:1".into()),
-                },
                 ..Default::default()
             },
             &prometheus::Registry::new(),

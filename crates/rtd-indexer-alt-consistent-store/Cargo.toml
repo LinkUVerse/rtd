@@ -1,7 +1,7 @@
 [package]
 name = "rtd-indexer-alt-consistent-store"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -14,6 +14,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 axum = { workspace = true, features = ["matched-path"] }
 axum-server = { workspace = true, features = ["tls-rustls-no-provider"] }
+rustls = { workspace = true }
 backoff.workspace = true
 bcs.workspace = true
 bincode = { version = "2.0.1", features = ["serde"] }
@@ -30,7 +31,6 @@ pin-project.workspace = true
 prometheus.workspace = true
 reqwest.workspace = true
 rocksdb = { version = "0.22.0", default-features = false, features = ["snappy", "lz4", "zstd", "zlib", "multi-threaded-cf"] }
-rustls.workspace = true
 scoped-futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -60,5 +60,4 @@ rtd-indexer-alt-metrics.workspace = true
 rtd-storage.workspace = true
 
 [dev-dependencies]
-rcgen.workspace = true
 tempfile.workspace = true

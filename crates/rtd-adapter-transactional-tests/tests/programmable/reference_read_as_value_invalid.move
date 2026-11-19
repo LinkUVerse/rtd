@@ -1,20 +1,20 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// Without `allow_references_in_ptbs`, a Move call may not return a reference, so the `Read`
-// argument is never reached.
+// Flag-on version of reference_read_as_value_invalid_v139: the Move call may return a
+// reference, so the `Read` argument is reached.
 
 //# init --addresses test=0x0 --accounts A
 
 //# publish
-module test::m {
-    public fun id_ref(x: &u64): &u64 {
-        x
-    }
+module test::m;
 
-    public fun check(value: u64, expected: u64) {
-        assert!(value == expected, 0);
-    }
+public fun id_ref(x: &u64): &u64 {
+    x
+}
+
+public fun check(value: u64, expected: u64) {
+    assert!(value == expected, 0);
 }
 
 //# programmable --sender A --inputs 112u64

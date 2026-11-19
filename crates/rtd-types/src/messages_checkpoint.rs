@@ -17,10 +17,10 @@ use crate::full_checkpoint_content::{Checkpoint, CheckpointData};
 use crate::gas::GasCostSummary;
 use crate::global_state_hash::GlobalStateHash;
 use crate::message_envelope::{Envelope, Message, TrustedEnvelope, VerifiedEnvelope};
+use crate::signature::GenericSignature;
 use crate::rtd_serde::AsProtocolVersion;
 use crate::rtd_serde::BigInt;
 use crate::rtd_serde::Readable;
-use crate::signature::GenericSignature;
 use crate::transaction::{Transaction, TransactionData};
 use crate::{base_types::AuthorityName, committee::Committee, error::RtdErrorKind};
 use anyhow::Result;
@@ -31,7 +31,6 @@ use linku_common::ZipDebugEqIteratorExt;
 use linku_metrics::histogram::Histogram as LinkUHistogram;
 use once_cell::sync::OnceCell;
 use prometheus::Histogram;
-use rtd_protocol_config::ProtocolConfig;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -40,6 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::slice::Iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use rtd_protocol_config::ProtocolConfig;
 use tap::TapFallible;
 use tracing::warn;
 
@@ -1078,24 +1078,30 @@ impl FullCheckpointContents {
     }
 
     pub fn random_for_testing() -> Self {
-        let (a, key): (_, AccountKeyPair) = get_key_pair();
-        let transaction = Transaction::from_data_and_signer(
-            TransactionData::new_transfer(
-                a,
-                FullObjectRef::from_fastpath_ref(random_object_ref()),
-                a,
-                random_object_ref(),
-                100000000000,
-                100,
-            ),
-            vec![&key],
-        );
-        let effects = TestEffectsBuilder::new(transaction.data()).build();
-        let exe_data = ExecutionData {
-            transaction,
-            effects,
-        };
-        FullCheckpointContents::new_with_causally_ordered_transactions(vec![exe_data])
+        Self::random_with_transactions_for_testing(1)
+    }
+
+    pub fn random_with_transactions_for_testing(num_transactions: usize) -> Self {
+        let exe_data = (0..num_transactions).map(|_| {
+            let (a, key): (_, AccountKeyPair) = get_key_pair();
+            let transaction = Transaction::from_data_and_signer(
+                TransactionData::new_transfer(
+                    a,
+                    FullObjectRef::from_fastpath_ref(random_object_ref()),
+                    a,
+                    random_object_ref(),
+                    100000000000,
+                    100,
+                ),
+                vec![&key],
+            );
+            let effects = TestEffectsBuilder::new(transaction.data()).build();
+            ExecutionData {
+                transaction,
+                effects,
+            }
+        });
+        FullCheckpointContents::new_with_causally_ordered_transactions(exe_data)
     }
 }
 

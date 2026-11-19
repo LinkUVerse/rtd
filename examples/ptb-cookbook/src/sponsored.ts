@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Transaction } from '@linku/rtd/transactions';
-import { client } from './network.js';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
 import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
 
+const client = new RtdGrpcClient({ baseUrl: 'https://fullnode.testnet.rtd.io:443', network: 'testnet' });
 const userKeypair = new Ed25519Keypair();
 const sponsorKeypair = new Ed25519Keypair();
 const userAddress = userKeypair.toRtdAddress();

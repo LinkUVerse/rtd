@@ -26,7 +26,9 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::error::{ErrorCategory, RtdError, RtdErrorKind, RtdResult};
 use rtd_types::messages_grpc::{SubmitTxRequest, TxType};
 use rtd_types::rtd_system_state::RtdSystemState;
-use rtd_types::transaction::{Transaction, TransactionData, VerifiedTransaction};
+use rtd_types::transaction::{
+    Transaction, TransactionData, TransactionDataAPI as _, VerifiedTransaction,
+};
 use rtd_types::transaction_driver_types::{
     EffectsFinalityInfo, ExecuteTransactionRequestType, ExecuteTransactionRequestV3,
     ExecuteTransactionResponseV3, FinalizedEffects, IsTransactionExecutedLocally,
@@ -40,7 +42,6 @@ use tracing::{Instrument, debug, error_span, info, instrument, warn};
 use crate::authority::AuthorityState;
 use crate::authority_aggregator::AuthorityAggregator;
 use crate::authority_client::{AuthorityAPI, NetworkAuthorityClient};
-use crate::node_readiness::FullnodeReadiness;
 use crate::transaction_driver::{OnsiteReconfigObserver, ReconfigObserver};
 use crate::transaction_driver::{
     QuorumTransactionResponse, SubmitTransactionOptions, TransactionDriver, TransactionDriverError,
@@ -59,10 +60,6 @@ pub type QuorumTransactionEffectsResult = Result<
     (TransactionDigest, TransactionSubmissionError),
 >;
 
-fn should_retry_recovered_transaction(error: &TransactionDriverError) -> bool {
-    error.is_submission_retriable()
-}
-
 /// Transaction Orchestrator is a Node component that utilizes Transaction Driver to
 /// submit transactions to validators for finality. It adds inflight deduplication,
 /// waiting for local execution, recovery, early validation, and epoch change handling
@@ -80,7 +77,6 @@ impl TransactionOrchestrator<NetworkAuthorityClient> {
         parent_path: &Path,
         prometheus_registry: &Registry,
         node_config: &NodeConfig,
-        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) -> Self {
         let observer = OnsiteReconfigObserver::new(
             reconfig_channel,
@@ -95,7 +91,6 @@ impl TransactionOrchestrator<NetworkAuthorityClient> {
             prometheus_registry,
             observer,
             node_config,
-            fullnode_readiness,
         )
     }
 }
@@ -112,7 +107,6 @@ where
         prometheus_registry: &Registry,
         reconfig_observer: OnsiteReconfigObserver,
         node_config: &NodeConfig,
-        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) -> Self {
         let metrics = Arc::new(TransactionOrchestratorMetrics::new(prometheus_registry));
         let td_metrics = Arc::new(TransactionDriverMetrics::new(prometheus_registry));
@@ -135,7 +129,6 @@ where
         Inner::start_task_to_recover_txes_in_log(
             pending_tx_log.clone(),
             transaction_driver.clone(),
-            fullnode_readiness.clone(),
         );
 
         let td_allowed_submission_list = node_config
@@ -171,7 +164,6 @@ where
             td_allowed_submission_list,
             td_blocked_submission_list,
             enable_early_validation,
-            fullnode_readiness,
         });
         Self { inner }
     }
@@ -195,8 +187,7 @@ where
         (ExecuteTransactionResponseV3, IsTransactionExecutedLocally),
         TransactionSubmissionError,
     > {
-        self.ensure_fullnode_ready()?;
-        let timer = Instant::now();
+        let timer = Instant::now() + min_timestamp_wait(request.transaction.transaction_data());
         let tx_type = if request.transaction.is_consensus_tx() {
             TxType::SharedObject
         } else {
@@ -278,8 +269,7 @@ where
         request: ExecuteTransactionRequestV3,
         client_addr: Option<SocketAddr>,
     ) -> Result<ExecuteTransactionResponseV3, TransactionSubmissionError> {
-        self.ensure_fullnode_ready()?;
-        let timer = Instant::now();
+        let timer = Instant::now() + min_timestamp_wait(request.transaction.transaction_data());
         let tx_type = if request.transaction.is_consensus_tx() {
             TxType::SharedObject
         } else {
@@ -343,18 +333,6 @@ where
     pub fn empty_pending_tx_log_in_test(&self) -> bool {
         self.inner.pending_tx_log.is_empty()
     }
-
-    fn ensure_fullnode_ready(&self) -> Result<(), TransactionSubmissionError> {
-        if let Some(readiness) = &self.inner.fullnode_readiness {
-            readiness.ensure_ready().map_err(|error| {
-                TransactionSubmissionError::TransactionFailed {
-                    category: ErrorCategory::Unavailable,
-                    details: error.to_string(),
-                }
-            })?;
-        }
-        Ok(())
-    }
 }
 
 struct Inner<A: Clone> {
@@ -365,7 +343,6 @@ struct Inner<A: Clone> {
     td_allowed_submission_list: Vec<String>,
     td_blocked_submission_list: Vec<String>,
     enable_early_validation: bool,
-    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
 }
 
 impl<A> Inner<A>
@@ -545,9 +522,12 @@ where
                 }
             }
         }
+        // Nothing below needs the epoch store; release it so that a reconfiguration during the
+        // finality wait does not keep the previous epoch's store alive.
+        drop(epoch_store);
 
         // Add transaction to WAL log.
-        let mut guard =
+        let guard =
             TransactionSubmissionGuard::new(self.pending_tx_log.clone(), &verified_transaction);
         let is_new_transaction = guard.is_new_transaction();
 
@@ -567,8 +547,6 @@ where
                 ?tx_digest,
                 "Returning cached results for already-executed transaction"
             );
-            // Local effects prove finality even if constructing the requested response fails.
-            guard.finish();
             let response = self.build_response_from_local_effects(
                 effects,
                 include_events,
@@ -653,16 +631,12 @@ where
         // Wait for execution timeout.
         let mut timeout_future = tokio::time::sleep(finality_timeout).boxed();
 
-        let result = loop {
+        loop {
             tokio::select! {
                 // Local effects might be available
                 all_effects_result = &mut local_effects_future => {
-                    let all_effects = match all_effects_result {
-                        Ok(all_effects) => all_effects,
-                        Err(error) => break Err(
-                            TransactionSubmissionError::TransactionDriverInternalError(error)
-                        ),
-                    };
+                    let all_effects = all_effects_result
+                        .map_err(TransactionSubmissionError::TransactionDriverInternalError)?;
                     if all_effects.len() != 1 {
                         break Err(TransactionSubmissionError::TransactionDriverInternalError(
                             RtdErrorKind::Unknown(format!("Unexpected number of effects found: {}", all_effects.len())).into()
@@ -679,8 +653,8 @@ where
                         include_events,
                         include_input_objects,
                         include_output_objects,
-                    );
-                    break response.map(|response| (response, true));
+                    )?;
+                    break Ok((response, true));
                 }
 
                 // This branch is disabled if execution_futures is empty.
@@ -731,16 +705,7 @@ where
                     break Err(TransactionSubmissionError::TimeoutBeforeFinality);
                 }
             }
-        };
-
-        // A retryable failure or task cancellation must leave the signed transaction in WAL.
-        // Duplicate callers cannot discard the owner's pending record on an unrelated error.
-        if result.is_ok()
-            || (is_new_transaction && matches!(&result, Err(error) if !error.is_retriable()))
-        {
-            guard.finish();
         }
-        result
     }
 
     #[instrument(level = "error", skip_all)]
@@ -751,7 +716,7 @@ where
         client_addr: Option<SocketAddr>,
         finality_timeout: Option<Duration>,
     ) -> Result<QuorumTransactionResponse, TransactionSubmissionError> {
-        let timer = Instant::now();
+        let timer = Instant::now() + min_timestamp_wait(verified_transaction.transaction_data());
         let tx_digest = *verified_transaction.digest();
         let tx_type = if verified_transaction.is_consensus_tx() {
             TxType::SharedObject
@@ -888,8 +853,7 @@ where
             let epoch_store = validator_state.load_epoch_store_one_call_per_task();
             epoch_store
                 .transactions_executed_in_checkpoint_notify(vec![tx_digest])
-                .await
-                .expect("db error waiting for transaction checkpointing");
+                .await;
         })
         .instrument(error_span!(
             "transaction_orchestrator::local_execution",
@@ -941,7 +905,6 @@ where
     fn start_task_to_recover_txes_in_log(
         pending_tx_log: Arc<WritePathPendingTransactionLog>,
         transaction_driver: Arc<TransactionDriver<A>>,
-        fullnode_readiness: Option<Arc<FullnodeReadiness>>,
     ) {
         spawn_logged_monitored_task!(async move {
             if std::env::var("SKIP_LOADING_FROM_PENDING_TX_LOG").is_ok() {
@@ -951,9 +914,6 @@ where
             let pending_txes = pending_tx_log
                 .load_all_pending_transactions()
                 .expect("failed to load all pending transactions");
-            if let Some(readiness) = &fullnode_readiness {
-                readiness.mark_pending_recovery_started();
-            }
             let num_pending_txes = pending_txes.len();
             info!(
                 "Recovering {} pending transactions from pending_tx_log.",
@@ -969,42 +929,19 @@ where
                         // requires a migration.
                         let tx = tx.into_inner();
                         let tx_digest = *tx.digest();
-                        let mut retry_backoff = backoff::ExponentialBackoff::new(
-                            Duration::from_secs(1),
-                            Duration::from_secs(60),
-                        );
-                        loop {
-                            // Retry the original signed transaction so validator locks keep the same digest.
-                            // TODO(william) correctly extract client_addr from logs
-                            match transaction_driver
-                                .drive_transaction(
-                                    SubmitTxRequest::new_transaction(tx.clone()),
-                                    SubmitTransactionOptions::default(),
-                                    Some(Duration::from_secs(60)),
-                                )
-                                .await
-                            {
-                                Ok(_) => {
-                                    debug!(?tx_digest, "Recovered pending transaction");
-                                    break;
-                                }
-                                Err(err) if should_retry_recovered_transaction(&err) => {
-                                    let delay = retry_backoff.next().unwrap();
-                                    warn!(
-                                        ?tx_digest,
-                                        ?delay,
-                                        "Retrying recovered pending transaction after retriable error: {err}"
-                                    );
-                                    sleep(delay).await;
-                                }
-                                Err(err) => {
-                                    warn!(
-                                        ?tx_digest,
-                                        "Recovered pending transaction failed permanently: {err}"
-                                    );
-                                    break;
-                                }
-                            }
+                        // It's not impossible we fail to enqueue a task but that's not the end of world.
+                        // TODO(william) correctly extract client_addr from logs
+                        if let Err(err) = transaction_driver
+                            .drive_transaction(
+                                SubmitTxRequest::new_transaction(tx),
+                                SubmitTransactionOptions::default(),
+                                Some(Duration::from_secs(60)),
+                            )
+                            .await
+                        {
+                            warn!(?tx_digest, "Failed to execute recovered transaction: {err}");
+                        } else {
+                            debug!(?tx_digest, "Executed recovered transaction");
                         }
                         if let Err(err) = pending_tx_log.finish_transaction(&tx_digest) {
                             warn!(
@@ -1012,7 +949,7 @@ where
                                 "Failed to clean up transaction in pending log: {err}"
                             );
                         } else {
-                            debug!(?tx_digest, "Finished transaction in pending log");
+                            debug!(?tx_digest, "Cleaned up transaction in pending log");
                         }
                     }
                 })
@@ -1249,7 +1186,6 @@ struct TransactionSubmissionGuard {
     pending_tx_log: Arc<WritePathPendingTransactionLog>,
     tx_digest: TransactionDigest,
     is_new_transaction: bool,
-    finished: bool,
 }
 
 impl TransactionSubmissionGuard {
@@ -1271,110 +1207,31 @@ impl TransactionSubmissionGuard {
             pending_tx_log,
             tx_digest,
             is_new_transaction,
-            finished: false,
         }
     }
 
     fn is_new_transaction(&self) -> bool {
         self.is_new_transaction
     }
-
-    fn finish(&mut self) {
-        if let Err(err) = self.pending_tx_log.finish_transaction(&self.tx_digest) {
-            warn!(?self.tx_digest, "Failed to clean up transaction in pending log: {err}");
-        } else {
-            self.finished = true;
-            debug!(?self.tx_digest, "Finished transaction in pending log");
-        }
-    }
 }
 
 impl Drop for TransactionSubmissionGuard {
     fn drop(&mut self) {
-        // Only the owner releases the inflight marker. A duplicate request must not
-        // make the original submission appear idle while it is still running.
-        if self.is_new_transaction && !self.finished {
-            self.pending_tx_log.release_transaction(&self.tx_digest);
+        if let Err(err) = self.pending_tx_log.finish_transaction(&self.tx_digest) {
+            warn!(?self.tx_digest, "Failed to clean up transaction in pending log: {err}");
+        } else {
+            debug!(?self.tx_digest, "Cleaned up transaction in pending log");
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::{
-        TransactionDriverError, TransactionSubmissionGuard, WritePathPendingTransactionLog,
-        should_retry_recovered_transaction,
-    };
-    use rtd_types::transaction::VerifiedTransaction;
-    use rtd_types::utils::create_fake_transaction;
-    use std::sync::Arc;
-    use std::time::Duration;
-
-    #[test]
-    fn unfinished_submission_preserves_wal_and_allows_same_digest_retry() {
-        let directory = tempfile::tempdir().unwrap();
-        let pending_tx_log = Arc::new(WritePathPendingTransactionLog::new(
-            directory.path().join("pending"),
-        ));
-        let transaction = VerifiedTransaction::new_unchecked(create_fake_transaction());
-        let transaction_digest = *transaction.digest();
-
-        let owner = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(owner.is_new_transaction());
-        let duplicate = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(!duplicate.is_new_transaction());
-        drop(duplicate);
-        let still_duplicate = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(!still_duplicate.is_new_transaction());
-        drop(still_duplicate);
-
-        // Dropping the owner releases only the in-memory marker, not the durable record.
-        drop(owner);
-        let mut retry = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(retry.is_new_transaction());
-        let pending = pending_tx_log.load_all_pending_transactions().unwrap();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].digest(), &transaction_digest);
-
-        retry.finish();
-        drop(retry);
-        assert!(pending_tx_log.is_empty());
-    }
-
-    #[test]
-    fn finished_owner_does_not_release_new_submissions_inflight_marker() {
-        let directory = tempfile::tempdir().unwrap();
-        let pending_tx_log = Arc::new(WritePathPendingTransactionLog::new(
-            directory.path().join("pending"),
-        ));
-        let transaction = VerifiedTransaction::new_unchecked(create_fake_transaction());
-
-        let mut owner = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(owner.is_new_transaction());
-        owner.finish();
-
-        let new_submission = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(new_submission.is_new_transaction());
-        drop(owner);
-
-        let duplicate = TransactionSubmissionGuard::new(pending_tx_log.clone(), &transaction);
-        assert!(!duplicate.is_new_transaction());
-        drop(duplicate);
-        drop(new_submission);
-    }
-
-    #[test]
-    fn recovery_retries_timeout_but_finishes_validation_failure() {
-        let timeout = TransactionDriverError::TimeoutWithLastRetriableError {
-            last_error: None,
-            attempts: 3,
-            timeout: Duration::from_secs(60),
-        };
-        assert!(should_retry_recovered_transaction(&timeout));
-
-        let validation_failure = TransactionDriverError::ValidationFailed {
-            error: "invalid transaction".to_string(),
-        };
-        assert!(!should_retry_recovered_transaction(&validation_failure));
-    }
+/// The time until the transaction's `min_timestamp`, which the transaction driver waits before it
+/// submits. Latency timers start after it, because the client chose the delay.
+fn min_timestamp_wait(transaction_data: &TransactionData) -> Duration {
+    let now_ms = AuthorityState::unixtime_now_ms();
+    transaction_data
+        .expiration()
+        .first_valid_timestamp_ms()
+        .map(|valid_from_ms| Duration::from_millis(valid_from_ms.saturating_sub(now_ms)))
+        .unwrap_or_default()
 }

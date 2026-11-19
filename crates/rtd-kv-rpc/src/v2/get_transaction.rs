@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     BatchGetTransactionsRequest, BatchGetTransactionsResponse, ExecutedTransaction,
     GetTransactionRequest, GetTransactionResponse, GetTransactionResult,
 };
@@ -176,7 +176,7 @@ mod tests {
 
     #[tokio::test]
     async fn batch_invalid_digest_is_an_entry_error_and_keeps_valid_order() {
-        use rtd_rpc::proto::rtd::rpc::v2::get_transaction_result::Result as Entry;
+        use rtd_rpc::proto::sui::rpc::v2::get_transaction_result::Result as Entry;
         let (ctx, _registry, mock, server) =
             query_context_with_mock_and_registry("batch_invalid_digest", 1).await;
         let checkpoint = TestCheckpointBuilder::new(5)

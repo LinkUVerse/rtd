@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{NativesCostTable, get_extension};
 use fastcrypto::hash::{Blake2b256, HashFunction, Keccak256};
-use move_binary_format::errors::PartialVMResult;
+use move_binary_format::{errors::PartialVMResult, safe_assert, safe_assert_eq};
 use move_core_types::gas_algebra::InternalGas;
 use move_vm_runtime::{
     execution::{
@@ -14,7 +14,7 @@ use move_vm_runtime::{
 };
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
 use smallvec::smallvec;
-use std::{collections::VecDeque, ops::Mul};
+use std::collections::VecDeque;
 
 const BLAKE_2B256_BLOCK_SIZE: u16 = 128;
 const KECCAK_256_BLOCK_SIZE: u16 = 136;
@@ -30,8 +30,8 @@ fn hash<H: HashFunction<DIGEST_SIZE>, const DIGEST_SIZE: usize>(
     // The caller specifies the block size
     block_size: u16,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 1);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 1);
 
     let msg = pop_arg!(args, VectorRef);
     let msg_ref = msg.as_bytes_ref()?;
@@ -41,10 +41,10 @@ fn hash<H: HashFunction<DIGEST_SIZE>, const DIGEST_SIZE: usize>(
     // Charge the msg dependent costs
     native_charge_gas_early_exit!(
         context,
-        msg_cost_per_byte.mul((msg_ref.len() as u64).into())
+        msg_cost_per_byte.saturating_mul(msg_ref.len() as u64)
             // Round up the blocks
             + msg_cost_per_block
-                .mul((msg_ref.len().div_ceil(block_size) as u64).into())
+                .saturating_mul(msg_ref.len().div_ceil(block_size) as u64)
     );
 
     Ok(NativeResult::ok(

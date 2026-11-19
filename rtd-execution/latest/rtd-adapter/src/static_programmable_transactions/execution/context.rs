@@ -5,8 +5,10 @@ use crate::{
     adapter,
     execution_mode::ExecutionMode,
     execution_value::ExecutionState,
-    gas_charger::{GasCharger, GasPayment, PaymentLocation},
-    gas_meter::RtdGasMeter,
+    metering::{
+        gas_charger::{GasMeter, GasPayment, PaymentLocation},
+        gas_meter::RtdGasMeter,
+    },
     sp,
     static_programmable_transactions::{
         env::Env,
@@ -20,12 +22,10 @@ use crate::{
     },
 };
 use indexmap::{IndexMap, IndexSet};
-use linku_common::ZipDebugEqIteratorExt;
-use linku_common::debug_fatal;
 use move_binary_format::{
     CompiledModule,
     compatibility::{Compatibility, InclusionCheck},
-    errors::{Location, PartialVMError, PartialVMResult, VMResult},
+    errors::{Location, PartialVMError},
     file_format::FunctionDefinitionIndex,
     normalized,
 };
@@ -38,19 +38,25 @@ use move_core_types::{
 use move_trace_format::format::MoveTraceBuilder;
 use move_vm_runtime::{
     execution::{
-        Type as VMType, TypeSubst as _,
+        Type as VMType,
         values::{VMValueCast, Value as VMValue},
-        vm::{LoadedFunctionInformation, MoveVM},
+        vm::MoveVM,
     },
     natives::extensions::NativeExtensions,
-    shared::{
-        gas::{GasMeter as _, SimpleInstruction},
-        linkage_context::LinkageHash,
-    },
+    shared::gas::{GasMeter as _, SimpleInstruction},
     validation::verification::ast::Package as VerifiedPackage,
 };
+use linku_common::ZipDebugEqIteratorExt;
+use linku_common::debug_fatal;
 use nonempty::nonempty;
-use quick_cache::unsync::Cache as QCache;
+use serde::{Deserialize, de::DeserializeSeed};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    rc::Rc,
+    sync::Arc,
+};
 use rtd_move_natives::object_runtime::{
     self, LoadedRuntimeObject, MoveAccumulatorAction, MoveAccumulatorEvent, MoveAccumulatorValue,
     ObjectRuntime, RuntimeResults, get_all_uids, max_event_error,
@@ -59,13 +65,11 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_types::{
     Identifier, TypeTag,
     accumulator_event::AccumulatorEvent,
-    accumulator_root::{
-        self, AccumulatorObjId, SETTLEMENT_MAX_TYPE_INSTANTIATION_NODES, is_settle_u128_call,
-    },
+    accumulator_root::{self, AccumulatorObjId},
     balance::Balance,
     base_types::{
-        MoveObjectType, ObjectID, RESOLVED_ASCII_STR, RESOLVED_UTF8_STR, RtdAddress,
-        SequenceNumber, TxContext,
+        MoveObjectType, ObjectID, RESOLVED_ASCII_STR, RESOLVED_UTF8_STR, SequenceNumber,
+        RtdAddress, TxContext,
     },
     effects::{AccumulatorAddress, AccumulatorValue, AccumulatorWriteV1},
     error::{ExecutionError, ExecutionErrorTrait, SafeIndex, command_argument_error},
@@ -81,14 +85,6 @@ use rtd_types::{
     storage::{BackingPackageStore, DenyListResult, PackageObject, get_package_objects},
 };
 use rtd_verifier::INIT_FN_NAME;
-use serde::{Deserialize, de::DeserializeSeed};
-use std::{
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-    rc::Rc,
-    sync::Arc,
-};
 use tracing::instrument;
 
 /// Publish init runs before any command arguments are read, so the gas stack is still empty.
@@ -145,43 +141,47 @@ macro_rules! object_runtime_mut {
 }
 
 macro_rules! charge_gas_ {
-    ($gas_charger:expr, $env:expr, $call:ident($($args:expr),*)) => {{
-        RtdGasMeter($gas_charger.move_gas_status_mut())
+    ($gas_meter:expr, $env:expr, $call:ident($($args:expr),*)) => {{
+        RtdGasMeter($gas_meter.move_gas_status_mut())
             .$call($($args),*)
             .map_err(|e| $env.convert_vm_error(e.finish(Location::Undefined)))
     }};
-    ($gas_charger:expr, $env:expr, $case:ident, $value_view:expr) => {
-        charge_gas_!($gas_charger, $env, $case($value_view))
+    ($gas_meter:expr, $env:expr, $case:ident, $value_view:expr) => {
+        charge_gas_!($gas_meter, $env, $case($value_view))
     };
 }
 
 macro_rules! charge_gas {
-    ($context:ident, $case:ident, $value_view:expr) => {{ charge_gas_!($context.gas_charger, $context.env, $case, $value_view) }};
+    ($context:ident, $case:ident, $value_view:expr) => {{ charge_gas_!($context.gas_meter, $context.env, $case, $value_view) }};
 }
 
-// Helper macro to manage Move VM cache for different linkage contexts. If the given linkage is
-// found the VM is reused, otherwise a new VM is created and inserted into the cache.
+// Temporarily removes the transaction-wide VM from the context so callers can use other mutable
+// context methods while executing a Move call, then restores it for the next call.
 macro_rules! with_vm {
-    ($self:ident, $linkage:expr, $error:ty, $body:expr) => {{
-        let link_context = $linkage.linkage_context::<$error>()?;
-        let linkage_hash = link_context.to_linkage_hash();
-        let mut vm = if let Some((_, vm)) = $self.executable_vm_cache.remove(&linkage_hash) {
+    ($context:ident, $error:ty, $body:expr) => {{
+        let mut vm = if let Some(vm) = $context.executable_vm.take() {
             vm
         } else {
-            let data_store = &$self.env.linkable_store.package_store;
-            $self
+            let linkage = $context.env.unified_linkage;
+            let link_context = linkage.linkage_context::<$error>()?;
+            let data_store = &$context.env.linkable_store.package_store;
+            $context
                 .env
                 .vm
                 .make_vm_with_native_extensions(
                     data_store,
-                    link_context.clone(),
-                    $self.native_extensions.clone(),
+                    link_context,
+                    $context.native_extensions.clone(),
                 )
-                .map_err(|e| $self.env.convert_linked_vm_error(e, $linkage))?
+                .map_err(|e| $context.env.convert_linked_vm_error(e, linkage))?
         };
-        let result = $body(&mut vm)?;
-        $self.executable_vm_cache.insert(linkage_hash, vm);
-        Ok(result)
+        let result = $body(&mut vm);
+        assert_invariant!(
+            $context.executable_vm.is_none(),
+            "unified-linkage VM cache was not empty"
+        );
+        $context.executable_vm = Some(vm);
+        result
     }};
 }
 
@@ -264,19 +264,18 @@ where
     /// Metrics for reporting exceeded limits
     pub metrics: Arc<ExecutionMetrics>,
     pub native_extensions: NativeExtensions<'env>,
+    executable_vm: Option<MoveVM<'env>>,
     /// A shared transaction context, contains transaction digest information and manages the
     /// creation of new object IDs
     pub tx_context: Rc<RefCell<TxContext>>,
     /// The gas charger used for metering
-    pub gas_charger: &'gas mut GasCharger,
+    pub(crate) gas_meter: &'gas mut GasMeter,
     /// User events are claimed after each Move call
     user_events: Vec<(ModuleId, StructTag, Vec<u8>)>,
     // runtime data
     locations: Locations,
     /// Tracks where the gas coin was sent, if it was moved by value
     gas_coin_transfer: Option<GasCoinTransfer>,
-    // cache of Move VMs created this transaction for different linkage contexts so that we can reuse them.
-    executable_vm_cache: QCache<LinkageHash, MoveVM<'env>>,
 }
 
 impl Locations {
@@ -330,11 +329,11 @@ where
     Mode: ExecutionMode,
 {
     #[instrument(name = "Context::new", level = "trace", skip_all)]
-    pub fn new(
+    pub(crate) fn new(
         env: &'env Env<'pc, 'vm, 'state, 'linkage, 'extension, Mode>,
         metrics: Arc<ExecutionMetrics>,
         tx_context: Rc<RefCell<TxContext>>,
-        gas_charger: &'gas mut GasCharger,
+        gas_meter: &'gas mut GasMeter,
         payment_location: Option<GasPayment>,
         pure_input_bytes: IndexSet<Vec<u8>>,
         object_inputs: Vec<T::ObjectInput>,
@@ -349,14 +348,14 @@ where
         let mut input_object_metadata = Vec::with_capacity(object_inputs.len());
         let mut object_values = Vec::with_capacity(object_inputs.len());
         for object_input in object_inputs {
-            let (i, m, v) = load_object_arg(gas_charger, env, &mut input_object_map, object_input)?;
+            let (i, m, v) = load_object_arg(gas_meter, env, &mut input_object_map, object_input)?;
             input_object_metadata.push((i, m));
             object_values.push(Some(v));
         }
         let object_inputs = Locals::new(object_values)?;
         let mut withdrawal_values = Vec::with_capacity(input_withdrawal_metadata.len());
         for withdrawal_input in &input_withdrawal_metadata {
-            let v = load_withdrawal_arg(gas_charger, env, withdrawal_input)?;
+            let v = load_withdrawal_arg(gas_meter, env, withdrawal_input)?;
             withdrawal_values.push(Some(v));
         }
         let withdrawal_inputs = Locals::new(withdrawal_values)?;
@@ -364,22 +363,11 @@ where
         let receiving_inputs = Locals::new_invalid(receiving_input_metadata.len())?;
         let mut new_gas_coin_id = None;
         let gas = match payment_location {
-            Some(gas_payment)
-                if matches!(gas_payment.location, PaymentLocation::AddressBalance(_))
-                    && !env.protocol_config.gasless_transaction_drop_safety() =>
-            {
-                None
-            }
             Some(gas_payment) => {
                 let ty = env.gas_coin_type()?;
                 let (gas_metadata, gas_value) = match gas_payment.location {
                     PaymentLocation::AddressBalance(rtd_address) => {
-                        assert_invariant!(
-                            env.protocol_config.enable_address_balance_gas_payments(),
-                            "Address balance gas payments must be enabled to have an address \
-                             balance payment location"
-                        );
-                        let max_gas_in_balance = gas_charger.gas_budget();
+                        let max_gas_in_balance = gas_meter.budget();
                         assert_invariant!(
                             gas_payment.amount >= max_gas_in_balance,
                             "not enough gas to pay. How did we get this far?"
@@ -399,7 +387,7 @@ where
                         (metadata, coin)
                     }
                     PaymentLocation::Coin(gas_coin_id) => load_object_arg_impl(
-                        gas_charger,
+                        gas_meter,
                         env,
                         &mut input_object_map,
                         gas_coin_id,
@@ -411,7 +399,7 @@ where
                 let mut gas_local = gas_locals.local(0)?;
                 let gas_ref = gas_local.borrow()?;
                 // We have already checked that the gas balance is enough to cover the gas budget
-                let max_gas_in_balance = gas_charger.gas_budget();
+                let max_gas_in_balance = gas_meter.budget();
                 gas_ref.coin_ref_subtract_balance(max_gas_in_balance)?;
                 Some((gas_payment, gas_metadata, gas_locals))
             }
@@ -421,7 +409,7 @@ where
             env.state_view,
             env.state_view,
             input_object_map,
-            !gas_charger.is_unmetered(),
+            !gas_meter.is_unmetered(),
             env.protocol_config,
             metrics.clone(),
             tx_context.clone(),
@@ -441,7 +429,7 @@ where
                 .map_err(|e| env.convert_vm_error(e.finish(Location::Undefined)))?;
         }
 
-        debug_assert_eq!(gas_charger.move_gas_status().stack_height_current(), 0);
+        debug_assert_eq!(gas_meter.move_gas_status().stack_height_current(), 0);
         let tx_context_value = Locals::new(vec![Some(Value::new_tx_context(
             tx_context.borrow().digest(),
         )?)])?;
@@ -449,8 +437,9 @@ where
             env,
             metrics,
             native_extensions,
+            executable_vm: None,
             tx_context,
-            gas_charger,
+            gas_meter,
             user_events: vec![],
             locations: Locations {
                 tx_context_value,
@@ -467,7 +456,6 @@ where
                 results: vec![],
             },
             gas_coin_transfer: None,
-            executable_vm_cache: QCache::new(1024),
         })
     }
 
@@ -475,12 +463,6 @@ where
         &mut self,
         transfer: GasCoinTransfer,
     ) -> Result<(), Mode::Error> {
-        // send funds transfer ==> accumulators/address balances are enabled
-        assert_invariant!(
-            !matches!(transfer, GasCoinTransfer::SendFunds { .. })
-                || self.env.protocol_config.enable_accumulators(),
-            "Gas coin transfers with send_funds are not allowed unless accumulators are enabled"
-        );
         if self.gas_coin_transfer.is_some() {
             invariant_violation!("Gas coin destination set more than once");
         }
@@ -567,7 +549,7 @@ where
             env,
             native_extensions,
             tx_context,
-            gas_charger,
+            gas_meter,
             user_events,
             ..
         } = self;
@@ -622,7 +604,7 @@ where
                 invariant_violation!("Gas payment should be specified if gas ID is present");
             };
             finish_gas_coin(
-                gas_charger,
+                gas_meter,
                 &mut writes,
                 &mut created_object_ids,
                 &deleted_object_ids,
@@ -683,7 +665,7 @@ where
         Ok(execution::context::finish(
             env.protocol_config,
             env.state_view,
-            gas_charger,
+            gas_meter,
             tx_context,
             &by_value_shared_objects,
             &consensus_owner_objects,
@@ -758,8 +740,8 @@ where
             .map(ObjectID::from)
             .collect::<BTreeSet<_>>();
 
-        let ty_linkage = ExecutableLinkage::type_linkage::<_, Mode::Error>(
-            env.linkage_analysis.config().clone(),
+        let ty_linkage = ExecutableLinkage::type_linkage_unmetered::<_, Mode::Error>(
+            env.resolution_config.clone(),
             &tys_addrs,
             env.linkable_store,
         )?;
@@ -807,7 +789,7 @@ where
                 mut local,
             } => {
                 if local.is_invalid()? {
-                    let v = load_pure_value(self.gas_charger, self.env, bytes, metadata)?;
+                    let v = load_pure_value(self.gas_meter, self.env, bytes, metadata)?;
                     local.store(v)?;
                 }
                 local
@@ -817,7 +799,7 @@ where
                 mut local,
             } => {
                 if local.is_invalid()? {
-                    let v = load_receiving_value(self.gas_charger, self.env, metadata)?;
+                    let v = load_receiving_value(self.gas_meter, self.env, metadata)?;
                     local.store(v)?;
                 }
                 local
@@ -826,17 +808,17 @@ where
         Ok(match usage {
             UsageKind::Move => {
                 let value = local.move_()?;
-                charge_gas_!(self.gas_charger, self.env, charge_move_loc, &value)?;
+                charge_gas_!(self.gas_meter, self.env, charge_move_loc, &value)?;
                 value
             }
             UsageKind::Copy => {
                 let value = local.copy()?;
-                charge_gas_!(self.gas_charger, self.env, charge_copy_loc, &value)?;
+                charge_gas_!(self.gas_meter, self.env, charge_copy_loc, &value)?;
                 value
             }
             UsageKind::Borrow => {
                 charge_gas_!(
-                    self.gas_charger,
+                    self.gas_meter,
                     self.env,
                     charge_simple_instr(SimpleInstruction::MutBorrowLoc)
                 )?;
@@ -870,9 +852,9 @@ where
     where
         VMValue: VMValueCast<V>,
     {
-        let before_height = self.gas_charger.move_gas_status().stack_height_current();
+        let before_height = self.gas_meter.move_gas_status().stack_height_current();
         let value = self.argument_value(arg)?;
-        let after_height = self.gas_charger.move_gas_status().stack_height_current();
+        let after_height = self.gas_meter.move_gas_status().stack_height_current();
         debug_assert_eq!(before_height.saturating_add(1), after_height);
         let value: V = value.cast()?;
         Ok(value)
@@ -898,7 +880,7 @@ where
         num_args: usize,
         num_return: usize,
     ) -> Result<(), Mode::Error> {
-        let move_gas_status = self.gas_charger.move_gas_status_mut();
+        let move_gas_status = self.gas_meter.move_gas_status_mut();
         let before_size = move_gas_status.stack_size_current();
         // Pop all of the arguments
         // If the return values came from the Move VM directly (via a Move call), pop those
@@ -923,7 +905,7 @@ where
     }
 
     pub fn copy_value(&mut self, value: &CtxValue) -> Result<CtxValue, Mode::Error> {
-        Ok(CtxValue(copy_value(self.gas_charger, self.env, &value.0)?))
+        Ok(CtxValue(copy_value(self.gas_meter, self.env, &value.0)?))
     }
 
     pub fn new_coin(&mut self, amount: u64) -> Result<CtxValue, Mode::Error> {
@@ -970,9 +952,7 @@ where
         args: Vec<CtxValue>,
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> Result<Vec<CtxValue>, Mode::Error> {
-        with_vm!(self, &function.linkage, Mode::Error, |vm: &mut MoveVM<
-            'env,
-        >| {
+        with_vm!(self, Mode::Error, |vm: &mut MoveVM<'env>| {
             let ty_args = function
                 .type_arguments
                 .iter()
@@ -984,12 +964,6 @@ where
                         .map_err(|e| self.env.convert_linked_vm_error(e, &function.linkage))
                 })
                 .collect::<Result<Vec<_>, Mode::Error>>()?;
-            let max_type_nodes = is_settle_u128_call(
-                function.original_mid.address(),
-                function.original_mid.name(),
-                &function.name,
-            )
-            .then_some(SETTLEMENT_MAX_TYPE_INSTANTIATION_NODES);
             let result = self.execute_function_bypass_visibility_with_vm(
                 vm,
                 &function.original_mid,
@@ -998,7 +972,6 @@ where
                 args,
                 &function.linkage,
                 trace_builder_opt,
-                max_type_nodes,
             )?;
             self.take_user_events(
                 vm,
@@ -1020,18 +993,16 @@ where
         args: Vec<CtxValue>,
         linkage: &ExecutableLinkage,
         tracer: &mut Option<MoveTraceBuilder>,
-        max_type_nodes: Option<u64>,
     ) -> Result<Vec<CtxValue>, Mode::Error> {
-        let gas_status = self.gas_charger.move_gas_status_mut();
+        let gas_status = self.gas_meter.move_gas_status_mut();
         let values = vm
-            .execute_function_bypass_visibility_with_max_type_nodes(
+            .execute_function_bypass_visibility(
                 original_mid,
                 function_name,
                 ty_args,
                 args.into_iter().map(|v| v.0.into()).collect(),
                 &mut RtdGasMeter(gas_status),
                 tracer.as_mut(),
-                max_type_nodes,
             )
             .map_err(|e| self.env.convert_linked_vm_error(e, linkage))?;
         Ok(values.into_iter().map(|v| CtxValue(v.into())).collect())
@@ -1044,23 +1015,10 @@ where
     pub fn deserialize_package(
         &mut self,
         package_payload: PackagePayload,
-        dep_ids: &[ObjectID],
+        _dep_ids: &[ObjectID],
     ) -> Result<DeserializedPackage, Mode::Error> {
-        Ok(match package_payload {
-            PackagePayload::Deserialized(deserialized_pkg) => deserialized_pkg,
-            PackagePayload::Serialized(module_bytes) => {
-                // This assertion is also checked in the call to `deserialize_modules`, but we
-                // want to check it here first to keep existing behavior around checking this
-                // invariant before the charge on pre-existing pathways.
-                assert_invariant!(
-                    !module_bytes.is_empty(),
-                    "empty package is checked in transaction input checker"
-                );
-                let total_bytes = module_bytes.iter().map(|v| v.len()).sum();
-                self.gas_charger.charge_publish_package(total_bytes)?;
-                self.env.deserialize_package(&module_bytes, dep_ids)?
-            }
-        })
+        let PackagePayload::Deserialized(deserialized_pkg) = package_payload;
+        Ok(deserialized_pkg)
     }
 
     fn fetch_package(&mut self, dependency_id: &ObjectID) -> Result<Rc<MovePackage>, Mode::Error> {
@@ -1141,7 +1099,7 @@ where
                 data_store,
                 *package_id,
                 serialized_pkg,
-                &mut RtdGasMeter(self.gas_charger.move_gas_status_mut()),
+                &mut RtdGasMeter(self.gas_meter.move_gas_status_mut()),
                 self.native_extensions.clone(),
             )
             .map_err(|e| self.env.convert_linked_vm_error(e, linkage))?;
@@ -1217,10 +1175,9 @@ where
         expected_stack_height: u64,
     ) -> Result<(), Mode::Error> {
         debug_assert_eq!(
-            self.gas_charger.move_gas_status().stack_height_current(),
+            self.gas_meter.move_gas_status().stack_height_current(),
             expected_stack_height,
         );
-        let check_expected_inits = self.env.protocol_config.harden_linkage_consistency();
         for module in modules {
             let Some((fdef_idx, fdef)) = module.find_function_def_by_name(INIT_FN_NAME.as_str())
             else {
@@ -1242,13 +1199,11 @@ where
             // balance the stack after borrowing the tx context
             charge_gas!(self, charge_store_loc, &tx_context)?;
 
-            if check_expected_inits {
-                assert_invariant!(
-                    expected_inits.remove(module_name),
-                    "module {module_name} defines an `init` but was not recorded as doing so when \
-                     the package payload was deserialized"
-                );
-            }
+            assert_invariant!(
+                expected_inits.remove(module_name),
+                "module {module_name} defines an `init` but was not recorded as doing so when \
+                 the package payload was deserialized"
+            );
 
             let args = if has_otw {
                 vec![CtxValue(Value::one_time_witness()?), CtxValue(tx_context)]
@@ -1256,7 +1211,7 @@ where
                 vec![CtxValue(tx_context)]
             };
             debug_assert_eq!(
-                self.gas_charger.move_gas_status().stack_height_current(),
+                self.gas_meter.move_gas_status().stack_height_current(),
                 expected_stack_height,
             );
             trace_utils::trace_move_call_start(trace_builder_opt);
@@ -1268,7 +1223,6 @@ where
                 args,
                 linkage,
                 trace_builder_opt,
-                None,
             )?;
             trace_utils::trace_move_call_end(trace_builder_opt);
 
@@ -1289,14 +1243,14 @@ where
                 "init should not have return values"
             );
             debug_assert_eq!(
-                self.gas_charger.move_gas_status().stack_height_current(),
+                self.gas_meter.move_gas_status().stack_height_current(),
                 expected_stack_height,
             );
         }
 
         // Every module we expected to initialize from earlier was initialized.
         assert_invariant!(
-            !check_expected_inits || expected_inits.is_empty(),
+            expected_inits.is_empty(),
             "modules {expected_inits:?} define an `init` that was never run"
         );
 
@@ -1413,44 +1367,22 @@ where
             })
             .collect::<Vec<&CompiledModule>>();
 
-        if self.env.protocol_config.enable_init_on_upgrade() {
-            // Only newly added modules have their `init` functions called on upgrade.
-            let expected_inits: BTreeSet<Identifier> = modules_with_init
-                .into_iter()
-                .filter(|name| !current_module_names.contains(name.as_str()))
-                .collect();
-            self.push_package_and_init_selected_modules(
-                version_id,
-                package,
-                verified_pkg,
-                vm,
-                new_modules.iter().copied(),
-                expected_inits,
-                &linkage,
-                trace_builder_opt,
-                UPGRADE_INIT_EXPECTED_STACK_HEIGHT,
-            )?;
-        } else {
-            let new_module_has_init = new_modules.iter().any(|module| {
-                module.function_defs.iter().any(|fdef| {
-                    let fhandle = module.function_handle_at(fdef.function);
-                    let fname = module.identifier_at(fhandle.name);
-                    fname == INIT_FN_NAME
-                })
-            });
-            if new_module_has_init {
-                return Err(Mode::Error::new_with_source(
-                    ExecutionErrorKind::FeatureNotYetSupported,
-                    "`init` in new modules on upgrade is not yet supported",
-                ));
-            }
-
-            self.env.linkable_store.package_store.push_package(
-                version_id,
-                Rc::new(package),
-                verified_pkg,
-            )?;
-        }
+        // Only newly added modules have their `init` functions called on upgrade.
+        let expected_inits: BTreeSet<Identifier> = modules_with_init
+            .into_iter()
+            .filter(|name| !current_module_names.contains(name.as_str()))
+            .collect();
+        self.push_package_and_init_selected_modules(
+            version_id,
+            package,
+            verified_pkg,
+            vm,
+            new_modules.iter().copied(),
+            expected_inits,
+            &linkage,
+            trace_builder_opt,
+            UPGRADE_INIT_EXPECTED_STACK_HEIGHT,
+        )?;
 
         Ok(version_id)
     }
@@ -1665,7 +1597,7 @@ impl CtxValue {
 }
 
 fn load_object_arg<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     input_object_map: &mut BTreeMap<ObjectID, object_runtime::InputObject>,
     input: T::ObjectInput,
@@ -1684,7 +1616,7 @@ fn load_object_arg<Mode: ExecutionMode>(
 }
 
 fn load_object_arg_impl<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     input_object_map: &mut BTreeMap<ObjectID, object_runtime::InputObject>,
     id: ObjectID,
@@ -1732,7 +1664,7 @@ fn load_object_arg_impl<Mode: ExecutionMode>(
 }
 
 fn load_withdrawal_arg<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     withdrawal: &T::WithdrawalInput,
 ) -> Result<Value, Mode::Error> {
@@ -1757,7 +1689,7 @@ fn load_withdrawal_arg<Mode: ExecutionMode>(
 }
 
 fn load_pure_value<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     bytes: &[u8],
     metadata: &T::PureInput,
@@ -1770,7 +1702,7 @@ fn load_pure_value<Mode: ExecutionMode>(
 }
 
 fn load_receiving_value<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     metadata: &T::ReceivingInput,
 ) -> Result<Value, Mode::Error> {
@@ -1782,7 +1714,7 @@ fn load_receiving_value<Mode: ExecutionMode>(
 }
 
 fn copy_value<Mode: ExecutionMode>(
-    meter: &mut GasCharger,
+    meter: &mut GasMeter,
     env: &Env<Mode>,
     value: &Value,
 ) -> Result<Value, Mode::Error> {
@@ -1797,7 +1729,7 @@ fn copy_value<Mode: ExecutionMode>(
 fn refund_max_gas_budget<OType>(
     writes: &mut IndexMap<ObjectID, (Owner, OType, VMValue)>,
     accumulator_events: &mut Vec<MoveAccumulatorEvent>,
-    gas_charger: &mut GasCharger,
+    gas_meter: &mut GasMeter,
     gas_id: ObjectID,
     gas_coin_transfer: Option<&GasCoinTransfer>,
 ) -> Result<(), ExecutionError> {
@@ -1812,7 +1744,7 @@ fn refund_max_gas_budget<OType>(
             balance_change_accumulator_event(
                 accumulator_events,
                 *recipient,
-                checked_as!(gas_charger.gas_budget(), i64)?,
+                checked_as!(gas_meter.budget(), i64)?,
             )?;
         }
         Some(GasCoinTransfer::TransferObjects) | None => {
@@ -1824,7 +1756,7 @@ fn refund_max_gas_budget<OType>(
             let mut locals = Locals::new([Some(value.into())])?;
             let mut local = locals.local(0)?;
             let coin_value = local.borrow()?.coin_ref_value()?;
-            let additional = gas_charger.gas_budget();
+            let additional = gas_meter.budget();
             if coin_value.checked_add(additional).is_none() {
                 return Err(ExecutionError::new_with_source(
                     ExecutionErrorKind::CoinBalanceOverflow,
@@ -1845,7 +1777,7 @@ fn refund_max_gas_budget<OType>(
 /// The ephemeral coin is removed from writes and created objects in the case that it was not
 /// transferred (left in its memory location at the end of the transaction).
 fn finish_gas_coin<OType>(
-    gas_charger: &mut GasCharger,
+    gas_meter: &mut GasMeter,
     writes: &mut IndexMap<ObjectID, (Owner, OType, VMValue)>,
     created_object_ids: &mut IndexSet<ObjectID>,
     deleted_object_ids: &IndexSet<ObjectID>,
@@ -1858,7 +1790,7 @@ fn finish_gas_coin<OType>(
     refund_max_gas_budget(
         writes,
         accumulator_events,
-        gas_charger,
+        gas_meter,
         gas_id,
         gas_coin_transfer.as_ref(),
     )?;
@@ -1870,12 +1802,10 @@ fn finish_gas_coin<OType>(
     // an address balance recipient that matches the original address balance charge location
     match &gas_coin_transfer {
         Some(GasCoinTransfer::SendFunds { recipient, .. }) => {
-            gas_charger.override_gas_charge_location(PaymentLocation::AddressBalance(
-                (*recipient).into(),
-            ))?;
+            gas_meter.set_charge_location(PaymentLocation::AddressBalance((*recipient).into()))?;
         }
         Some(GasCoinTransfer::TransferObjects) => {
-            gas_charger.override_gas_charge_location(PaymentLocation::Coin(gas_id))?;
+            gas_meter.set_charge_location(PaymentLocation::Coin(gas_id))?;
         }
         None => (),
     }
@@ -2039,41 +1969,6 @@ unsafe fn create_written_object<Mode: ExecutionMode>(
             Mode::packages_are_predefined(),
         )
     }
-}
-
-/// substitutes the type arguments into the parameter and return types
-pub fn subst_signature(
-    signature: LoadedFunctionInformation,
-    type_arguments: &[VMType],
-) -> VMResult<LoadedFunctionInformation> {
-    let LoadedFunctionInformation {
-        parameters,
-        return_,
-        is_entry,
-        is_native,
-        visibility,
-        index,
-        instruction_count,
-    } = signature;
-    let parameters = parameters
-        .into_iter()
-        .map(|ty| ty.subst(type_arguments))
-        .collect::<PartialVMResult<Vec<_>>>()
-        .map_err(|err| err.finish(Location::Undefined))?;
-    let return_ = return_
-        .into_iter()
-        .map(|ty| ty.subst(type_arguments))
-        .collect::<PartialVMResult<Vec<_>>>()
-        .map_err(|err| err.finish(Location::Undefined))?;
-    Ok(LoadedFunctionInformation {
-        parameters,
-        return_,
-        is_entry,
-        is_native,
-        visibility,
-        index,
-        instruction_count,
-    })
 }
 
 pub enum EitherError<E: ExecutionErrorTrait = ExecutionError> {
@@ -2304,10 +2199,10 @@ impl fmt::Display for PrimitiveArgumentLayout {
     }
 }
 
-pub fn finish(
+pub(crate) fn finish(
     protocol_config: &ProtocolConfig,
     state_view: &dyn ExecutionState,
-    gas_charger: &mut GasCharger,
+    gas_meter: &mut GasMeter,
     tx_context: &TxContext,
     by_value_shared_objects: &BTreeSet<ObjectID>,
     consensus_owner_objects: &BTreeMap<ObjectID, Owner>,
@@ -2462,7 +2357,7 @@ pub fn finish(
         result,
         num_non_gas_coin_owners,
     } = state_view.check_coin_deny_list(receiving_funds_type_and_owners);
-    gas_charger.charge_coin_transfers(protocol_config, num_non_gas_coin_owners)?;
+    gas_meter.charge_coin_transfers(protocol_config, num_non_gas_coin_owners)?;
     result?;
 
     let created_object_ids: BTreeSet<ObjectID> = created_object_ids.into_iter().collect();

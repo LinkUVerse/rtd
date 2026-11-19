@@ -9,7 +9,7 @@ use rtd_protocol_config::ProtocolConfig;
 use rtd_test_transaction_builder::FundSource;
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID,
-    base_types::{RtdAddress, SequenceNumber},
+    base_types::{SequenceNumber, RtdAddress},
     effects::{TransactionEffects, TransactionEffectsAPI, UnchangedConsensusKind},
     gas_coin::MIST_PER_RTD,
     object::Owner,
@@ -29,7 +29,12 @@ async fn test_object_balance_withdraw_stress() {
         cfg
     });
 
-    let test_cluster = Arc::new(TestClusterBuilder::new().build().await);
+    let test_cluster = Arc::new(
+        TestClusterBuilder::new()
+            .with_num_validators(4)
+            .build()
+            .await,
+    );
     let sender = test_cluster.get_address_0();
 
     // Publish the object_balance package from examples.
@@ -187,7 +192,7 @@ async fn simulate_object_funds_and_check_root(
     tx: &rtd_types::transaction::TransactionData,
 ) -> TransactionEffects {
     use rtd_rpc::field::FieldMaskUtil;
-    use rtd_rpc::proto::rtd::rpc::v2 as proto;
+    use rtd_rpc::proto::sui::rpc::v2 as proto;
 
     let mut request = proto::SimulateTransactionRequest::default()
         .with_transaction(

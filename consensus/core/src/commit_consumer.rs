@@ -3,77 +3,101 @@
 
 use std::sync::Arc;
 
+use consensus_config::Stake;
+use consensus_types::block::Round;
 use linku_metrics::monitored_mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use parking_lot::Mutex;
-use tokio::sync::watch;
-use tracing::{debug, info};
+use tokio::sync::{SetOnce, watch};
+use tracing::debug;
 
 use crate::{CommitIndex, CommittedSubDag};
 
-/// Maximum number of persisted consensus commits ahead of the crash-safe consumer cursor.
-pub const MAX_PENDING_DURABLE_COMMITS: CommitIndex = 1_000;
-
 /// Arguments from commit consumer to this consensus instance.
-/// This includes both parameters and components for communications.
 #[derive(Clone)]
 pub struct CommitConsumerArgs {
-    /// The consumer requests consensus to replay from commit replay_after_commit_index + 1.
-    /// Set to 0 to replay from the start (as commit sequence starts at index = 1).
-    pub(crate) replay_after_commit_index: CommitIndex,
-    /// Index of the last commit that the consumer has processed.  This is useful during
-    /// crash recovery when other components can wait for the consumer to finish processing
-    /// up to this index.
-    pub(crate) consumer_last_processed_commit_index: CommitIndex,
-
-    /// A channel to output the committed sub dags.
+    pub(crate) replay_mode: ReplayMode,
     pub(crate) commit_sender: UnboundedSender<CommittedSubDag>,
-    // Allows the commit consumer to report its progress.
-    monitor: Arc<CommitConsumerMonitor>,
+    monitor: Arc<ConsumerMonitor>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ReplayMode {
+    /// Replay from a consumer-supplied watermark without acknowledgement pacing.
+    FromWatermark {
+        /// Commit indices start at one. Replay starts at this index plus one;
+        /// zero requests the entire epoch.
+        replay_after_commit_index: CommitIndex,
+        /// Consumer-supplied target for startup readiness.
+        consumer_last_processed_commit_index: CommitIndex,
+    },
+    /// Replay the entire epoch, discovering the target from consensus storage.
+    /// Only the finalized prefix is paced by application acknowledgements;
+    /// the unfinalized tail and live consensus keep their existing flow control.
+    FullEpochPaced,
 }
 
 impl CommitConsumerArgs {
+    /// Requests replay after `replay_after_commit_index`, using the consumer's
+    /// last processed index as the recovery target. This mode does not wait for
+    /// application acknowledgements during startup.
+    /// Commit indices start at one; use zero to replay from the first commit.
     pub fn new(
         replay_after_commit_index: CommitIndex,
         consumer_last_processed_commit_index: CommitIndex,
     ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
-        let monitor = Arc::new(CommitConsumerMonitor::new(
+        Self::new_with_replay_mode(ReplayMode::FromWatermark {
             replay_after_commit_index,
             consumer_last_processed_commit_index,
-        ));
-        Self::new_with_monitor(
-            replay_after_commit_index,
-            consumer_last_processed_commit_index,
-            monitor,
-        )
+        })
     }
 
-    pub fn new_with_recovery_drain_ceiling(
-        replay_after_commit_index: CommitIndex,
-        consumer_last_processed_commit_index: CommitIndex,
-        recovery_drain_ceiling: Option<CommitIndex>,
-    ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
-        let monitor = Arc::new(CommitConsumerMonitor::new_with_recovery_drain_ceiling(
-            replay_after_commit_index,
-            consumer_last_processed_commit_index,
-            recovery_drain_ceiling,
-        ));
-        Self::new_with_monitor(
-            replay_after_commit_index,
-            consumer_last_processed_commit_index,
-            monitor,
-        )
+    /// Replays the epoch from its first commit into a consumer with no durable
+    /// execution watermark. Consensus owns storage and delivers historical and
+    /// live commits over the returned stream.
+    ///
+    /// This is an integration API for external consensus consumers that rebuild
+    /// application state on restart. DO NOT REMOVE this entry point solely because it
+    /// has no production callers in this workspace. Changes to this contract
+    /// must account for downstream consumers.
+    ///
+    /// Consensus discovers the startup target from its store: the last stored
+    /// commit when transaction voting is disabled, or the last finalized commit
+    /// when voting is enabled. It waits for application acknowledgements between
+    /// recovery batches. An unfinalized tail goes through normal finalization
+    /// without waiting for application at startup, since it may need live consensus.
+    /// Consequently, pacing bounds only the finalized prefix: if voting is enabled
+    /// and no commits are finalized, the entire history is queued without pacing.
+    ///
+    /// The consumer must run before awaiting [`crate::ConsensusAuthority::start`]
+    /// and call [`ConsumerMonitor::set_highest_handled_commit`] only after
+    /// applying each commit. Waiting for startup before consuming would deadlock
+    /// recovery. Use [`Self::monitor`] to observe readiness and committed-head
+    /// progress without accessing storage.
+    /// Startup panics if the consumer closes while recovery is waiting for an
+    /// application acknowledgement.
+    pub fn new_with_full_replay() -> (Self, UnboundedReceiver<CommittedSubDag>) {
+        Self::new_with_replay_mode(ReplayMode::FullEpochPaced)
     }
 
-    fn new_with_monitor(
-        replay_after_commit_index: CommitIndex,
-        consumer_last_processed_commit_index: CommitIndex,
-        monitor: Arc<CommitConsumerMonitor>,
-    ) -> (Self, UnboundedReceiver<CommittedSubDag>) {
-        let (commit_sender, commit_receiver) = unbounded_channel("consensus_commit_output");
-        (
-            Self {
+    fn new_with_replay_mode(replay_mode: ReplayMode) -> (Self, UnboundedReceiver<CommittedSubDag>) {
+        let (replay_after_commit_index, replay_target) = match replay_mode {
+            ReplayMode::FromWatermark {
                 replay_after_commit_index,
                 consumer_last_processed_commit_index,
+            } => (
+                replay_after_commit_index,
+                Some(consumer_last_processed_commit_index),
+            ),
+            ReplayMode::FullEpochPaced => (0, None),
+        };
+        let (commit_sender, commit_receiver) = unbounded_channel("consensus_commit_output");
+        let monitor = Arc::new(ConsumerMonitor::new(
+            replay_after_commit_index,
+            replay_target,
+        ));
+        (
+            Self {
+                replay_mode,
                 commit_sender,
                 monitor,
             },
@@ -81,545 +105,359 @@ impl CommitConsumerArgs {
         )
     }
 
-    pub fn monitor(&self) -> Arc<CommitConsumerMonitor> {
+    pub fn monitor(&self) -> Arc<ConsumerMonitor> {
         self.monitor.clone()
     }
 }
 
-/// Helps monitor the progress of the consensus commit handler (consumer).
+/// Process-local committed head reported by consensus, independently of application progress.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommitProgress {
+    /// Latest committed index reported by consensus, independently of consumer progress.
+    /// Recovery reports the stored head before replay, rather than each historical
+    /// commit as it is delivered. Live commits advance this value afterwards.
+    pub highest_committed_index: CommitIndex,
+    /// Leader round associated with [`Self::highest_committed_index`], including
+    /// the stored head during replay rather than the consumer's replay position.
+    pub highest_committed_round: Round,
+}
+
+/// This node's view of committee progress. The round prober sets the round, stake and probe
+/// time after every complete probe, and the commit syncer sets the quorum commit index. The
+/// values are read-only and are not inputs to consensus.
 ///
-/// This component tracks four related boundaries:
-/// 1. Checking the highest commit index processed by the consensus commit handler.
-///    Consensus components can decide to wait for more commits to be processed before proceeding with
-///    their work.
-/// 2. Waiting for consensus commit handler to finish processing replayed commits.
-///    Current usage is actually outside of consensus.
-/// 3. Tracking the highest consumer commit that is durable across process crashes.
-/// 4. Bounding live consensus output against that durable watermark.
-pub struct CommitConsumerMonitor {
-    // highest commit that has been handled by the consumer.
-    highest_handled_commit: watch::Sender<u32>,
-
-    // Highest commit whose consumer output has been atomically persisted. This is intentionally
-    // separate from `highest_handled_commit`: handling a commit only puts its output in RTD's
-    // in-memory checkpoint quarantine, while this watermark is safe to resume from after SIGKILL.
-    highest_durable_commit: watch::Sender<u32>,
-
-    // Consensus recovery discovers its target only after opening the consensus store. The
-    // checkpoint builder uses this status to process replay concurrently, but does not announce
-    // startup completion until the complete recovered stream has reached the consumer.
-    recovery_status: watch::Sender<CommitRecoveryStatus>,
-
-    // A persisted maximum consensus head for databases which already exceeded the normal
-    // durable-lag bound before the guard was introduced. Reusing this ceiling across restarts
-    // prevents repeated crashes from granting a fresh drain allowance every time.
-    recovery_drain_ceiling: Option<CommitIndex>,
-
-    // Serializes retirement of the temporary legacy allowance with admission of commit-sync
-    // ranges, which are fetched outside Core and handed to it asynchronously.
-    recovery_drain_gate: Mutex<RecoveryDrainGate>,
-
-    // Generic consensus users do not have RTD's checkpoint quarantine and historically report
-    // only handled progress. Preserve that API behavior unless the RTD constructor explicitly
-    // enables crash-safe durable tracking.
-    explicit_durable_tracking: bool,
-
-    // At node startup, the last consensus commit processed by the commit consumer from the previous run.
-    // This can be 0 if starting a new epoch.
-    consumer_last_processed_commit_index: CommitIndex,
+/// The round prober runs only on validator nodes. On other nodes only `quorum_commit_index`
+/// updates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PeerProgress {
+    /// Highest round over all authorities at which an authority's block was accepted by a
+    /// quorum of stake, from the last complete probe.
+    pub quorum_accepted_round: Round,
+    /// Quorum commit index from the last commit syncer scheduling pass.
+    pub quorum_commit_index: CommitIndex,
+    /// Total stake of peers whose request succeeded in the last complete probe. It excludes
+    /// this node.
+    pub responsive_stake: Stake,
+    /// Consensus clock time in milliseconds when the last complete probe finished. It is zero
+    /// when no probe has completed.
+    pub probed_at_ms: u64,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-struct CommitRecoveryStatus {
-    target_commit: CommitIndex,
-    started: bool,
-    scan_complete: bool,
+/// Tracks application progress, startup readiness, the consensus head, and peer progress.
+///
+/// External consumers observe the committed head, handled commits, and replay
+/// target separately to monitor catch-up without reading consensus storage. Liveness
+/// watchdogs use [`PeerProgress`] to interpret a pause in local commits.
+/// DO NOT REMOVE these observation APIs solely because they have no callers in
+/// this workspace. They support the external integration described by
+/// [`CommitConsumerArgs::new_with_full_replay`].
+pub struct ConsumerMonitor {
+    replay_target: SetOnce<CommitIndex>,
+    committed: watch::Sender<CommitProgress>,
+    handled: watch::Sender<CommitIndex>,
+    peer_progress: Mutex<PeerProgress>,
 }
 
-#[derive(Debug)]
-struct RecoveryDrainGate {
-    active: bool,
-    highest_reserved_consensus_head: CommitIndex,
-}
-
-impl CommitConsumerMonitor {
+impl ConsumerMonitor {
     pub(crate) fn new(
         replay_after_commit_index: CommitIndex,
-        consumer_last_processed_commit_index: CommitIndex,
-    ) -> Self {
-        Self::new_internal(
-            replay_after_commit_index,
-            consumer_last_processed_commit_index,
-            None,
-            false,
-        )
-    }
-
-    pub fn new_with_recovery_drain_ceiling(
-        replay_after_commit_index: CommitIndex,
-        consumer_last_processed_commit_index: CommitIndex,
-        recovery_drain_ceiling: Option<CommitIndex>,
-    ) -> Self {
-        Self::new_internal(
-            replay_after_commit_index,
-            consumer_last_processed_commit_index,
-            recovery_drain_ceiling,
-            true,
-        )
-    }
-
-    fn new_internal(
-        replay_after_commit_index: CommitIndex,
-        consumer_last_processed_commit_index: CommitIndex,
-        recovery_drain_ceiling: Option<CommitIndex>,
-        explicit_durable_tracking: bool,
+        replay_target: Option<CommitIndex>,
     ) -> Self {
         Self {
-            highest_handled_commit: watch::Sender::new(replay_after_commit_index),
-            highest_durable_commit: watch::Sender::new(consumer_last_processed_commit_index),
-            recovery_status: watch::Sender::new(CommitRecoveryStatus::default()),
-            recovery_drain_ceiling,
-            recovery_drain_gate: Mutex::new(RecoveryDrainGate {
-                active: recovery_drain_ceiling.is_some(),
-                highest_reserved_consensus_head: replay_after_commit_index
-                    .max(consumer_last_processed_commit_index),
+            replay_target: SetOnce::new_with(replay_target),
+            committed: watch::Sender::new(CommitProgress {
+                highest_committed_index: 0,
+                highest_committed_round: 0,
             }),
-            explicit_durable_tracking,
-            consumer_last_processed_commit_index,
+            handled: watch::Sender::new(replay_after_commit_index),
+            peer_progress: Mutex::new(PeerProgress::default()),
         }
     }
 
-    /// Gets the highest commit index processed by the consensus commit handler.
-    pub fn highest_handled_commit(&self) -> CommitIndex {
-        *self.highest_handled_commit.borrow()
+    /// Returns the consensus head, independently of consumer acknowledgements.
+    pub fn progress(&self) -> CommitProgress {
+        *self.committed.borrow()
     }
 
-    /// Updates the highest commit index processed by the consensus commit handler.
+    /// Subscribes to consensus head changes only. To observe application progress
+    /// and target discovery, also use [`Self::subscribe_handled_commit`] and
+    /// [`Self::wait_for_replay_target`].
+    pub fn subscribe_progress(&self) -> watch::Receiver<CommitProgress> {
+        self.committed.subscribe()
+    }
+
+    /// Returns the fixed startup target. With [`CommitConsumerArgs::new_with_full_replay`],
+    /// `None` means storage has not been inspected and `Some(0)` means there is no
+    /// finalized startup work. With [`CommitConsumerArgs::new`], the consumer-supplied
+    /// last processed index is available immediately.
+    pub fn replay_target(&self) -> Option<CommitIndex> {
+        self.replay_target.get().copied()
+    }
+
+    /// Waits for target discovery, without waiting for the consumer to apply it.
+    pub async fn wait_for_replay_target(&self) -> CommitIndex {
+        *self.replay_target.wait().await
+    }
+
+    pub(crate) fn set_replay_target(&self, target: CommitIndex) {
+        self.replay_target
+            .set(target)
+            .expect("startup replay target must be set only once");
+    }
+
+    pub(crate) fn report_committed(&self, index: CommitIndex, round: Round) {
+        self.committed.send_if_modified(|progress| {
+            if index <= progress.highest_committed_index {
+                return false;
+            }
+            progress.highest_committed_index = index;
+            progress.highest_committed_round = round;
+            true
+        });
+    }
+
+    pub fn highest_handled_commit(&self) -> CommitIndex {
+        *self.handled.borrow()
+    }
+
+    /// Subscribes to consumer acknowledgements, independently of consensus progress.
+    pub fn subscribe_handled_commit(&self) -> watch::Receiver<CommitIndex> {
+        self.handled.subscribe()
+    }
+
+    /// Acknowledge application, after the consumer has finished processing the commit.
     pub fn set_highest_handled_commit(&self, highest_handled_commit: CommitIndex) {
         debug!("Highest handled commit set to {}", highest_handled_commit);
-        let previous = self.highest_handled_commit();
-        let updated = self.highest_handled_commit.send_if_modified(|current| {
-            if highest_handled_commit > *current {
-                *current = highest_handled_commit;
-                true
-            } else {
-                false
-            }
-        });
-        if updated && !self.explicit_durable_tracking {
-            self.set_highest_durable_commit(highest_handled_commit);
-        }
-        let recovery_status = *self.recovery_status.borrow();
-        if updated
-            && recovery_status.started
-            && highest_handled_commit < recovery_status.target_commit
-            && highest_handled_commit / 10_000 > previous / 10_000
-        {
-            info!(
-                target: "rtd_startup",
-                processed_commit = highest_handled_commit,
-                target_commit = recovery_status.target_commit,
-                remaining_commits = recovery_status
-                    .target_commit
-                    .saturating_sub(highest_handled_commit),
-                "Startup consensus replay is being applied"
-            );
-        }
-        if updated
-            && recovery_status.started
-            && previous < recovery_status.target_commit
-            && highest_handled_commit >= recovery_status.target_commit
-        {
-            info!(
-                target: "rtd_startup",
-                processed_commit = highest_handled_commit,
-                target_commit = recovery_status.target_commit,
-                "Startup consensus replay has reached its persisted target"
-            );
-        }
+        self.handled.send_replace(highest_handled_commit);
     }
 
-    /// Gets the highest commit whose consumer output is durable across process crashes.
-    pub fn highest_durable_commit(&self) -> CommitIndex {
-        *self.highest_durable_commit.borrow()
+    /// Returns this node's latest view of committee progress. See [`PeerProgress`].
+    pub fn peer_progress(&self) -> PeerProgress {
+        *self.peer_progress.lock()
     }
 
-    pub(crate) fn subscribe_highest_durable_commit(&self) -> watch::Receiver<CommitIndex> {
-        self.highest_durable_commit.subscribe()
-    }
-
-    /// Updates the crash-safe consumer watermark after the containing database batch commits.
-    pub fn set_highest_durable_commit(&self, highest_durable_commit: CommitIndex) {
-        debug!(
-            "Highest durable consumer commit set to {}",
-            highest_durable_commit
-        );
-        let previous = self.highest_durable_commit();
-        let updated = self.highest_durable_commit.send_if_modified(|current| {
-            if highest_durable_commit > *current {
-                *current = highest_durable_commit;
-                true
-            } else {
-                false
-            }
-        });
-        if updated && highest_durable_commit / 10_000 > previous / 10_000 {
-            info!(
-                target: "rtd_startup",
-                durable_commit = highest_durable_commit,
-                "Crash-safe consensus cursor advanced"
-            );
-        }
-    }
-
-    fn maximum_allowed_consensus_head(&self) -> CommitIndex {
-        let highest_durable_commit = self.highest_durable_commit();
-        let normal_limit = highest_durable_commit.saturating_add(MAX_PENDING_DURABLE_COMMITS);
-        let recovery_status = *self.recovery_status.borrow();
-        let recovery_drain_gate = self.recovery_drain_gate.lock();
-
-        if let Some(recovery_drain_ceiling) = self.recovery_drain_ceiling
-            && recovery_drain_gate.active
-            && recovery_status.started
-            && recovery_status.scan_complete
-        {
-            // A database created before this guard can already be far beyond `normal_limit`.
-            // After its ordered replay has been enqueued, permit commits only up to a ceiling
-            // fixed and persisted on the first migration attempt. Keep that ceiling active until
-            // the startup target itself is durable and all work currently pending in Core
-            // fits in the normal window. The startup target is only the old consensus head and can
-            // fall behind newly-created signature commits, so reaching `D + window >= target` is
-            // not sufficient. `try_finish_recovery_drain` performs the stricter transition.
-            normal_limit.max(recovery_drain_ceiling)
-        } else {
-            normal_limit
-        }
-    }
-
-    fn try_finish_recovery_drain(&self, highest_pending_consensus_head: CommitIndex) {
-        let recovery_status = *self.recovery_status.borrow();
-        let highest_durable_commit = self.highest_durable_commit();
-        let normal_limit = highest_durable_commit.saturating_add(MAX_PENDING_DURABLE_COMMITS);
-        let mut recovery_drain_gate = self.recovery_drain_gate.lock();
-        let highest_pending_consensus_head =
-            highest_pending_consensus_head.max(recovery_drain_gate.highest_reserved_consensus_head);
-        if recovery_drain_gate.active
-            && recovery_status.started
-            && recovery_status.scan_complete
-            && highest_durable_commit >= recovery_status.target_commit
-            && highest_pending_consensus_head <= normal_limit
-        {
-            recovery_drain_gate.active = false;
-            info!(
-                target: "rtd_startup",
-                startup_target_commit = recovery_status.target_commit,
-                durable_commit = highest_durable_commit,
-                consensus_head = highest_pending_consensus_head,
-                "Legacy consensus recovery drain is complete; normal crash-safe backpressure is now active"
-            );
-        }
-    }
-
-    fn try_reserve_consensus_head(&self, target_consensus_head: CommitIndex) -> bool {
-        let highest_durable_commit = self.highest_durable_commit();
-        let normal_limit = highest_durable_commit.saturating_add(MAX_PENDING_DURABLE_COMMITS);
-        let recovery_status = *self.recovery_status.borrow();
-        let mut recovery_drain_gate = self.recovery_drain_gate.lock();
-        let maximum_allowed_consensus_head = if let Some(recovery_drain_ceiling) =
-            self.recovery_drain_ceiling
-            && recovery_drain_gate.active
-            && recovery_status.started
-            && recovery_status.scan_complete
-        {
-            normal_limit.max(recovery_drain_ceiling)
-        } else {
-            normal_limit
-        };
-
-        if target_consensus_head > maximum_allowed_consensus_head {
-            return false;
-        }
-
-        recovery_drain_gate.highest_reserved_consensus_head = recovery_drain_gate
-            .highest_reserved_consensus_head
-            .max(target_consensus_head);
-        true
-    }
-
-    /// Returns how many additional live commits consensus may persist without exceeding the
-    /// crash-safe replay window (or the fixed drain allowance for a pre-existing oversized tail).
-    pub(crate) fn remaining_durable_commit_capacity(
+    pub(crate) fn report_probe(
         &self,
-        consensus_head: CommitIndex,
-        highest_pending_consensus_head: CommitIndex,
-    ) -> CommitIndex {
-        debug_assert!(highest_pending_consensus_head >= consensus_head);
-        self.try_finish_recovery_drain(highest_pending_consensus_head);
-        self.maximum_allowed_consensus_head()
-            .saturating_sub(consensus_head)
-    }
-
-    /// Wait until persisting `target_consensus_head` would stay within the bounded replay window.
-    pub(crate) async fn wait_for_durable_commit_capacity(
-        &self,
-        target_consensus_head: CommitIndex,
+        quorum_accepted_round: Round,
+        responsive_stake: Stake,
+        probed_at_ms: u64,
     ) {
-        let mut durable_rx = self.highest_durable_commit.subscribe();
-        let mut recovery_rx = self.recovery_status.subscribe();
+        let mut progress = self.peer_progress.lock();
+        progress.quorum_accepted_round = quorum_accepted_round;
+        progress.responsive_stake = responsive_stake;
+        progress.probed_at_ms = probed_at_ms;
+    }
+
+    pub(crate) fn report_quorum_commit_index(&self, quorum_commit_index: CommitIndex) {
+        self.peer_progress.lock().quorum_commit_index = quorum_commit_index;
+    }
+
+    pub(crate) async fn wait_for_handled(&self, target: CommitIndex) {
+        let mut handled = self.subscribe_handled_commit();
         loop {
-            if self.try_reserve_consensus_head(target_consensus_head) {
+            if *handled.borrow_and_update() >= target {
                 return;
             }
-            tokio::select! {
-                result = durable_rx.changed() => {
-                    result.expect("commit consumer durable-progress sender cannot be dropped");
-                }
-                result = recovery_rx.changed() => {
-                    result.expect("commit recovery-status sender cannot be dropped");
-                }
-            }
+            handled.changed().await.unwrap();
         }
     }
 
-    pub(crate) fn start_recovery(&self, target_commit: CommitIndex) {
-        let mut recovery_drain_gate = self.recovery_drain_gate.lock();
-        recovery_drain_gate.highest_reserved_consensus_head = recovery_drain_gate
-            .highest_reserved_consensus_head
-            .max(target_commit);
-        drop(recovery_drain_gate);
-        self.recovery_status.send_replace(CommitRecoveryStatus {
-            target_commit,
-            started: true,
-            scan_complete: false,
-        });
-    }
-
-    pub(crate) fn finish_recovery_scan(&self) {
-        self.recovery_status.send_modify(|status| {
-            assert!(status.started, "consensus recovery was not started");
-            status.scan_complete = true;
-        });
-        let status = *self.recovery_status.borrow();
-        let processed_commit = self.highest_handled_commit();
-        info!(
-            target: "rtd_startup",
-            processed_commit,
-            target_commit = status.target_commit,
-            remaining_commits = status.target_commit.saturating_sub(processed_commit),
-            "Consensus database scan is complete; waiting for replayed commits to finish applying"
-        );
-    }
-
-    pub fn is_recovery_complete(&self) -> bool {
-        let status = *self.recovery_status.borrow();
-        status.started
-            && status.scan_complete
-            && self.highest_handled_commit() >= status.target_commit
-    }
-
-    pub async fn wait_for_recovery_complete(&self) {
-        let mut recovery_rx = self.recovery_status.subscribe();
-        let mut handled_rx = self.highest_handled_commit.subscribe();
-        loop {
-            let status = *recovery_rx.borrow_and_update();
-            let highest_handled_commit = *handled_rx.borrow_and_update();
-            if status.started
-                && status.scan_complete
-                && highest_handled_commit >= status.target_commit
-            {
-                return;
-            }
-            tokio::select! {
-                result = recovery_rx.changed() => {
-                    result.expect("commit recovery-status sender cannot be dropped");
-                }
-                result = handled_rx.changed() => {
-                    result.expect("commit consumer progress sender cannot be dropped");
-                }
-            }
-        }
-    }
-
-    /// Waits for consensus to replay commits until the consumer last processed commit index.
+    /// Waits until the consumer has applied the startup replay target, including
+    /// target discovery for full replay. An undiscovered target is not an empty
+    /// database.
     pub async fn replay_to_consumer_last_processed_commit_complete(&self) {
-        let mut rx = self.highest_handled_commit.subscribe();
-        loop {
-            let highest_handled = *rx.borrow_and_update();
-            if highest_handled >= self.consumer_last_processed_commit_index {
-                return;
-            }
-            rx.changed().await.unwrap();
-        }
+        let target = self.wait_for_replay_target().await;
+        self.wait_for_handled(target).await;
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::CommitConsumerMonitor;
+    use std::time::Duration;
 
-    #[test]
-    fn test_commit_consumer_monitor() {
-        let monitor = CommitConsumerMonitor::new(0, 10);
+    use rstest::rstest;
+    use tokio::time::timeout;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_consumer_monitor() {
+        let monitor = ConsumerMonitor::new(0, Some(10));
         assert_eq!(monitor.highest_handled_commit(), 0);
-
         monitor.set_highest_handled_commit(100);
         assert_eq!(monitor.highest_handled_commit(), 100);
-        assert_eq!(monitor.highest_durable_commit(), 100);
+        monitor
+            .replay_to_consumer_last_processed_commit_complete()
+            .await;
     }
 
     #[tokio::test]
-    async fn durable_capacity_waits_for_crash_safe_progress() {
-        let monitor = std::sync::Arc::new(CommitConsumerMonitor::new_with_recovery_drain_ceiling(
-            0, 10, None,
-        ));
-        assert_eq!(monitor.highest_durable_commit(), 10);
+    async fn full_replay_waits_for_storage_and_for_the_consumer() {
+        let (args, _receiver) = CommitConsumerArgs::new_with_full_replay();
+        let monitor = args.monitor();
+        assert!(
+            timeout(
+                Duration::from_millis(20),
+                monitor.replay_to_consumer_last_processed_commit_complete()
+            )
+            .await
+            .is_err()
+        );
+        monitor.set_replay_target(5);
+        monitor.set_highest_handled_commit(4);
+        assert!(
+            timeout(
+                Duration::from_millis(20),
+                monitor.replay_to_consumer_last_processed_commit_complete()
+            )
+            .await
+            .is_err()
+        );
+        monitor.set_highest_handled_commit(5);
+        timeout(
+            Duration::from_secs(1),
+            monitor.replay_to_consumer_last_processed_commit_complete(),
+        )
+        .await
+        .unwrap();
+    }
 
-        let waiter = tokio::spawn({
-            let monitor = monitor.clone();
-            async move {
-                monitor
-                    .wait_for_durable_commit_capacity(10 + super::MAX_PENDING_DURABLE_COMMITS + 1)
-                    .await;
+    #[rstest]
+    #[case(0)]
+    #[case(5)]
+    #[tokio::test]
+    async fn acknowledged_full_replay_waits_for_target_discovery(#[case] target: CommitIndex) {
+        let (args, _receiver) = CommitConsumerArgs::new_with_full_replay();
+        let monitor = args.monitor();
+        assert_eq!(monitor.replay_target(), None);
+        let ready = monitor.replay_to_consumer_last_processed_commit_complete();
+        tokio::pin!(ready);
+        assert!(futures::poll!(&mut ready).is_pending());
+
+        monitor.set_highest_handled_commit(target);
+        assert!(futures::poll!(&mut ready).is_pending());
+        monitor.set_replay_target(target);
+        timeout(Duration::from_secs(1), ready).await.unwrap();
+    }
+
+    #[rstest]
+    #[case::discovered_empty(true, 0)]
+    #[case::discovered_nonempty(true, 5)]
+    #[case::supplied_empty(false, 0)]
+    #[case::supplied_nonempty(false, 5)]
+    #[tokio::test]
+    #[should_panic(expected = "startup replay target must be set only once")]
+    async fn replay_target_cannot_be_set_twice(
+        #[case] full_replay: bool,
+        #[case] target: CommitIndex,
+    ) {
+        let (args, _receiver) = if full_replay {
+            CommitConsumerArgs::new_with_full_replay()
+        } else {
+            CommitConsumerArgs::new(0, target)
+        };
+        let monitor = args.monitor();
+        if full_replay {
+            monitor.set_replay_target(target);
+        }
+        assert_eq!(monitor.replay_target(), Some(target));
+        assert_eq!(monitor.wait_for_replay_target().await, target);
+        monitor.set_replay_target(target);
+    }
+
+    #[tokio::test]
+    async fn committed_handled_and_target_notifications_are_independent() {
+        let (args, _receiver) = CommitConsumerArgs::new_with_full_replay();
+        let monitor = args.monitor();
+        let mut committed = monitor.subscribe_progress();
+        let mut handled = monitor.subscribe_handled_commit();
+        let target = monitor.wait_for_replay_target();
+        tokio::pin!(target);
+        assert!(futures::poll!(&mut target).is_pending());
+
+        monitor.report_committed(20, 50);
+        timeout(Duration::from_secs(1), committed.changed())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            *committed.borrow_and_update(),
+            CommitProgress {
+                highest_committed_index: 20,
+                highest_committed_round: 50,
             }
-        });
-        tokio::task::yield_now().await;
-        assert!(!waiter.is_finished());
+        );
+        assert!(!handled.has_changed().unwrap());
+        assert!(futures::poll!(&mut target).is_pending());
 
-        monitor.set_highest_durable_commit(11);
-        waiter.await.unwrap();
+        monitor.set_highest_handled_commit(2);
+        timeout(Duration::from_secs(1), handled.changed())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(*handled.borrow_and_update(), 2);
+        assert!(!committed.has_changed().unwrap());
+        assert!(futures::poll!(&mut target).is_pending());
+
+        monitor.set_replay_target(5);
+        assert_eq!(timeout(Duration::from_secs(1), target).await.unwrap(), 5);
+        assert!(!committed.has_changed().unwrap());
+        assert!(!handled.has_changed().unwrap());
+        assert_eq!(monitor.replay_target(), Some(5));
+        assert_eq!(monitor.highest_handled_commit(), 2);
+
+        monitor.report_committed(19, 49);
+        monitor.report_committed(20, 50);
+        assert!(!committed.has_changed().unwrap());
+        assert_eq!(monitor.progress(), *committed.borrow());
     }
 
     #[tokio::test]
-    async fn recovery_completes_only_after_scan_and_consumer_handling() {
-        let monitor = std::sync::Arc::new(CommitConsumerMonitor::new_with_recovery_drain_ceiling(
-            5, 10, None,
-        ));
-        monitor.start_recovery(20);
-        monitor.set_highest_handled_commit(20);
-        assert!(!monitor.is_recovery_complete());
-
-        monitor.finish_recovery_scan();
-        monitor.wait_for_recovery_complete().await;
-        assert!(monitor.is_recovery_complete());
+    async fn committed_head_advances_independently_of_a_stalled_consumer() {
+        let monitor = ConsumerMonitor::new(0, Some(0));
+        monitor.report_committed(20, 50);
+        monitor.set_highest_handled_commit(2);
+        monitor.report_committed(21, 52);
+        monitor.report_committed(19, 49);
+        assert_eq!(monitor.highest_handled_commit(), 2);
+        assert_eq!(monitor.progress().highest_committed_index, 21);
+        assert_eq!(monitor.progress().highest_committed_round, 52);
     }
 
     #[tokio::test]
-    async fn oversized_existing_tail_gets_only_its_persisted_post_scan_ceiling() {
-        let durable = 10;
-        let target = durable + super::MAX_PENDING_DURABLE_COMMITS + 5_000;
-        let recovery_drain_ceiling = target + 8_000;
-        let monitor = std::sync::Arc::new(CommitConsumerMonitor::new_with_recovery_drain_ceiling(
-            0,
-            durable,
-            Some(recovery_drain_ceiling),
-        ));
-        monitor.start_recovery(target);
+    async fn peer_progress_stores_latest_samples() {
+        let monitor = ConsumerMonitor::new(0, Some(0));
+        assert_eq!(monitor.peer_progress(), PeerProgress::default());
+        let committed = monitor.subscribe_progress();
+        let handled = monitor.subscribe_handled_commit();
 
-        assert_eq!(monitor.remaining_durable_commit_capacity(target, target), 0);
-        let waiter = tokio::spawn({
-            let monitor = monitor.clone();
-            async move {
-                monitor.wait_for_durable_commit_capacity(target + 1).await;
+        monitor.report_probe(30, 7_500, 1_000);
+        monitor.report_quorum_commit_index(12);
+        assert_eq!(
+            monitor.peer_progress(),
+            PeerProgress {
+                quorum_accepted_round: 30,
+                quorum_commit_index: 12,
+                responsive_stake: 7_500,
+                probed_at_ms: 1_000,
             }
-        });
-        tokio::task::yield_now().await;
-        assert!(!waiter.is_finished());
-
-        monitor.finish_recovery_scan();
-        waiter.await.unwrap();
-        assert_eq!(
-            monitor.remaining_durable_commit_capacity(target, target),
-            recovery_drain_ceiling - target
-        );
-        assert_eq!(
-            monitor
-                .remaining_durable_commit_capacity(recovery_drain_ceiling, recovery_drain_ceiling),
-            0
         );
 
-        // Reaching the old startup target is not enough when live consensus has advanced beyond
-        // the normal window to sequence checkpoint signatures.
-        let live_consensus_head = target + 2_000;
-        monitor.set_highest_durable_commit(target);
-        assert!(monitor.try_reserve_consensus_head(live_consensus_head));
+        // Lower values replace higher ones.
+        monitor.report_probe(20, 0, 2_000);
+        monitor.report_quorum_commit_index(3);
         assert_eq!(
-            monitor.remaining_durable_commit_capacity(target, target),
-            recovery_drain_ceiling - target,
+            monitor.peer_progress(),
+            PeerProgress {
+                quorum_accepted_round: 20,
+                quorum_commit_index: 3,
+                responsive_stake: 0,
+                probed_at_ms: 2_000,
+            }
         );
 
-        // Once every startup commit is durable and Core's actual pending head is back inside the
-        // normal window, retire the legacy allowance permanently for this process.
-        monitor.set_highest_durable_commit(live_consensus_head - 500);
-        assert_eq!(
-            monitor.remaining_durable_commit_capacity(live_consensus_head, live_consensus_head),
-            super::MAX_PENDING_DURABLE_COMMITS - 500,
-        );
-        assert_eq!(
-            monitor
-                .remaining_durable_commit_capacity(recovery_drain_ceiling, recovery_drain_ceiling),
-            0,
-            "a retired drain allowance must not reopen"
-        );
-
-        let restarted_target = recovery_drain_ceiling;
-        let restarted = CommitConsumerMonitor::new_with_recovery_drain_ceiling(
-            0,
-            durable,
-            Some(recovery_drain_ceiling),
-        );
-        restarted.start_recovery(restarted_target);
-        restarted.finish_recovery_scan();
-        assert_eq!(
-            restarted.remaining_durable_commit_capacity(restarted_target, restarted_target),
-            0,
-            "a restart must not grant another drain budget"
-        );
-    }
-
-    #[tokio::test]
-    async fn recovery_drain_full_window_allows_only_bounded_signature_commits() {
-        let durable = 139_885;
-        let startup_head = durable + super::MAX_PENDING_DURABLE_COMMITS;
-        let fixed_ceiling = startup_head + 2_000;
-        let normal = CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, None);
-        normal.start_recovery(startup_head);
-        normal.set_highest_handled_commit(startup_head);
-        normal.finish_recovery_scan();
-        assert_eq!(
-            normal.remaining_durable_commit_capacity(startup_head, startup_head),
-            0
-        );
-        assert!(!normal.try_reserve_consensus_head(startup_head + 1));
-
-        let recovering =
-            CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, Some(fixed_ceiling));
-        recovering.start_recovery(startup_head);
-        recovering.set_highest_handled_commit(startup_head);
-        assert!(!recovering.try_reserve_consensus_head(startup_head + 1));
-        recovering.finish_recovery_scan();
-        assert_eq!(
-            recovering.remaining_durable_commit_capacity(startup_head, startup_head),
-            2_000
-        );
-        assert!(recovering.try_reserve_consensus_head(startup_head + 1));
-        assert!(!recovering.try_reserve_consensus_head(fixed_ceiling + 1));
-
-        recovering.set_highest_durable_commit(startup_head);
-        assert_eq!(
-            recovering.remaining_durable_commit_capacity(startup_head + 1, startup_head + 1),
-            super::MAX_PENDING_DURABLE_COMMITS - 1
-        );
-        assert!(!recovering.try_reserve_consensus_head(fixed_ceiling));
-
-        let restarted =
-            CommitConsumerMonitor::new_with_recovery_drain_ceiling(0, durable, Some(fixed_ceiling));
-        restarted.start_recovery(fixed_ceiling);
-        restarted.set_highest_handled_commit(fixed_ceiling);
-        restarted.finish_recovery_scan();
-        assert_eq!(
-            restarted.remaining_durable_commit_capacity(fixed_ceiling, fixed_ceiling),
-            0
-        );
-        assert!(!restarted.try_reserve_consensus_head(fixed_ceiling + 1));
+        // Peer progress does not notify the committed head or handled commit subscribers.
+        assert!(!committed.has_changed().unwrap());
+        assert!(!handled.has_changed().unwrap());
     }
 }

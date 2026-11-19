@@ -4,17 +4,17 @@
 // Using a returned reference in a non-reference position (where the underlying type matches)
 // produces a `Read` argument internally.
 
-//# init --addresses test=0x0 --accounts A --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0 --accounts A
 
 //# publish
-module test::m {
-    public fun id_ref(x: &u64): &u64 {
-        x
-    }
+module test::m;
 
-    public fun check(value: u64, expected: u64) {
-        assert!(value == expected, 0);
-    }
+public fun id_ref(x: &u64): &u64 {
+    x
+}
+
+public fun check(value: u64, expected: u64) {
+    assert!(value == expected, 0);
 }
 
 //# programmable --sender A --dev-inspect --inputs 112u64

@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 
 use rtd_kvstore::{BigTableClient, WatermarkV1};
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     BatchGetObjectsRequest, BatchGetObjectsResponse, BatchGetTransactionsRequest,
     BatchGetTransactionsResponse, GetCheckpointRequest, GetCheckpointResponse, GetEpochRequest,
     GetEpochResponse, GetObjectRequest, GetObjectResponse, GetServiceInfoRequest,
@@ -425,9 +425,9 @@ pub(crate) mod test_utils {
     use rtd_kvstore::testing::MockBigtableServer;
     use rtd_package_resolver::PackageStore;
     use rtd_package_resolver::Resolver;
-    use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
-    use rtd_rpc::proto::rtd::rpc::v2::Ordering;
-    use rtd_rpc::proto::rtd::rpc::v2::QueryOptions;
+    use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
+    use rtd_rpc::proto::sui::rpc::v2::Ordering;
+    use rtd_rpc::proto::sui::rpc::v2::QueryOptions;
     use rtd_types::balance_change::derive_balance_changes_2;
     use rtd_types::full_checkpoint_content::Checkpoint;
     use rtd_types::storage::{ObjectKey, get_transaction_object_set};

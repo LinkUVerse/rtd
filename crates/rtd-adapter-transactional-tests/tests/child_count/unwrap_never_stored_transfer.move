@@ -8,27 +8,27 @@
 
 //# publish
 
-module test::m {
-    public struct S has key, store {
-        id: rtd::object::UID,
-    }
+module test::m;
 
-    public struct R has key {
-        id: rtd::object::UID,
-        s: S,
-    }
+public struct S has key, store {
+    id: rtd::object::UID,
+}
 
-    public entry fun create(ctx: &mut TxContext) {
-        let parent = rtd::object::new(ctx);
-        let child = S { id: rtd::object::new(ctx) };
-        rtd::transfer::transfer(R { id: parent, s: child }, tx_context::sender(ctx))
-    }
+public struct R has key {
+    id: rtd::object::UID,
+    s: S,
+}
 
-    public entry fun unwrap_and_transfer(r: R, ctx: &mut TxContext) {
-        let R { id, s } = r;
-        rtd::object::delete(id);
-        rtd::transfer::transfer(s, tx_context::sender(ctx));
-    }
+public entry fun create(ctx: &mut TxContext) {
+    let parent = rtd::object::new(ctx);
+    let child = S { id: rtd::object::new(ctx) };
+    rtd::transfer::transfer(R { id: parent, s: child }, tx_context::sender(ctx))
+}
+
+public entry fun unwrap_and_transfer(r: R, ctx: &mut TxContext) {
+    let R { id, s } = r;
+    rtd::object::delete(id);
+    rtd::transfer::transfer(s, tx_context::sender(ctx));
 }
 
 //

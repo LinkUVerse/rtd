@@ -11,14 +11,14 @@ use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::Checkpoint;
-use rtd_rpc::proto::rtd::rpc::v2::Event;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ObjectSet;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionEvents;
-use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
+use rtd_rpc::proto::sui::rpc::v2::Checkpoint;
+use rtd_rpc::proto::sui::rpc::v2::Event;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetCheckpointResponse;
+use rtd_rpc::proto::sui::rpc::v2::ObjectSet;
+use rtd_rpc::proto::sui::rpc::v2::TransactionEvents;
+use rtd_rpc::proto::sui::rpc::v2::get_checkpoint_request::CheckpointId;
 use rtd_sdk_types::Digest;
 use rtd_types::balance_change::derive_balance_changes_2;
 use rtd_types::full_checkpoint_content::ObjectSet as TypesObjectSet;
@@ -115,7 +115,7 @@ pub fn get_checkpoint(
                 let set = checkpoint_data
                     .object_set
                     .iter()
-                    .map(|o| rtd_rpc::proto::rtd::rpc::v2::Object::merge_from(o, &submask))
+                    .map(|o| rtd_rpc::proto::sui::rpc::v2::Object::merge_from(o, &submask))
                     .collect();
                 checkpoint.objects = Some(ObjectSet::default().with_objects(set));
             }

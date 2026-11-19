@@ -940,7 +940,7 @@ fn create_genesis_transaction(
                 // unsettled withdrawals for it to account for.
                 &rtd_types::accumulator_root::EmptyUnsettledObjectFunds,
                 gas_data,
-                RtdGasStatus::new_unmetered(protocol_config),
+                0, // reference gas price: unused, the genesis transaction is unmetered
                 kind,
                 None, // compat_args
                 signer,

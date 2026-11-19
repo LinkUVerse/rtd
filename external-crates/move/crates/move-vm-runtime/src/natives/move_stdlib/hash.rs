@@ -12,8 +12,8 @@ use crate::{
     },
     pop_arg,
 };
-use move_binary_format::errors::PartialVMResult;
-use move_core_types::gas_algebra::{InternalGas, InternalGasPerByte, NumBytes};
+use move_binary_format::{errors::PartialVMResult, safe_assert, safe_assert_eq};
+use move_core_types::gas_algebra::InternalGas;
 use sha2::{Digest, Sha256};
 use sha3::Sha3_256;
 use smallvec::smallvec;
@@ -28,28 +28,27 @@ use std::{collections::VecDeque, sync::Arc};
 #[derive(Debug, Clone)]
 pub struct Sha2_256GasParameters {
     pub base: InternalGas,
-    pub per_byte: InternalGasPerByte,
-    pub legacy_min_input_len: NumBytes,
+    pub per_byte: InternalGas,
+    pub legacy_min_input_len: u64,
 }
 
 #[inline]
 fn native_sha2_256(
     gas_params: &Sha2_256GasParameters,
     context: &mut NativeContext,
-    _ty_args: Vec<Type>,
+    ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(_ty_args.is_empty());
-    debug_assert!(arguments.len() == 1);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(arguments.len(), 1);
 
     let hash_arg = pop_arg!(arguments, Vec<u8>);
 
     let cost = gas_params.base
-        + gas_params.per_byte
-            * std::cmp::max(
-                NumBytes::new(hash_arg.len() as u64),
-                gas_params.legacy_min_input_len,
-            );
+        + gas_params.per_byte.saturating_mul(std::cmp::max(
+            hash_arg.len() as u64,
+            gas_params.legacy_min_input_len,
+        ));
     // Charge before doing work
     native_charge_gas_early_exit!(context, cost);
 
@@ -77,28 +76,27 @@ pub fn make_native_sha2_256(gas_params: Sha2_256GasParameters) -> NativeFunction
 #[derive(Debug, Clone)]
 pub struct Sha3_256GasParameters {
     pub base: InternalGas,
-    pub per_byte: InternalGasPerByte,
-    pub legacy_min_input_len: NumBytes,
+    pub per_byte: InternalGas,
+    pub legacy_min_input_len: u64,
 }
 
 #[inline]
 fn native_sha3_256(
     gas_params: &Sha3_256GasParameters,
     context: &mut NativeContext,
-    _ty_args: Vec<Type>,
+    ty_args: Vec<Type>,
     mut arguments: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(_ty_args.is_empty());
-    debug_assert!(arguments.len() == 1);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(arguments.len(), 1);
 
     let hash_arg = pop_arg!(arguments, Vec<u8>);
 
     let cost = gas_params.base
-        + gas_params.per_byte
-            * std::cmp::max(
-                NumBytes::new(hash_arg.len() as u64),
-                gas_params.legacy_min_input_len,
-            );
+        + gas_params.per_byte.saturating_mul(std::cmp::max(
+            hash_arg.len() as u64,
+            gas_params.legacy_min_input_len,
+        ));
     // Charge before doing work
     native_charge_gas_early_exit!(context, cost);
 

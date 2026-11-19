@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    gas_charger::GasPayment,
+    metering::gas_charger::GasPayment,
     static_programmable_transactions::{
         linkage::resolved_linkage::{ExecutableLinkage, ResolvedLinkage},
         loading::ast::{self as L, PackagePayload},
@@ -12,8 +12,8 @@ use crate::{
 use indexmap::{IndexMap, IndexSet};
 use move_core_types::u256::U256;
 use move_vm_runtime::execution::values::VectorSpecialization;
-use rtd_types::base_types::{ObjectID, ObjectRef};
 use std::cell::OnceCell;
+use rtd_types::base_types::{ObjectID, ObjectRef};
 
 //**************************************************************************************************
 // AST Nodes
@@ -21,7 +21,7 @@ use std::cell::OnceCell;
 
 #[derive(Debug)]
 pub struct Transaction {
-    pub gas_payment: Option<GasPayment>,
+    pub(crate) gas_payment: Option<GasPayment>,
     /// Gathered BCS bytes from Pure inputs
     pub bytes: IndexSet<Vec<u8>>,
     // All input objects
@@ -37,7 +37,7 @@ pub struct Transaction {
     /// < `original_command_len`
     pub original_command_len: usize,
     pub commands: Commands,
-    pub unified_linkage: Option<ExecutableLinkage>,
+    pub unified_linkage: ExecutableLinkage,
 }
 
 /// The original index into the `input` vector of the transaction, before the inputs were split

@@ -6,18 +6,19 @@ use std::path::PathBuf;
 use prost_types::FieldMask;
 use rtd_macros::sim_test;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::Bcs;
-use rtd_rpc::proto::rtd::rpc::v2::ExecuteTransactionRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ExecuteTransactionResponse;
-use rtd_rpc::proto::rtd::rpc::v2::Transaction;
-use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
-use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::Bcs;
+use rtd_rpc::proto::sui::rpc::v2::ExecuteTransactionRequest;
+use rtd_rpc::proto::sui::rpc::v2::ExecuteTransactionResponse;
+use rtd_rpc::proto::sui::rpc::v2::Transaction;
+use rtd_rpc::proto::sui::rpc::v2::UserSignature;
+use rtd_rpc::proto::sui::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
 use rtd_sdk_types::BalanceChange;
 use rtd_test_transaction_builder::{TestTransactionBuilder, make_transfer_rtd_transaction};
 use rtd_types::base_types::RtdAddress;
 use rtd_types::transaction::TransactionDataAPI;
 use test_cluster::TestClusterBuilder;
 
+mod mldsa65;
 mod resolve;
 
 #[sim_test]

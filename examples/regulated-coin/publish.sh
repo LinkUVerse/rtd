@@ -14,12 +14,11 @@ done
 # Put the dependent package, as the depending will be published too via --with-unpublished-dependencies
 MOVE_PACKAGE_PATH=./move
 
-NETWORK="${RTD_FULLNODE_URL:-}"
-if [[ -z "$NETWORK" ]]; then
-  echo "Set RTD_FULLNODE_URL to the JSON-RPC endpoint of your RTD testnet"
-  exit 1
-fi
+rtd client switch --env testnet
 
+NETWORK="https://rpc.testnet.rtd.io:443"
+FAUCET="https://faucet.testnet.rtd.io/gas"
+    
 rtd client switch --env testnet
 
 ADMIN_ADDRESS=$(rtd client active-address)
@@ -57,13 +56,6 @@ DENY_CAP_ID=$DENY_CAP_ID
 TREASURY_CAP_ID=$TREASURY_CAP_ID
 MODULE_NAME=regulated_coin
 COIN_NAME=REGULATED_COIN
-API_ENV
-
-cat >rust-client/.env<<-API_ENV
-RTD_FULLNODE_URL=$NETWORK
-PACKAGE_ID=$PACKAGE_ID
-MODULE_NAME=regulated_coin
-RUST_LOG=rust_client=DEBUG
 API_ENV
 
 echo "Contract deployment finished!"

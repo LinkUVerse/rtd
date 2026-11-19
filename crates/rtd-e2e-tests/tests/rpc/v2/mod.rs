@@ -9,7 +9,7 @@ use prost_types::FieldMask;
 use rtd_move_build::BuildConfig;
 use rtd_rpc::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Bcs, ExecuteTransactionRequest, ExecutedTransaction, Transaction, UserSignature,
 };
 use rtd_types::base_types::{ObjectID, RtdAddress};
@@ -140,7 +140,7 @@ async fn publish_package(
         payment: vec![(gas_object.0, gas_object.1, gas_object.2)],
         owner: address,
         price: gas_price,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);
@@ -157,7 +157,7 @@ async fn publish_package(
         .changed_objects
         .iter()
         .find_map(|o| {
-            use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
+            use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
             if o.output_state == Some(OutputObjectState::PackageWrite as i32) {
                 o.object_id
                     .as_ref()

@@ -4,10 +4,10 @@
 use rtd_macros::sim_test;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
-use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
-use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, ExecutedTransaction, GetCheckpointRequest, Object};
+use rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest;
+use rtd_rpc::proto::sui::rpc::v2::get_checkpoint_request::CheckpointId;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::{Checkpoint, ExecutedTransaction, GetCheckpointRequest, Object};
 use test_cluster::TestClusterBuilder;
 
 use crate::{stake_with_validator, transfer_coin};

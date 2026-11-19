@@ -10,21 +10,21 @@ task 1, lines 6-29:
 //# publish --sender A
 created: object(1,0)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 7782400,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1031000000, storage_cost: 7782400,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 31:
 //# run test::obj_vault::new --sender A
 created: object(2,0)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 987901, non_refundable_storage_fee: 99
 
 task 3, lines 33-35:
 //# programmable --sender A --dry-run --inputs object(2,0) 0 @A
 // Withdrawing zero MIST should succeed before the vault has an object balance.
 //> 0: test::obj_vault::withdraw_to(Input(0), Input(1), Input(2));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 0), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 0)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(_), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 0), (object(_), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 0)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 4, lines 37-39:
 //# programmable --sender A --dry-run --inputs object(2,0) 1 @A
@@ -39,8 +39,8 @@ task 5, lines 41-44:
 //> 0: SplitCoins(Gas, [Input(0)]);
 //> 1: test::obj_vault::fund(Input(1), Result(0));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 1000)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 1000)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 6, lines 46-47:
 //# create-checkpoint
@@ -51,8 +51,8 @@ task 7, lines 49-51:
 // Withdrawing 500 MIST from the funded vault should succeed.
 //> 0: test::obj_vault::withdraw_to(Input(0), Input(1), Input(2));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 500), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 500)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(_), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 500), (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 500)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 8, lines 53-55:
 //# programmable --sender A --dry-run --inputs object(2,0) 5000 @A
@@ -76,8 +76,8 @@ task 10, lines 62-66:
 //> 1: test::obj_vault::fund(Input(1), Result(0));
 //> 2: test::obj_vault::withdraw_to(Input(1), Input(2), Input(3));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 1400), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 900)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(_), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 1400), (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 900)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 11, lines 68-72:
 //# programmable --sender A --dry-run --inputs 500 object(2,0) 1600 @A
@@ -93,8 +93,8 @@ task 12, lines 74-76:
 // Withdrawing zero MIST should succeed.
 //> 0: test::obj_vault::withdraw_to(Input(0), Input(1), Input(2));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 0), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 0)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(_), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 0), (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 0)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 13, lines 78-82:
 //# programmable --sender A --dry-run --inputs 700 object(2,0) 600 @A
@@ -103,8 +103,8 @@ task 13, lines 78-82:
 //> 1: test::obj_vault::fund(Input(1), Result(0));
 //> 2: test::obj_vault::withdraw_to(Input(1), Input(2), Input(3));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 600), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 100)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(_), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 600), (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 100)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 14, lines 84-86:
 //# programmable --sender A --inputs object(2,0) 600 @A
@@ -112,8 +112,8 @@ task 14, lines 84-86:
 //> 0: test::obj_vault::withdraw_to(Input(0), Input(1), Input(2));
 mutated: object(0,0), object(2,0)
 unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000acc
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 600), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 600)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 600), (object(14,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 600)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 15, lines 88-90:
 //# programmable --sender A --inputs object(2,0) 600 @A
@@ -132,8 +132,8 @@ task 17, lines 95-97:
 //> 0: test::obj_vault::withdraw_to(Input(0), Input(1), Input(2));
 mutated: object(0,0), object(2,0)
 unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000acc
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 400), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 400)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Split, 400), (object(14,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 400)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229
 
 task 18, lines 99-103:
 //# programmable --sender A --inputs 500 object(2,0) 400 @A
@@ -142,5 +142,5 @@ task 18, lines 99-103:
 //> 1: test::obj_vault::fund(Input(1), Result(0));
 //> 2: test::obj_vault::withdraw_to(Input(1), Input(2), Input(3));
 mutated: object(0,0), object(2,0)
-accumulators_written: (object(3,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 400), (object(3,1), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 100)
-gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2264724, non_refundable_storage_fee: 22876
+accumulators_written: (object(5,0), fake(2,0), rtd::balance::Balance<rtd::rtd::RTD>, Merge, 100), (object(14,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 400)
+gas summary: computation_cost: 1000000, storage_cost: 2287600,  storage_rebate: 2287371, non_refundable_storage_fee: 229

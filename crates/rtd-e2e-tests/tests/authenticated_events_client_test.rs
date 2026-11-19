@@ -3,6 +3,8 @@
 
 use futures::StreamExt;
 use move_core_types::identifier::Identifier;
+use std::sync::Arc;
+use std::time::Duration;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_light_client::authenticated_events::AuthenticatedEventsClient;
 use rtd_macros::sim_test;
@@ -16,8 +18,6 @@ use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::committee::Committee;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::TransactionData;
-use std::sync::Arc;
-use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 fn create_rpc_config_with_authenticated_events() -> rtd_config::RpcConfig {
@@ -231,6 +231,7 @@ async fn test_client_cross_epoch_stream() {
     let rpc_config = create_rpc_config_with_authenticated_events();
 
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .disable_fullnode_pruning()
         .with_rpc_config(rpc_config)
         .with_epoch_duration_ms(10000)

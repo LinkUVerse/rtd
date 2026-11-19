@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rtd_futures::service::Service;
 use serde::Deserialize;
 use serde::Serialize;
+use rtd_futures::service::Service;
 use tokio::sync::mpsc;
 use tracing::info;
 
@@ -45,14 +45,12 @@ mod committer;
 pub trait Handler: Processor {
     type Store: SequentialStore;
 
-    /// If at least this many rows are pending, the committer will commit them eagerly.
-    const MIN_EAGER_ROWS: usize = 50;
-
-    /// Soft cap: once this many rows are pending, the collector stops eagerly draining
-    /// its input channel and yields to the flush phase. Receive is never hard-gated — unlike
-    /// concurrent pipelines, a missing predecessor may be buried in the input channel, and
-    /// blocking receive would risk deadlock. The cap only bounds receive-to-flush latency in
-    /// the happy path.
+    /// Once this many rows are pending and the next checkpoint to write has arrived, the
+    /// collector stops receiving processed checkpoints until it cuts a batch, which applies
+    /// back-pressure to the processor and ingestion. While the next checkpoint is missing, the
+    /// collector keeps receiving past this limit, because the missing checkpoint may still be in
+    /// its input channel. Under back-pressure, a batch therefore gathers about this many rows,
+    /// which is fewer than `MAX_BATCH_CHECKPOINTS` checkpoints when those hold more rows.
     const MAX_PENDING_ROWS: usize = 5000;
 
     /// Maximum number of checkpoints to try and write in a single batch. The larger this number
@@ -97,10 +95,7 @@ pub struct SequentialConfig {
     /// Processor concurrency. Defaults to adaptive scaling up to the number of CPUs.
     pub fanout: Option<ConcurrencyConfig>,
 
-    /// Override for `Handler::MIN_EAGER_ROWS` (eager batch threshold).
-    pub min_eager_rows: Option<usize>,
-
-    /// Override for `Handler::MAX_PENDING_ROWS` (soft cap).
+    /// Override for `Handler::MAX_PENDING_ROWS` (reorder buffer limit).
     pub max_pending_rows: Option<usize>,
 
     /// Override for `Handler::MAX_BATCH_CHECKPOINTS` (checkpoints per write batch).
@@ -153,11 +148,11 @@ pub(crate) fn pipeline<H: Handler>(
             max: num_cpus::get().max(1),
             dead_band: None,
         });
-    let min_eager_rows = config.min_eager_rows.unwrap_or(H::MIN_EAGER_ROWS);
     let max_pending_rows = config.max_pending_rows.unwrap_or(H::MAX_PENDING_ROWS);
     let max_batch_checkpoints = config
         .max_batch_checkpoints
-        .unwrap_or(H::MAX_BATCH_CHECKPOINTS);
+        .unwrap_or(H::MAX_BATCH_CHECKPOINTS)
+        .max(1);
 
     let processor_channel_size = config
         .processor_channel_size
@@ -188,7 +183,6 @@ pub(crate) fn pipeline<H: Handler>(
         next_checkpoint,
         collector_rx,
         metrics.clone(),
-        min_eager_rows,
         max_pending_rows,
         max_batch_checkpoints,
         collector_tx,
@@ -231,7 +225,6 @@ mod tests {
         type Store = FallibleMockStore;
         type Batch = Vec<u64>;
         const MAX_BATCH_CHECKPOINTS: usize = 3; // Using small max value for testing.
-        const MIN_EAGER_ROWS: usize = 4; // Using small eager value for testing.
 
         fn batch(&self, batch: &mut Self::Batch, values: std::vec::IntoIter<Self::Value>) {
             batch.extend(values);
@@ -267,7 +260,6 @@ mod tests {
     ) -> TestSetup {
         let metrics = IndexerMetrics::new(None, &Registry::default());
 
-        let min_eager_rows = config.min_eager_rows.unwrap_or(TestHandler::MIN_EAGER_ROWS);
         let max_pending_rows = config
             .max_pending_rows
             .unwrap_or(TestHandler::MAX_PENDING_ROWS);
@@ -292,7 +284,6 @@ mod tests {
             next_checkpoint,
             checkpoint_rx,
             metrics.clone(),
-            min_eager_rows,
             max_pending_rows,
             max_batch_checkpoints,
             collector_tx,
@@ -322,6 +313,73 @@ mod tests {
             checkpoint * 1000, // timestamp
             vec![checkpoint],  // values
         )
+    }
+
+    /// Starts only the collector, handing batches to a channel with room for `channel_size` of
+    /// them, so tests can inspect each batch.
+    fn spawn_collector(
+        config: SequentialConfig,
+        channel_size: usize,
+    ) -> (
+        mpsc::Sender<IndexedCheckpoint<TestHandler>>,
+        mpsc::Receiver<BatchedRows<TestHandler>>,
+        Service,
+    ) {
+        let metrics = IndexerMetrics::new(None, &Registry::default());
+        let (checkpoint_tx, checkpoint_rx) = mpsc::channel(10);
+        let (collector_tx, collector_rx) = mpsc::channel(channel_size);
+        let max_pending_rows = config
+            .max_pending_rows
+            .unwrap_or(TestHandler::MAX_PENDING_ROWS);
+
+        let service = collector(
+            Arc::new(TestHandler),
+            config,
+            0,
+            checkpoint_rx,
+            metrics,
+            max_pending_rows,
+            TestHandler::MAX_BATCH_CHECKPOINTS,
+            collector_tx,
+        );
+
+        (checkpoint_tx, collector_rx, service)
+    }
+
+    /// Configuration that holds rows until `min_batch_rows` are pending, or for at most
+    /// `max_batch_delay_ms`.
+    fn min_batch_config(min_batch_rows: usize, max_batch_delay_ms: u64) -> SequentialConfig {
+        SequentialConfig {
+            committer: CommitterConfig {
+                min_batch_rows,
+                max_batch_delay_ms,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    async fn recv_batch(
+        rx: &mut mpsc::Receiver<BatchedRows<TestHandler>>,
+    ) -> BatchedRows<TestHandler> {
+        tokio::time::timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("timed out waiting for a batch")
+            .expect("collector closed its channel")
+    }
+
+    /// Receives batches until one ends at checkpoint `last`, returning their values in order.
+    async fn recv_until(rx: &mut mpsc::Receiver<BatchedRows<TestHandler>>, last: u64) -> Vec<u64> {
+        let mut written = vec![];
+        while written.last() != Some(&last) {
+            written.extend(recv_batch(rx).await.batch);
+        }
+        written
+    }
+
+    async fn expect_no_batch(rx: &mut mpsc::Receiver<BatchedRows<TestHandler>>) {
+        let result = tokio::time::timeout(Duration::from_secs(1), rx.recv()).await;
+        assert!(result.is_err(), "expected no batch");
     }
 
     #[tokio::test]
@@ -424,47 +482,251 @@ mod tests {
         assert_eq!(setup.store.get_sequential_data(), vec![0, 1, 2, 3]);
     }
 
-    #[tokio::test]
-    async fn test_committer_commits_eagerly() {
+    /// The next checkpoint is cut into a batch as soon as the committer has room, and checkpoints
+    /// that arrive while it has none are gathered into the next batch together.
+    #[tokio::test(start_paused = true)]
+    async fn collector_writes_as_soon_as_the_committer_has_room() {
+        let (checkpoint_tx, mut batch_rx, _collector) =
+            spawn_collector(SequentialConfig::default(), 1);
+
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // The first batch now fills the committer's channel, so these have to wait.
+        for i in 1..=3 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0]);
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![1, 2, 3]);
+        assert_eq!(batch.watermark.checkpoint_hi_inclusive, 3);
+    }
+
+    /// Checkpoints that arrive ahead of their predecessor are held until it arrives.
+    #[tokio::test(start_paused = true)]
+    async fn collector_waits_for_missing_predecessor() {
+        let (checkpoint_tx, mut batch_rx, _collector) =
+            spawn_collector(SequentialConfig::default(), 10);
+
+        for i in [1, 2] {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        expect_no_batch(&mut batch_rx).await;
+
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1, 2]);
+    }
+
+    /// Once `max_pending_rows` are pending and the next checkpoint is ready, the collector stops
+    /// receiving, so its input channel fills up, until the committer takes a batch.
+    #[tokio::test(start_paused = true)]
+    async fn collector_stops_receiving_while_pending_rows_are_full() {
         let config = SequentialConfig {
-            committer: CommitterConfig {
-                collect_interval_ms: 4_000, // Long polling to test eager commit
-                ..Default::default()
-            },
+            max_pending_rows: Some(3),
             ..Default::default()
         };
-        let mut setup = setup_test(0, config, FallibleMockStore::default());
+        let (checkpoint_tx, mut batch_rx, _collector) = spawn_collector(config, 1);
 
-        // Wait for initial poll to be over
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Checkpoint 0 fills the committer's channel.
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
 
-        // Send checkpoints 0-2
-        for i in 0..3 {
-            send_checkpoint(&mut setup, i).await;
+        // Checkpoints 1 to 3 fill the collector's pending rows, and 4 to 13 its input channel.
+        for i in 1..=13 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
         }
 
-        // Verify no checkpoints are written yet (not enough rows for eager commit)
-        assert_eq!(setup.store.get_sequential_data(), Vec::<u64>::new());
+        let blocked = tokio::time::timeout(Duration::from_secs(1), checkpoint_tx.reserve()).await;
+        assert!(blocked.is_err(), "collector kept receiving while full");
 
-        // Send checkpoint 3 to trigger the eager commit (3 + 1 >= MIN_EAGER_ROWS)
-        send_checkpoint(&mut setup, 3).await;
+        // Taking a batch lets the collector cut the next one and receive again.
+        assert_eq!(recv_batch(&mut batch_rx).await.batch, vec![0]);
+        let permit = tokio::time::timeout(Duration::from_secs(1), checkpoint_tx.reserve())
+            .await
+            .expect("collector did not resume receiving")
+            .unwrap();
+        permit.send(create_checkpoint(14));
 
-        // Wait for processing
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        let written = recv_until(&mut batch_rx, 14).await;
+        assert_eq!(written, (1..=14).collect::<Vec<_>>());
+    }
 
-        // Verify all checkpoints are written
-        assert_eq!(setup.store.get_sequential_data(), vec![0, 1, 2, 3]);
+    /// While the next checkpoint is missing, the collector keeps receiving past
+    /// `max_pending_rows`, because the missing checkpoint may be behind them in its input channel.
+    #[tokio::test(start_paused = true)]
+    async fn collector_receives_missing_predecessor_past_max_pending_rows() {
+        let config = SequentialConfig {
+            max_pending_rows: Some(2),
+            ..Default::default()
+        };
+        let (checkpoint_tx, mut batch_rx, _collector) = spawn_collector(config, 10);
+
+        // More checkpoints than the collector's pending rows and input channel hold together.
+        for i in 1..=15 {
+            let send = checkpoint_tx.send(create_checkpoint(i));
+            tokio::time::timeout(Duration::from_secs(1), send)
+                .await
+                .expect("collector stopped receiving while checkpoint 0 is missing")
+                .unwrap();
+        }
+        expect_no_batch(&mut batch_rx).await;
+
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+
+        let written = recv_until(&mut batch_rx, 15).await;
+        assert_eq!(written, (0..=15).collect::<Vec<_>>());
+    }
+
+    /// A full buffer is cut into a batch below `min_batch_rows`, without waiting for
+    /// `max_batch_delay_ms`, because the collector receives nothing more while it is full.
+    #[tokio::test(start_paused = true)]
+    async fn collector_writes_below_min_batch_rows_while_pending_rows_are_full() {
+        let config = SequentialConfig {
+            max_pending_rows: Some(3),
+            ..min_batch_config(100, 60_000)
+        };
+        let (checkpoint_tx, mut batch_rx, _collector) = spawn_collector(config, 10);
+
+        for i in 0..3 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1, 2]);
+    }
+
+    /// A stale duplicate of a written checkpoint does not stop the collector from receiving while
+    /// the next checkpoint is missing.
+    #[tokio::test(start_paused = true)]
+    async fn collector_keeps_receiving_past_stale_checkpoints() {
+        let config = SequentialConfig {
+            max_pending_rows: Some(2),
+            ..Default::default()
+        };
+        let (checkpoint_tx, mut batch_rx, _collector) = spawn_collector(config, 1);
+
+        // Checkpoint 0 fills the committer's channel.
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // A duplicate of checkpoint 0 and checkpoint 2 fill the pending rows while 1 is missing,
+        // followed by more checkpoints than the input channel holds.
+        for i in [0, 2].into_iter().chain(3..=13) {
+            let send = checkpoint_tx.send(create_checkpoint(i));
+            tokio::time::timeout(Duration::from_secs(1), send)
+                .await
+                .expect("collector stopped receiving while checkpoint 1 is missing")
+                .unwrap();
+        }
+
+        checkpoint_tx.send(create_checkpoint(1)).await.unwrap();
+
+        let written = recv_until(&mut batch_rx, 13).await;
+        assert_eq!(written, (0..=13).collect::<Vec<_>>());
+    }
+
+    /// A checkpoint received twice before it is written counts its rows once.
+    #[tokio::test(start_paused = true)]
+    async fn collector_counts_duplicate_pending_checkpoint_once() {
+        let (checkpoint_tx, mut batch_rx, _collector) =
+            spawn_collector(min_batch_config(3, 60_000), 10);
+
+        for i in [1, 1, 0] {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        expect_no_batch(&mut batch_rx).await;
+
+        checkpoint_tx.send(create_checkpoint(2)).await.unwrap();
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1, 2]);
+    }
+
+    /// Closing the input channel while the collector has stopped receiving still writes out every
+    /// checkpoint, in order, and stops the collector.
+    #[tokio::test(start_paused = true)]
+    async fn collector_writes_everything_when_closed_while_pending_rows_are_full() {
+        let config = SequentialConfig {
+            max_pending_rows: Some(3),
+            ..Default::default()
+        };
+        let (checkpoint_tx, mut batch_rx, mut collector) = spawn_collector(config, 1);
+
+        checkpoint_tx.send(create_checkpoint(0)).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        for i in 1..=13 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        drop(checkpoint_tx);
+
+        let written = recv_until(&mut batch_rx, 13).await;
+        assert_eq!(written, (0..=13).collect::<Vec<_>>());
+
+        tokio::time::timeout(Duration::from_secs(1), collector.join())
+            .await
+            .expect("collector shutdown timeout")
+            .expect("collector shutdown failed");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn collector_holds_checkpoints_until_min_batch_rows() {
+        let (checkpoint_tx, mut batch_rx, _collector) =
+            spawn_collector(min_batch_config(3, 60_000), 10);
+
+        for i in 0..2 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        expect_no_batch(&mut batch_rx).await;
+
+        checkpoint_tx.send(create_checkpoint(2)).await.unwrap();
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1, 2]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn collector_writes_below_min_batch_rows_after_max_batch_delay() {
+        let (checkpoint_tx, mut batch_rx, _collector) =
+            spawn_collector(min_batch_config(3, 3_000), 10);
+
+        for i in 0..2 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        expect_no_batch(&mut batch_rx).await;
+
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn collector_writes_below_min_batch_rows_on_shutdown() {
+        let (checkpoint_tx, mut batch_rx, mut collector) =
+            spawn_collector(min_batch_config(100, 60_000), 10);
+
+        for i in 0..2 {
+            checkpoint_tx.send(create_checkpoint(i)).await.unwrap();
+        }
+        drop(checkpoint_tx);
+
+        let batch = recv_batch(&mut batch_rx).await;
+        assert_eq!(batch.batch, vec![0, 1]);
+
+        tokio::time::timeout(Duration::from_secs(1), collector.join())
+            .await
+            .expect("collector shutdown timeout")
+            .expect("collector shutdown failed");
     }
 
     #[tokio::test]
     async fn test_committer_retries_on_transaction_failure() {
-        let config = SequentialConfig {
-            committer: CommitterConfig {
-                collect_interval_ms: 1_000, // Long polling to test retry logic
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let config = SequentialConfig::default();
 
         // Create store with transaction failure configuration
         let store = FallibleMockStore::default().with_transaction_failures(1); // Will fail once before succeeding
@@ -474,9 +736,8 @@ mod tests {
         // Send a checkpoint
         send_checkpoint(&mut setup, 10).await;
 
-        // Wait long enough for the collector to poll-tick (collect_interval = 1s),
-        // hand the batch to the committer, and for the committer to complete one failed
-        // attempt + one successful retry under exponential backoff (100ms initial).
+        // Wait long enough for the committer to complete one failed attempt and one successful
+        // retry under exponential backoff (100ms initial).
         tokio::time::sleep(Duration::from_millis(1_500)).await;
 
         assert_eq!(setup.store.get_sequential_data(), vec![10]);
@@ -490,7 +751,6 @@ mod tests {
         let config = SequentialConfig {
             committer: CommitterConfig::default(),
             max_batch_checkpoints: Some(3),
-            min_eager_rows: Some(1),
             pipeline_depth: Some(1),
             ..Default::default()
         };
@@ -516,7 +776,6 @@ mod tests {
         let config = SequentialConfig {
             committer: CommitterConfig::default(),
             max_batch_checkpoints: Some(2),
-            min_eager_rows: Some(1),
             pipeline_depth: Some(2),
             ..Default::default()
         };

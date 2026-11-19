@@ -4,6 +4,10 @@
 mod test_utils;
 
 use anyhow::anyhow;
+use shared_crypto::intent::Intent;
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::str::FromStr;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_move_build::BuildConfig;
 use rtd_rosetta::CoinMetadataCache;
@@ -14,10 +18,6 @@ use rtd_types::transaction::{
     InputObjectKind, TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE, Transaction,
     TransactionData, TransactionDataAPI, TransactionKind,
 };
-use shared_crypto::intent::Intent;
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::str::FromStr;
 use test_cluster::TestClusterBuilder;
 use test_utils::{execute_transaction, get_random_rtd};
 

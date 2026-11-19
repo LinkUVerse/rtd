@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::RpcService;
-use rtd_rpc::proto::rtd::rpc::v2::GetBalanceRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetBalanceResponse;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ListBalancesRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListBalancesResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ListDynamicFieldsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListDynamicFieldsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::state_service_server::StateService;
+use rtd_rpc::proto::sui::rpc::v2::GetBalanceRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetBalanceResponse;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::ListBalancesRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListBalancesResponse;
+use rtd_rpc::proto::sui::rpc::v2::ListDynamicFieldsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListDynamicFieldsResponse;
+use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsResponse;
+use rtd_rpc::proto::sui::rpc::v2::state_service_server::StateService;
 
 mod get_balance;
 mod get_coin_info;

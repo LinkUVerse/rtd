@@ -13,20 +13,15 @@
 use crate::{
     cache::identifier_interner::IdentifierInterner,
     execution::{
-        dispatch_tables::VMDispatchTables,
-        interpreter::{
-            helpers::{instantiate_enum_type, instantiate_single_type, instantiate_struct_type},
-            state::MachineState,
-        },
+        dispatch_tables::VMDispatchTables, interpreter::state::MachineState,
         values::Value as RuntimeValue,
     },
-    jit::execution::ast::{ArenaType, Function, Type, TypeSubst},
+    jit::execution::ast::{Function, SizedArenaType, Type},
 };
 use move_binary_format::errors::{PartialVMError, PartialVMResult, VMError, VMResult};
 use move_core_types::{
-    account_address::AccountAddress,
-    annotated_value::MoveTypeLayout as AnnotatedTypeLayout,
-    language_storage::{ModuleId, TypeTag},
+    account_address::AccountAddress, annotated_value::MoveTypeLayout as AnnotatedTypeLayout,
+    language_storage::TypeTag,
 };
 use move_trace_format::{
     format::{
@@ -789,16 +784,17 @@ impl VMTracer<'_> {
             },
         );
 
-        let Ok(version_id) = get_version_id(vtables, &function.module_id(&self.interner)) else {
+        let Ok(version_id) = get_version_id(vtables, &function.vtable_key().package_key()) else {
             self.report_error("Failed to get version id");
             return None;
         };
+        let module_id = function.module_id(&self.interner);
 
         self.trace.open_frame(
             self.current_frame_identifier()?,
             function.index(),
-            function.name(&self.interner).to_string(),
-            function.module_id(&self.interner).clone(),
+            function.name_str(&self.interner).to_owned(),
+            module_id,
             version_id,
             call_args
                 .into_iter()
@@ -925,16 +921,17 @@ impl VMTracer<'_> {
             },
         );
 
-        let Ok(version_id) = get_version_id(vtables, &function.module_id(&self.interner)) else {
+        let Ok(version_id) = get_version_id(vtables, &function.vtable_key().package_key()) else {
             self.report_error("Failed to get version id");
             return None;
         };
+        let module_id = function.module_id(&self.interner);
 
         self.trace.open_frame(
             self.current_frame_identifier()?,
             function.index(),
-            function.name(&self.interner).to_string(),
-            function.module_id(&self.interner).clone(),
+            function.name_str(&self.interner).to_owned(),
+            module_id,
             version_id,
             call_args,
             function_type_info.ty_args,
@@ -1012,7 +1009,7 @@ impl VMTracer<'_> {
                 .current_frame
                 .function
                 .to_ref()
-                .name(&self.interner),
+                .name_str(&self.interner),
             pc,
         );
 
@@ -1392,12 +1389,13 @@ impl VMTracer<'_> {
             }
             B::PackGeneric(struct_inst_ptr) => {
                 let field_count = struct_inst_ptr.field_count as usize;
-                let struct_type = instantiate_struct_type(
-                    &machine.type_limits,
-                    struct_inst_ptr,
-                    &machine.call_stack.current_frame.ty_args,
-                )
-                .ok()?;
+                let struct_type = vtables
+                    .instantiate_struct_type(
+                        struct_inst_ptr,
+                        &machine.call_stack.current_frame.ty_args,
+                        &machine.type_limits,
+                    )
+                    .ok()?;
                 let stack_len = self.type_stack.len();
                 let _ = self.type_stack.split_off(stack_len - field_count);
                 let ty = vtables.type_to_fully_annotated_layout(&struct_type).ok()?;
@@ -1588,12 +1586,13 @@ impl VMTracer<'_> {
                     .instruction(instruction, ty_args, effects, *remaining_gas, pc);
             }
             B::VecPack(ty_ptr, n) => {
-                let ty = instantiate_single_type(
-                    &machine.type_limits,
-                    ty_ptr,
-                    &machine.call_stack.current_frame.ty_args,
-                )
-                .ok()?;
+                let ty = vtables
+                    .subst_type(
+                        ty_ptr,
+                        &machine.call_stack.current_frame.ty_args,
+                        &machine.type_limits,
+                    )
+                    .ok()?;
                 let ty = vtables.type_to_fully_annotated_layout(&ty).ok()?;
                 let ty = AnnotatedTypeLayout::Vector(Box::new(ty));
                 let stack_len = self.type_stack.len();
@@ -1750,12 +1749,13 @@ impl VMTracer<'_> {
                 let _ = self.type_stack.split_off(stack_len - field_count);
                 let ty = vtables
                     .type_to_fully_annotated_layout(
-                        &instantiate_enum_type(
-                            &machine.type_limits,
-                            variant_inst_ptr,
-                            &machine.call_stack.current_frame.ty_args,
-                        )
-                        .ok()?,
+                        &vtables
+                            .instantiate_enum_type(
+                                variant_inst_ptr,
+                                &machine.call_stack.current_frame.ty_args,
+                                &machine.type_limits,
+                            )
+                            .ok()?,
                     )
                     .ok()?;
                 self.type_stack.push(StackType {
@@ -1986,13 +1986,14 @@ impl FunctionTypeInfo {
             Some(match ty {
                 Type::Reference(r) => (*r, Some(Mutability::Imm)),
                 Type::MutableReference(t) => (*t, Some(Mutability::Mut)),
-                Type::TyParam(_) => return None,
                 _ => (ty, None),
             })
         }
 
-        let subst_and_layout_type = |ty: &ArenaType| -> Option<TagWithLayoutInfoOpt> {
-            let subst_ty = ty.subst(ty_args).ok()?;
+        let subst_and_layout_type = |ty: &SizedArenaType| -> Option<TagWithLayoutInfoOpt> {
+            // Unchecked substitution is fine here: the tracer is observational and never runs on
+            // a network execution path, so it needn't re-check the traversal limits.
+            let subst_ty = ty.ty.subst_unchecked(ty_args).ok()?;
             let (ty, ref_type) = deref_ty(subst_ty)?;
             let tag = vtables.type_to_type_tag(&ty).ok()?;
             // NB: This may fail if the type represents a value greater than the max
@@ -2041,9 +2042,7 @@ fn into_annotated_move_value(
 
 fn get_version_id(
     vtables: &VMDispatchTables,
-    original_id: &ModuleId,
+    original_id: &AccountAddress,
 ) -> PartialVMResult<AccountAddress> {
-    vtables
-        .get_package(original_id.address())
-        .map(|pkg| pkg.version_id)
+    vtables.get_package(original_id).map(|pkg| pkg.version_id)
 }

@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::{GetFunctionRequest, GetFunctionResponse};
+use rtd_rpc::proto::sui::rpc::v2::{GetFunctionRequest, GetFunctionResponse};
 use rtd_types::move_package::MovePackage;
 
 #[tracing::instrument(skip(service))]

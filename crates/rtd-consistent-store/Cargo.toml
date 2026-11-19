@@ -1,7 +1,7 @@
 [package]
 name = "rtd-consistent-store"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -28,8 +28,8 @@ rocksdb = { version = "0.22.0", default-features = false, features = ["snappy", 
 scoped-futures.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-rtd-futures.workspace = true
 rtd-config.workspace = true
+rtd-futures.workspace = true
 rtd-indexer-alt-framework = { workspace = true, default-features = false }
 rtd-indexer-alt-framework-store-traits.workspace = true
 rtd-storage.workspace = true

@@ -8,9 +8,9 @@ use move_vm_runtime::{native_charge_gas_early_exit, native_functions::NativeCont
 use move_vm_types::{
     loaded_data::runtime_types::Type, natives::function::NativeResult, pop_arg, values::Value,
 };
-use rtd_types::rtd_system_state::rtd_system_state_inner_v1::ValidatorMetadataV1;
 use smallvec::smallvec;
 use std::collections::VecDeque;
+use rtd_types::rtd_system_state::rtd_system_state_inner_v1::ValidatorMetadataV1;
 
 #[derive(Clone, Debug)]
 pub struct ValidatorValidateMetadataBcsCostParams {
@@ -44,8 +44,9 @@ pub fn validate_metadata_bcs(
 
     native_charge_gas_early_exit!(
         context,
-        validator_validate_metadata_bcs_cost_params.validator_validate_metadata_data_cost_per_byte
-            * (metadata_bytes.len() as u64).into()
+        validator_validate_metadata_bcs_cost_params
+            .validator_validate_metadata_data_cost_per_byte
+            .saturating_mul(metadata_bytes.len() as u64)
     );
 
     let validator_metadata =

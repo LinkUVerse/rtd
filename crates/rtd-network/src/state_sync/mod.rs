@@ -95,6 +95,7 @@ use rtd_storage::object_store::util::{build_object_store, fetch_checkpoint};
 use rtd_storage::verify_checkpoint;
 pub use server::GetCheckpointAvailabilityResponse;
 pub use server::GetCheckpointSummaryRequest;
+pub use server::GetCheckpointTransactionsRequest;
 
 /// A handle to the StateSync subsystem.
 ///

@@ -13,7 +13,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use reqwest::Client;
-use rtd_rpc::proto::rtd::rpc::v2 as grpc;
+use rtd_rpc::proto::sui::rpc::v2 as grpc;
 use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;

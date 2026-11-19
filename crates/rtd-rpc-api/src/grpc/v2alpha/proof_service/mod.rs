@@ -1,9 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_rpc::proto::rtd::rpc::v2alpha::GetCheckpointObjectProofRequest;
-use rtd_rpc::proto::rtd::rpc::v2alpha::GetCheckpointObjectProofResponse;
-use rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_server::ProofService;
+use rtd_rpc::proto::sui::rpc::v2alpha::GetCheckpointObjectProofRequest;
+use rtd_rpc::proto::sui::rpc::v2alpha::GetCheckpointObjectProofResponse;
+use rtd_rpc::proto::sui::rpc::v2alpha::proof_service_server::ProofService;
 
 use crate::RpcService;
 

@@ -4,17 +4,17 @@
 //# init --addresses p=0x0 q=0x0 q_2=0x0 r=0x0 s=0x0 --accounts A
 
 //# publish
-module p::m {
-    use rtd::rtd::RTD;
-    use rtd::coin;
+module p::m;
 
-    public fun sharer<T: key + store>(x: T) {
-        transfer::public_share_object(x);
-    }
+use rtd::coin;
+use rtd::rtd::RTD;
 
-    public fun mint_shared(ctx: &mut TxContext) {
-        transfer::public_share_object(coin::zero<RTD>(ctx))
-    }
+public fun sharer<T: key + store>(x: T) {
+    transfer::public_share_object(x);
+}
+
+public fun mint_shared(ctx: &mut TxContext) {
+    transfer::public_share_object(coin::zero<RTD>(ctx))
 }
 
 //# programmable --sender A --inputs 10

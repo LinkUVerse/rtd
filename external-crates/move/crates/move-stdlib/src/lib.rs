@@ -5,8 +5,8 @@
 use move_command_line_common::files::{MOVE_EXTENSION, extension_equals, find_filenames};
 use move_core_types::parsing::address::NumericalAddress;
 use move_docgen::DocgenOptions;
-use move_package_alt::Vanilla;
-use move_package_alt_compilation::build_config::BuildConfig;
+use move_package::Vanilla;
+use move_package_compilation::build_config::BuildConfig;
 use std::{
     collections::BTreeMap,
     fs,
@@ -55,7 +55,8 @@ pub fn summaries_full_path() -> String {
 
 pub fn source_files() -> Vec<String> {
     let path = path_in_crate(MODULES_DIR);
-    find_filenames(&[path], |p| extension_equals(p, MOVE_EXTENSION)).unwrap()
+    find_filenames(&[path], |p| extension_equals(p, MOVE_EXTENSION))
+        .expect("Failed to discover Move stdlib sources")
 }
 
 pub fn named_addresses() -> BTreeMap<String, NumericalAddress> {

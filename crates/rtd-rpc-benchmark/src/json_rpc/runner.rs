@@ -9,7 +9,6 @@ use crate::config::BenchmarkConfig;
 use anyhow::{Context as _, Result};
 use dashmap::DashMap;
 use phf::phf_map;
-use rtd_futures::stream::TrySpawnStreamExt;
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -17,24 +16,25 @@ use std::{
     sync::{Arc, Mutex},
     time::Instant,
 };
+use rtd_futures::stream::TrySpawnStreamExt;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
 /// static map of method names to the index of their cursor parameter
 static METHOD_CURSOR_POSITIONS: phf::Map<&'static str, usize> = phf_map! {
-    // based on function headers in crates/rtd-json-rpc-api/src/indexer.rs
+    // based on function headers in the `rtdx` indexer JSON-RPC methods
     "rtdx_getOwnedObjects" => 2,
     "rtdx_queryTransactionBlocks" => 1,
-    // based on function headers in crates/rtd-json-rpc-api/src/coin.rs
+    // based on function headers in the `rtdx` coin JSON-RPC methods
     "rtdx_getCoins" => 2,
     "rtdx_getAllCoins" => 1,
 };
 
 static METHOD_LENGTHS: phf::Map<&'static str, usize> = phf_map! {
-    // based on function headers in crates/rtd-json-rpc-api/src/indexer.rs
+    // based on function headers in the `rtdx` indexer JSON-RPC methods
     "rtdx_getOwnedObjects" => 4,
     "rtdx_queryTransactionBlocks" => 4,
-    // based on function headers in crates/rtd-json-rpc-api/src/coin.rs
+    // based on function headers in the `rtdx` coin JSON-RPC methods
     "rtdx_getCoins" => 4,
     "rtdx_getAllCoins" => 3,
 };

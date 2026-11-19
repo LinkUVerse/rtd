@@ -5,16 +5,16 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use prost_types::FieldMask;
+use std::str::FromStr;
+use std::sync::Arc;
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Checkpoint, GetCheckpointRequest, GetServiceInfoRequest, get_checkpoint_request,
 };
 use rtd_types::base_types::TransactionDigest;
 use rtd_types::digests::CheckpointDigest;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
-use std::str::FromStr;
-use std::sync::Arc;
 
 use rtd_types::digests::ChainIdentifier;
 
@@ -331,16 +331,16 @@ mod checkpoint_race_tests {
     use axum::extract::State;
     use axum::{Extension, Json};
     use axum_extra::extract::WithRejection;
-    use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::{LedgerService, LedgerServiceServer};
-    use rtd_rpc::proto::rtd::rpc::v2::state_service_server::{StateService, StateServiceServer};
-    use rtd_rpc::proto::rtd::rpc::v2::{
+    use std::marker::PhantomData;
+    use std::num::NonZeroUsize;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use rtd_rpc::proto::sui::rpc::v2::ledger_service_server::{LedgerService, LedgerServiceServer};
+    use rtd_rpc::proto::sui::rpc::v2::state_service_server::{StateService, StateServiceServer};
+    use rtd_rpc::proto::sui::rpc::v2::{
         Balance, CheckpointSummary, GetBalanceRequest, GetBalanceResponse, GetCheckpointResponse,
         get_checkpoint_request,
     };
     use rtd_types::base_types::RtdAddress;
-    use std::marker::PhantomData;
-    use std::num::NonZeroUsize;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use tonic::{Request, Response, Status};
 
     const AHEAD_CHECKPOINT: u64 = 42;

@@ -12,8 +12,8 @@ use rtd_inverted_index::SkipPolicy;
 use rtd_kvstore::BitmapIndexSpec;
 use rtd_kvstore::tables::event_bitmap_index;
 use rtd_kvstore::tables::transaction_bitmap_index;
-use rtd_rpc::proto::rtd::rpc::v2::EventFilter;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionFilter;
+use rtd_rpc::proto::sui::rpc::v2::EventFilter;
+use rtd_rpc::proto::sui::rpc::v2::TransactionFilter;
 use rtd_rpc_api::RpcError;
 use tokio::time::Instant;
 
@@ -334,7 +334,7 @@ mod admission_tests {
         use bytes::Bytes;
         use prometheus::Registry;
         use rtd_kvstore::{tables::watermarks, testing::MockBigtableServer};
-        use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerService;
+        use rtd_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerService;
         let mock = MockBigtableServer::new();
         let (address, handle) = mock.start().await.unwrap();
         let client = rtd_kvstore::BigTableClient::new_local(address.to_string(), "test".into())
@@ -370,7 +370,7 @@ mod admission_tests {
                 .map(|(key, value)| (key, Bytes::copy_from_slice(&value.to_be_bytes()))),
         )
         .await;
-        let mut stale = rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoResponse::default();
+        let mut stale = rtd_rpc::proto::sui::rpc::v2::GetServiceInfoResponse::default();
         stale.checkpoint_height = Some(999);
         *server.cache.write().await = Some((
             Instant::now() - tokio::time::Duration::from_secs(2),
@@ -405,7 +405,7 @@ mod admission_tests {
         use bytes::Bytes;
         use prometheus::Registry;
         use rtd_kvstore::{tables::watermarks, testing::MockBigtableServer};
-        use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerService;
+        use rtd_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerService;
 
         let mock = MockBigtableServer::new();
         for pipeline in crate::DEFAULT_SERVICE_INFO_WATERMARK_PIPELINES {

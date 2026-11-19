@@ -85,8 +85,6 @@ pub(crate) struct Core {
     /// Block proposal engine for Validator nodes only.
     /// Validators have a proposer to create blocks, Observers have None (they only receive blocks).
     proposer: Option<Box<dyn Proposer>>,
-    /// Core must retry after durable progress if a full replay window paused local work.
-    durable_backpressure_active: bool,
 }
 
 impl Core {
@@ -200,7 +198,6 @@ impl Core {
             signals,
             dag_state,
             proposer,
-            durable_backpressure_active: false,
         };
 
         // Initialize propagation scores for the proposer before recovery.
@@ -267,7 +264,6 @@ impl Core {
             signals,
             dag_state,
             proposer: None,
-            durable_backpressure_active: false,
         }
         .recover_observer()
     }
@@ -372,6 +368,8 @@ impl Core {
         for block in &accepted_blocks {
             self.signals.new_accepted_block(block.clone());
         }
+        #[cfg(test)]
+        rtd_macros::handle_fail_point("consensus-after-accept-certified-blocks");
         accepted_blocks
     }
 
@@ -523,36 +521,6 @@ impl Core {
             .set(new_clock_round as i64);
     }
 
-    pub(crate) fn subscribe_highest_durable_commit(&self) -> watch::Receiver<crate::CommitIndex> {
-        self.commit_observer.subscribe_highest_durable_commit()
-    }
-
-    /// Durable checkpoint progress can reopen a replay window after the leader timer for the
-    /// current round has already fired. Retry local work only if backpressure stopped it.
-    pub(crate) fn on_durable_commit_progress(&mut self) -> ConsensusResult<()> {
-        if !self.durable_backpressure_active {
-            return Ok(());
-        }
-        let consensus_head = self.dag_state.read().last_commit_index();
-        if self
-            .commit_observer
-            .remaining_durable_commit_capacity(consensus_head, consensus_head)
-            == 0
-        {
-            return Ok(());
-        }
-
-        self.durable_backpressure_active = false;
-        // Proposal first: the newly available slot may be needed for checkpoint-signature
-        // traffic. Committing a local leader before proposing could consume it immediately.
-        self.try_propose(true)?;
-        self.try_commit_local()?;
-        // A local commit can advance the threshold clock, so retry proposal at the new round.
-        self.try_propose(true)?;
-        self.try_signal_new_round();
-        Ok(())
-    }
-
     /// Creating a new block for the dictated round. This is used when a leader timeout occurs, either
     /// when the min timeout expires or max. When `force = true` , then any checks like previous round
     /// leader existence will get skipped.
@@ -627,21 +595,6 @@ impl Core {
     // When force is true, ignore if leader from the last round exists among ancestors and if
     // the minimum round delay has passed.
     fn try_propose(&mut self, force: bool) -> ConsensusResult<Option<VerifiedBlock>> {
-        if self.proposer.is_some() {
-            let consensus_head = self.dag_state.read().last_commit_index();
-            if self
-                .commit_observer
-                .remaining_durable_commit_capacity(consensus_head, consensus_head)
-                == 0
-            {
-                self.durable_backpressure_active = true;
-                tracing::debug!(
-                    consensus_head,
-                    "Pausing block proposals until checkpoint output becomes crash-safe"
-                );
-                return Ok(None);
-            }
-        }
         if let Some(proposer) = &mut self.proposer
             && let Some(extended_block) = proposer.try_new_block(force)
         {
@@ -690,24 +643,6 @@ impl Core {
         let mut committed_sub_dags = Vec::new();
         // TODO: Add optimization to abort early without quorum for a round.
         loop {
-            let consensus_head = self.dag_state.read().last_commit_index();
-            let highest_pending_consensus_head = certified_commits
-                .last()
-                .map(|commit| commit.index())
-                .unwrap_or(consensus_head)
-                .max(consensus_head);
-            let remaining_durable_capacity = self
-                .commit_observer
-                .remaining_durable_commit_capacity(consensus_head, highest_pending_consensus_head);
-            if remaining_durable_capacity == 0 && certified_commits.is_empty() {
-                self.durable_backpressure_active = true;
-                tracing::debug!(
-                    consensus_head,
-                    "Pausing local consensus commits until checkpoint output becomes crash-safe"
-                );
-                break;
-            }
-
             // LeaderSchedule has a limit to how many sequenced leaders can be committed
             // before a change is triggered. Calling into leader schedule will get you
             // how many commits till next leader change. We will loop back and recalculate
@@ -739,15 +674,6 @@ impl Core {
             }
             assert!(commits_until_update > 0);
 
-            // Locally decided commits can be retried from the DAG. Certified ranges
-            // are capacity-gated by CommitSyncer before they reach Core.
-            if certified_commits.is_empty() {
-                commits_until_update = commits_until_update.min(
-                    usize::try_from(remaining_durable_capacity)
-                        .expect("commit capacity must fit in usize"),
-                );
-            }
-
             // If there are certified commits to process, find out which leaders and commits from them
             // are decided and use them as the next commits.
             let (certified_leaders, decided_certified_commits): (
@@ -769,19 +695,6 @@ impl Core {
                     .with_label_values(&["committed"])
                     .inc_by(decided_certified_commits.len() as u64);
             }
-
-            // Only accept blocks for the certified commits that we are certain to sequence.
-            // This ensures that only blocks corresponding to committed certified commits are flushed to disk.
-            // Blocks from non-committed certified commits will not be flushed, preventing issues during crash-recovery.
-            // This avoids scenarios where accepting and flushing blocks of non-committed certified commits could lead to
-            // premature commit rule execution. Due to GC, this could cause a panic if the commit rule tries to access
-            // missing causal history from blocks of certified commits.
-            let blocks = decided_certified_commits
-                .iter()
-                .flat_map(|c| c.blocks())
-                .cloned()
-                .collect::<Vec<_>>();
-            self.accept_committed_blocks(blocks);
 
             // If there is no certified commit to process, run the decision rule.
             let (decided_leaders, local) = if certified_leaders.is_empty() {
@@ -828,9 +741,26 @@ impl Core {
             );
 
             // TODO: refcount subdags
-            let subdags = self
-                .commit_observer
-                .handle_committed_leaders(sequenced_leaders, local)?;
+            let subdags = if local {
+                self.commit_observer
+                    .handle_committed_leaders(sequenced_leaders, true)?
+            } else {
+                let mut subdags = Vec::with_capacity(sequenced_leaders.len());
+                for (leader, certified_commit) in sequenced_leaders
+                    .into_iter()
+                    .zip_eq(decided_certified_commits)
+                {
+                    // A certified subdag can omit ancestors at or below the preceding commit's
+                    // GC round. Insert that commit before accepting the next subdag, so a
+                    // concurrent finalizer flush cannot persist blocks without their GC boundary.
+                    self.accept_committed_blocks(certified_commit.blocks().to_vec());
+                    subdags.extend(
+                        self.commit_observer
+                            .handle_committed_leaders(vec![leader], false)?,
+                    );
+                }
+                subdags
+            };
 
             // Try to unsuspend blocks if gc_round has advanced.
             self.block_manager
@@ -972,19 +902,6 @@ impl Core {
 
         let mut committed_sub_dags = Vec::new();
         loop {
-            let consensus_head = self.dag_state.read().last_commit_index();
-            if self
-                .commit_observer
-                .remaining_durable_commit_capacity(consensus_head, consensus_head)
-                == 0
-            {
-                self.durable_backpressure_active = true;
-                tracing::debug!(
-                    consensus_head,
-                    "Pausing v3 local commits until checkpoint output becomes crash-safe"
-                );
-                break;
-            }
             let next_commit_leaders = self
                 .leader_schedule_v3
                 .as_ref()
@@ -1314,6 +1231,7 @@ pub(crate) async fn create_cores(
 #[cfg(test)]
 pub(crate) struct CoreTestFixture {
     pub(crate) core: Core,
+    pub(crate) consumer_monitor: Arc<crate::ConsumerMonitor>,
     pub(crate) transaction_vote_tracker: TransactionVoteTracker,
     pub(crate) signal_receivers: CoreSignalsReceivers,
     pub(crate) block_receiver: broadcast::Receiver<ExtendedBlock>,
@@ -1321,7 +1239,6 @@ pub(crate) struct CoreTestFixture {
     pub(crate) dag_state: Arc<RwLock<DagState>>,
     pub(crate) store: Arc<MemStore>,
     pub(crate) transaction_client: TransactionClient,
-    pub(crate) commit_consumer_monitor: Arc<crate::CommitConsumerMonitor>,
 }
 
 #[cfg(test)]
@@ -1412,7 +1329,7 @@ impl CoreTestFixture {
         let block_receiver = signal_receivers.block_broadcast_receiver();
 
         let (commit_consumer, commit_output_receiver) = CommitConsumerArgs::new(0, 0);
-        let commit_consumer_monitor = commit_consumer.monitor();
+        let consumer_monitor = commit_consumer.monitor();
         let commit_observer = CommitObserver::new(
             context.clone(),
             commit_consumer,
@@ -1440,6 +1357,7 @@ impl CoreTestFixture {
 
         Self {
             core,
+            consumer_monitor,
             transaction_vote_tracker,
             signal_receivers,
             block_receiver,
@@ -1447,7 +1365,6 @@ impl CoreTestFixture {
             dag_state,
             store,
             transaction_client,
-            commit_consumer_monitor,
         }
     }
 
@@ -1488,40 +1405,6 @@ mod test {
         test_dag_parser::parse_dag,
         transaction::{BlockStatus, Priority, TransactionClient},
     };
-
-    #[tokio::test]
-    async fn durable_progress_reopens_a_paused_core() {
-        telemetry_subscribers::init_for_testing();
-        let (context, _) = Context::new_for_test(4);
-        let mut fixture = CoreTestFixture::new(
-            context,
-            vec![1, 1, 1, 1],
-            AuthorityIndex::new_for_test(0),
-            false,
-        )
-        .await;
-
-        // A full durable window can outlast both leader timeouts for this round. The
-        // checkpoint writer's next durable update must wake Core independently of them.
-        fixture.core.durable_backpressure_active = true;
-        let mut durable_rx = fixture.core.subscribe_highest_durable_commit();
-        durable_rx.mark_unchanged();
-        fixture
-            .commit_consumer_monitor
-            .set_highest_durable_commit(1);
-        tokio::time::timeout(Duration::from_secs(1), durable_rx.changed())
-            .await
-            .expect("Core should observe durable progress")
-            .expect("durable progress sender should remain open");
-
-        fixture.core.on_durable_commit_progress().unwrap();
-        assert!(!fixture.core.durable_backpressure_active);
-        assert!(
-            fixture.core.dag_state.read().last_commit_index()
-                <= fixture.commit_consumer_monitor.highest_durable_commit()
-                    + crate::MAX_PENDING_DURABLE_COMMITS
-        );
-    }
 
     /// Recover Core and continue proposing from the last round which forms a quorum.
     #[tokio::test]
@@ -3541,6 +3424,174 @@ mod test {
         }
     }
 
+    #[tokio::test(start_paused = true)]
+    async fn certified_commits_recover_after_flush_before_insertion() {
+        use crate::linearizer::Linearizer;
+
+        // G is catching up while E returns from an outage with its old self-link.
+        // The other five authorities maintain quorum without committing E1.
+        let (_, builder) = parse_dag("DAG {
+            Round 0 : { 7 },
+            Round 1 : { A -> [*], B -> [*], C -> [*], D -> [*], E -> [*], F -> [*] },
+            Round 2 : { A -> [-E1], B -> [-E1], C -> [-E1], D -> [-E1], F -> [-E1] },
+            Round 3 : { A -> [*], B -> [*], C -> [*], D -> [*], F -> [*] },
+            Round 4 : { A -> [*], B -> [*], C -> [*], D -> [*], F -> [*] },
+            Round 5 : { A -> [*], B -> [*], C -> [*], D -> [*], E -> [A4, B4, C4, D4, F4, E1], F -> [*] },
+            Round 6 : { A -> [*], B -> [*], C -> [*], D -> [*], E -> [*], F -> [*] },
+            Round 7 : { A -> [*], B -> [*], C -> [*], D -> [*], E -> [*], F -> [*] }
+        }").unwrap();
+        let mut context = (*builder.context).clone();
+        context.protocol_config.set_gc_depth_for_testing(4);
+        context.protocol_config.set_enable_v3_for_testing(false);
+        let own_index = AuthorityIndex::new_for_test(6);
+        let block = |round, author| {
+            builder
+                .all_blocks()
+                .into_iter()
+                .find(|b| b.round() == round && b.author() == AuthorityIndex::new_for_test(author))
+                .unwrap()
+        };
+        let e1 = block(1, 4);
+        let e5 = block(5, 4);
+        let leaders = vec![
+            block(1, 1),
+            block(2, 2),
+            block(3, 3),
+            block(5, 5),
+            block(7, 0),
+        ];
+
+        let source_store = Arc::new(MemStore::new());
+        let source_dag = Arc::new(RwLock::new(DagState::new(
+            Arc::new(context.clone()),
+            source_store.clone(),
+        )));
+        source_dag.write().accept_blocks(builder.all_blocks());
+        let subdags =
+            Linearizer::new(Arc::new(context.clone()), source_dag.clone()).handle_commit(leaders);
+        source_dag.write().flush();
+        let certified_commits = source_store
+            .scan_commits((1..=subdags.len() as u32).into())
+            .unwrap()
+            .into_iter()
+            .zip_eq(&subdags)
+            .map(|(commit, subdag)| CertifiedCommit::new_certified(commit, subdag.blocks.clone()))
+            .collect::<Vec<_>>();
+        assert!(subdags.iter().all(|subdag| {
+            subdag
+                .blocks
+                .iter()
+                .all(|b| b.reference() != e1.reference())
+        }));
+        assert!(
+            subdags
+                .last()
+                .unwrap()
+                .blocks
+                .iter()
+                .any(|b| b.reference() == e5.reference())
+        );
+
+        for crash_before_index in 2..=certified_commits.len() {
+            let mut fixture =
+                CoreTestFixture::new(context.clone(), vec![1; 7], own_index, true).await;
+            // Commit sync verifies and votes on fetched blocks before forwarding them to Core.
+            fixture.transaction_vote_tracker.add_voted_blocks(
+                certified_commits
+                    .iter()
+                    .flat_map(|commit| commit.blocks().iter().cloned())
+                    .map(|block| (block, vec![]))
+                    .collect(),
+            );
+            let (_, missing) = fixture.core.accept_blocks(
+                builder
+                    .all_blocks()
+                    .into_iter()
+                    .filter(|block| block.round() <= 3 && block.reference() != e1.reference())
+                    .collect(),
+            );
+            assert!(missing.is_empty());
+            let prior = fixture.core.try_commit(vec![]).unwrap();
+            assert_eq!(prior.len(), 1);
+            assert!(prior[0].decided_with_local_blocks);
+            assert_eq!(prior[0].commit_ref, certified_commits[0].reference());
+
+            // A finalizer handling the prior commit can flush at any block-acceptance
+            // boundary, before Core inserts the current certified commit.
+            let dag = fixture.dag_state.clone();
+            let accepted_leader = certified_commits[crash_before_index - 1].leader();
+            let finalized_commit_ref = prior[0].commit_ref;
+            let test_thread = std::thread::current().id();
+            rtd_macros::register_fail_point("consensus-after-accept-certified-blocks", move || {
+                if std::thread::current().id() != test_thread {
+                    return;
+                }
+                let mut dag = dag.write();
+                if dag.last_commit_index() != crash_before_index as u32 - 1 {
+                    return;
+                }
+                assert!(dag.contains_block(&accepted_leader));
+                dag.add_finalized_commit(finalized_commit_ref, BTreeMap::new());
+                dag.flush();
+                panic!("crash after certified block acceptance");
+            });
+            let crash = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                fixture.core.try_commit(certified_commits[1..].to_vec())
+            }));
+            rtd_macros::clear_fail_point("consensus-after-accept-certified-blocks");
+            assert_eq!(
+                crash.unwrap_err().downcast_ref::<&str>(),
+                Some(&"crash after certified block acceptance")
+            );
+            let store = fixture.store.clone();
+            assert_eq!(
+                store.read_last_commit().unwrap().unwrap().index(),
+                crash_before_index as u32 - 1
+            );
+            // Drain the fixture's tasks without adding the interrupted commit.
+            fixture.core.stop().await;
+            drop(fixture);
+
+            // Exercise Core's actual startup decision rule, then resume commit sync.
+            // Batch acceptance would persist E5 with GC=0 and panic on its absent E1 ancestor.
+            let mut recovered = CoreTestFixture::new_with_store(
+                context.clone(),
+                vec![1; 7],
+                own_index,
+                true,
+                store.clone(),
+            )
+            .await;
+            assert!(!recovered.dag_state.read().contains_block(&e1.reference()));
+            let remaining = recovered
+                .core
+                .filter_new_commits(certified_commits.clone())
+                .unwrap();
+            recovered.transaction_vote_tracker.add_voted_blocks(
+                remaining
+                    .iter()
+                    .flat_map(|commit| commit.blocks().iter().cloned())
+                    .map(|block| (block, vec![]))
+                    .collect(),
+            );
+            let resumed = recovered.core.try_commit(remaining).unwrap();
+            assert!(
+                resumed
+                    .iter()
+                    .all(|subdag| !subdag.decided_with_local_blocks)
+            );
+            recovered.dag_state.write().flush();
+            let commits = store
+                .scan_commits((1..=certified_commits.len() as u32).into())
+                .unwrap();
+            assert_eq!(commits.len(), certified_commits.len());
+            for (actual, expected) in commits.iter().zip_eq(&certified_commits) {
+                assert_eq!(actual.reference(), expected.reference());
+            }
+            recovered.core.stop().await;
+        }
+    }
+
     #[tokio::test]
     async fn try_commit_v3_local_commits() {
         telemetry_subscribers::init_for_testing();
@@ -3554,6 +3605,7 @@ mod test {
 
         let authority_index = AuthorityIndex::new_for_test(0);
         let core = CoreTestFixture::new(context, vec![1, 1, 1, 1], authority_index, true).await;
+        let monitor = core.consumer_monitor.clone();
         let mut core = core.core;
 
         // Build a fully connected DAG and accept its blocks, without any commits yet.
@@ -3574,6 +3626,9 @@ mod test {
             assert!(subdag.decided_with_local_blocks);
         }
         assert_eq!(core.dag_state.read().last_commit_index(), 11);
+        assert_eq!(monitor.progress().highest_committed_index, 11);
+        assert_eq!(monitor.progress().highest_committed_round, 11);
+        assert_eq!(monitor.highest_handled_commit(), 0);
 
         // Re-running the commit rule must be a no-op.
         assert!(core.try_commit_v3().unwrap().is_empty());

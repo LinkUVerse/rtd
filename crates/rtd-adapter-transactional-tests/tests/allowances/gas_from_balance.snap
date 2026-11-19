@@ -39,7 +39,7 @@ task 4, lines 22-25:
 //> 1: rtd::allowance::new<rtd::balance::Balance<rtd::rtd::RTD>>(Input(0), Input(1), Input(2), Input(3), Input(4), Result(0));
 created: object(4,0), object(4,1)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 6422000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+gas summary: computation_cost: 1000000, storage_cost: 6422000,  storage_rebate: 987901, non_refundable_storage_fee: 99
 
 task 5, lines 27-31:
 //# programmable --sender B --address-balance-gas --inputs allowance_withdraw<rtd::balance::Balance<rtd::rtd::RTD>>(50000,@A,object(4,0)) mutshared(4,0) immshared(6) @B
@@ -49,8 +49,8 @@ task 5, lines 27-31:
 //> 1: rtd::balance::send_funds<rtd::rtd::RTD>(Result(0), Input(3));
 mutated: object(4,0)
 unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000006
-accumulators_written: (object(1,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Split, 50000), (object(2,0), B, rtd::balance::Balance<rtd::rtd::RTD>, Split, 981388)
-gas summary: computation_cost: 1000000, storage_cost: 3138800,  storage_rebate: 3107412, non_refundable_storage_fee: 31388
+accumulators_written: (object(1,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Split, 50000), (object(2,0), B, rtd::balance::Balance<rtd::rtd::RTD>, Split, 950314)
+gas summary: computation_cost: 1000000, storage_cost: 3138800,  storage_rebate: 3138486, non_refundable_storage_fee: 314
 
 task 6, lines 33-36:
 //# programmable --sender A --inputs b"self" @A vector[100000u256] vector[] vector[99999999999999]
@@ -59,7 +59,7 @@ task 6, lines 33-36:
 //> 1: rtd::allowance::new<rtd::balance::Balance<rtd::rtd::RTD>>(Input(0), Input(1), Input(2), Input(3), Input(4), Result(0));
 created: object(6,0), object(6,1)
 mutated: object(0,0)
-gas summary: computation_cost: 1000000, storage_cost: 6429600,  storage_rebate: 978120, non_refundable_storage_fee: 9880
+gas summary: computation_cost: 1000000, storage_cost: 6429600,  storage_rebate: 987901, non_refundable_storage_fee: 99
 
 task 7, lines 38-42:
 //# programmable --sender A --address-balance-gas --inputs allowance_withdraw<rtd::balance::Balance<rtd::rtd::RTD>>(30000,@A,object(6,0)) mutshared(6,0) immshared(6) @B
@@ -69,8 +69,8 @@ task 7, lines 38-42:
 //> 1: rtd::balance::send_funds<rtd::rtd::RTD>(Result(0), Input(3));
 mutated: object(6,0)
 unchanged_shared: 0x0000000000000000000000000000000000000000000000000000000000000006
-accumulators_written: (object(1,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Split, 1061464), (object(2,0), B, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 30000)
-gas summary: computation_cost: 1000000, storage_cost: 3146400,  storage_rebate: 3114936, non_refundable_storage_fee: 31464
+accumulators_written: (object(1,0), A, rtd::balance::Balance<rtd::rtd::RTD>, Split, 1030315), (object(2,0), B, rtd::balance::Balance<rtd::rtd::RTD>, Merge, 30000)
+gas summary: computation_cost: 1000000, storage_cost: 3146400,  storage_rebate: 3146085, non_refundable_storage_fee: 315
 
 task 8, lines 44-45:
 //# view-object 4,0
@@ -173,8 +173,8 @@ Checkpoint created: 2
 
 task 11, lines 52-53:
 //# view-funds rtd::balance::Balance<rtd::rtd::RTD> A
-9998888536
+9998919685
 
 task 12, lines 55-56:
 //# view-funds rtd::balance::Balance<rtd::rtd::RTD> B
-9999048612
+9999079686

@@ -8,13 +8,13 @@ use crate::{BenchmarkProxyMetrics, FullNodeProxy, LocalValidatorAggregatorProxy,
 use anyhow::{Context, Result, anyhow, bail};
 use prometheus::Registry;
 use rand::seq::SliceRandom;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::thread::JoinHandle;
 use rtd_types::base_types::ObjectID;
 use rtd_types::object::Owner;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{Argument, Command, ObjectArg, TransactionData};
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::thread::JoinHandle;
 use tokio::runtime::Builder;
 use tokio::sync::{Barrier, oneshot};
 use tracing::info;
@@ -104,7 +104,7 @@ impl BenchmarkSetup {
             .ok_or_else(|| {
                 anyhow!(format!(
                     "Failed to find keypair at path: {}",
-                    &opts.keystore_path
+                    opts.keystore_path
                 ))
             })?;
 
@@ -147,7 +147,10 @@ impl BenchmarkSetup {
                     .collect();
 
                 let system_state = execution_proxy.get_latest_system_state_object().await?;
-                let gas_price = system_state.reference_gas_price;
+                let gas_price = crate::system_state_observer::setup_gas_price(
+                    system_state.reference_gas_price,
+                    opts.setup_gas_price_multiplier,
+                );
 
                 // Batch merges to stay within the max_arguments protocol
                 // limit (512). Each batch merges up to 500 coins into the

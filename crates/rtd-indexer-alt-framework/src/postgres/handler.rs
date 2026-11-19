@@ -25,6 +25,7 @@
 //! To fully decouple, we'd need to move all postgres-specific code (including IndexerCluster) to
 //! rtd-pg-db, which would be a much larger breaking change. Consider this for a future refactor.
 //!
+//! See: <https://github.com/LinkUVerse/rtd/pull/24055#issuecomment-3471278182>
 
 use async_trait::async_trait;
 
@@ -40,9 +41,6 @@ use crate::postgres::FieldCount;
 /// the 32,767 bind parameter limit.
 #[async_trait]
 pub trait Handler: Processor<Value: FieldCount> {
-    /// If at least this many rows are pending, the committer will commit them eagerly.
-    const MIN_EAGER_ROWS: usize = 50;
-
     /// If there are more than this many rows pending, the committer applies backpressure.
     const MAX_PENDING_ROWS: usize = 5000;
 
@@ -87,7 +85,6 @@ where
     type Store = Db;
     type Batch = Vec<H::Value>;
 
-    const MIN_EAGER_ROWS: usize = H::MIN_EAGER_ROWS;
     const MAX_PENDING_ROWS: usize = H::MAX_PENDING_ROWS;
     const MAX_WATERMARK_UPDATES: usize = H::MAX_WATERMARK_UPDATES;
 

@@ -14,6 +14,8 @@ use fastcrypto::{
     traits::{RecoverableSignature, ToFromBytes},
 };
 use move_binary_format::errors::PartialVMResult;
+use move_binary_format::safe_assert;
+use move_binary_format::safe_assert_eq;
 use move_core_types::gas_algebra::InternalGas;
 use move_vm_runtime::{
     execution::{
@@ -26,9 +28,9 @@ use move_vm_runtime::{
 use move_vm_runtime::{native_charge_gas_early_exit, natives::functions::NativeContext};
 use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rtd_types::crypto::KeypairTraits;
 use smallvec::smallvec;
 use std::collections::VecDeque;
+use rtd_types::crypto::KeypairTraits;
 
 pub const FAIL_TO_RECOVER_PUBKEY: u64 = 0;
 pub const INVALID_SIGNATURE: u64 = 1;
@@ -76,8 +78,8 @@ pub fn ecrecover(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 3);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 3);
 
     let hash = pop_arg!(args, u8);
 
@@ -124,8 +126,8 @@ pub fn ecrecover(
     // Charge the arg size dependent costs
     native_charge_gas_early_exit!(
         context,
-        cost_per_byte * (msg_ref.len() as u64).into()
-            + cost_per_block * (msg_ref.len().div_ceil(block_size) as u64).into()
+        cost_per_byte.saturating_mul(msg_ref.len() as u64)
+            + cost_per_block.saturating_mul(msg_ref.len().div_ceil(block_size) as u64)
     );
 
     let cost = context.gas_used();
@@ -158,8 +160,8 @@ pub fn decompress_pubkey(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 1);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 1);
 
     // Load the cost parameters from the protocol config
     let ecdsa_k1_decompress_pubkey_cost_params = get_extension!(context, NativesCostTable)?
@@ -220,8 +222,8 @@ pub fn secp256k1_verify(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 4);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 4);
 
     let hash = pop_arg!(args, u8);
 
@@ -275,8 +277,8 @@ pub fn secp256k1_verify(
     // Charge the arg size dependent costs
     native_charge_gas_early_exit!(
         context,
-        cost_per_byte * (msg_ref.len() as u64).into()
-            + cost_per_block * (msg_ref.len().div_ceil(block_size) as u64).into()
+        cost_per_byte.saturating_mul(msg_ref.len() as u64)
+            + cost_per_block.saturating_mul(msg_ref.len().div_ceil(block_size) as u64)
     );
 
     let cost = context.gas_used();
@@ -310,8 +312,8 @@ pub fn secp256k1_sign(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 4);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 4);
 
     // The corresponding Move function, rtd::ecdsa_k1::secp256k1_sign, is only used for testing, so
     // we don't need to charge any gas.
@@ -363,8 +365,8 @@ pub fn secp256k1_keypair_from_seed(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 1);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 1);
 
     // The corresponding Move function, rtd::ecdsa_k1::secp256k1_keypair_from_seed, is only used for
     // testing, so we don't need to charge any gas.

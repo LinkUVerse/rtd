@@ -18,7 +18,7 @@ use rtd_indexer_alt_object_store::ObjectStore;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 use rtd_types::full_checkpoint_content::Checkpoint;
 
 pub struct CheckpointBlob {

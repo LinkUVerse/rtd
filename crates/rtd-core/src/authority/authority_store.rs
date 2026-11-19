@@ -19,14 +19,15 @@ use move_core_types::account_address::AccountAddress;
 use move_core_types::resolver::{ModuleResolver, SerializedPackage};
 use rtd_config::node::AuthorityStorePruningConfig;
 use rtd_macros::fail_point_arg;
+use rtd_package_resolver::{PackageStoreWithLruCache, SyncResolver};
 use rtd_types::execution::TypeLayoutStore;
 use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::message_envelope::Message;
-use rtd_types::rtd_system_state::get_rtd_system_state;
 use rtd_types::storage::{
     BackingPackageStore, FullObjectKey, MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore,
     get_module, get_package,
 };
+use rtd_types::rtd_system_state::get_rtd_system_state;
 use rtd_types::{base_types::SequenceNumber, fp_ensure};
 use tokio::time::Instant;
 use tracing::{debug, info, trace};
@@ -974,13 +975,13 @@ impl AuthorityStore {
         old_epoch_store: &AuthorityPerEpochStore,
     ) -> RtdResult
     where
-        T: TypeLayoutStore + Send + Copy,
+        T: TypeLayoutStore + Send + Sync + Copy,
     {
         if !self.enable_epoch_rtd_conservation_check {
             return Ok(());
         }
 
-        let executor = old_epoch_store.executor();
+        let package_store = PackageStoreWithLruCache::new(type_layout_store);
         info!("Starting RTD conservation check. This may take a while..");
         let cur_time = Instant::now();
         let mut pending_objects = vec![];
@@ -997,11 +998,9 @@ impl AuthorityStore {
                         if count % 1_000_000 == 0 {
                             let mut task_objects = vec![];
                             mem::swap(&mut pending_objects, &mut task_objects);
+                            let package_store = &package_store;
                             pending_tasks.push(s.spawn(move || {
-                                let mut layout_resolver = executor.type_layout_resolver(
-                                    old_epoch_store.protocol_config(),
-                                    Box::new(type_layout_store),
-                                );
+                                let mut layout_resolver = SyncResolver::new(package_store);
                                 let mut total_storage_rebate = 0;
                                 let mut total_rtd = 0;
                                 for object in task_objects {
@@ -1009,7 +1008,7 @@ impl AuthorityStore {
                                     // get_total_rtd includes storage rebate, however all storage rebate is
                                     // also stored in the storage fund, so we need to subtract it here.
                                     let object_contained_rtd = match object
-                                        .get_total_rtd(layout_resolver.as_mut())
+                                        .get_total_rtd(&mut layout_resolver)
                                     {
                                         Ok(rtd) => rtd,
                                         Err(e)
@@ -1048,14 +1047,11 @@ impl AuthorityStore {
                 (init.0 + result.0, init.1 + result.1)
             })
         });
-        let mut layout_resolver = executor.type_layout_resolver(
-            old_epoch_store.protocol_config(),
-            Box::new(type_layout_store),
-        );
+        let mut layout_resolver = SyncResolver::new(&package_store);
         for object in pending_objects {
             total_storage_rebate += object.storage_rebate;
             total_rtd +=
-                object.get_total_rtd(layout_resolver.as_mut()).unwrap() - object.storage_rebate;
+                object.get_total_rtd(&mut layout_resolver).unwrap() - object.storage_rebate;
         }
         info!(
             "Scanned {} live objects, took {:?}",
@@ -1368,17 +1364,6 @@ impl GlobalStateHashStore for AuthorityStore {
             .root_state_hash_by_epoch
             .get(&epoch)
             .map_err(Into::into)
-    }
-
-    fn get_root_state_hash_for_highest_epoch(
-        &self,
-    ) -> RtdResult<Option<(EpochId, (CheckpointSequenceNumber, GlobalStateHash))>> {
-        Ok(self
-            .perpetual_tables
-            .root_state_hash_by_epoch
-            .reversed_safe_iter_with_bounds(None, None)?
-            .next()
-            .transpose()?)
     }
 
     fn insert_state_hash_for_epoch(

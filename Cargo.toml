@@ -2,81 +2,82 @@
 resolver = "2"
 
 exclude = [
-  "examples/tic-tac-toe/cli",
-  "examples/regulated-coin/rust-client",
-  "examples/custom-indexer/rust",
-  "examples/rust/basic-rtd-indexer",
-  "examples/rust/clickhouse-rtd-indexer",
-  "examples/rust/walrus-attributes-indexer",
-  "external-crates/move/crates/jsonrpc",
-  "external-crates/move/crates/bytecode-interpreter-crypto",
-  "external-crates/move/crates/bytecode-verifier-libfuzzer",
-  "external-crates/move/crates/bytecode-verifier-tests",
-  "external-crates/move/crates/bytecode-verifier-prop-tests",
-  "external-crates/move/crates/bytecode-verifier-transactional-tests",
-  "external-crates/move/crates/enum-compat-util",
-  "external-crates/move/crates/invalid-mutations",
-  "external-crates/move/crates/language-benchmarks",
-  "external-crates/move/crates/module-generation",
-  "external-crates/move/crates/move-abstract-interpreter",
-  "external-crates/move/crates/move-abstract-stack",
-  "external-crates/move/crates/move-analyzer",
-  "external-crates/move/crates/move-binary-format",
-  "external-crates/move/crates/move-borrow-graph",
-  "external-crates/move/crates/move-bytecode-source-map",
-  "external-crates/move/crates/move-bytecode-utils",
-  "external-crates/move/crates/move-bytecode-verifier",
-  "external-crates/move/crates/move-bytecode-verifier-meter",
-  "external-crates/move/crates/move-bytecode-viewer",
-  "external-crates/move/crates/move-cli",
-  "external-crates/move/crates/move-command-line-common",
-  "external-crates/move/crates/move-compiler",
-  "external-crates/move/crates/move-compiler-transactional-tests",
-  "external-crates/move/crates/move-core-types",
-  "external-crates/move/crates/move-coverage",
-  "external-crates/move/crates/move-disassembler",
-  "external-crates/move/crates/move-docgen",
-  "external-crates/move/crates/move-ir-compiler",
-  "external-crates/move/crates/move-ir-compiler-transactional-tests",
-  "external-crates/move/crates/move-ir-to-bytecode",
-  "external-crates/move/crates/move-ir-to-bytecode-syntax",
-  "external-crates/move/crates/move-ir-types",
-  "external-crates/move/crates/move-model-2",
-  "external-crates/move/crates/move-package",
-  "external-crates/move/crates/move-package-alt",
-  "external-crates/move/crates/move-package-alt-compilation",
-  "external-crates/move/crates/move-proc-macros",
-  "external-crates/move/crates/move-regex-borrow-graph",
-  "external-crates/move/crates/move-stackless-bytecode-2",
-  "external-crates/move/crates/move-stdlib",
-  "external-crates/move/crates/move-symbol-pool",
-  "external-crates/move/crates/move-transactional-test-runner",
-  "external-crates/move/crates/move-trace-format",
-  "external-crates/move/crates/move-unit-test",
-  "external-crates/move/crates/move-vm-config",
-  "external-crates/move/crates/move-vm-profiler",
-  "external-crates/move/crates/move-vm-runtime",
-  "external-crates/move/crates/move-vm-transactional-tests",
-  "external-crates/move/crates/serializer-tests",
-  "external-crates/move/crates/test-generation",
-  "external-crates/move/historical-versions/v0/crates/move-bytecode-verifier",
-  "external-crates/move/historical-versions/v0/crates/move-stdlib-natives",
-  "external-crates/move/historical-versions/v0/crates/move-vm-runtime",
-  "external-crates/move/historical-versions/v0/crates/move-vm-types",
-  "external-crates/move/historical-versions/v1/crates/move-bytecode-verifier",
-  "external-crates/move/historical-versions/v1/crates/move-stdlib-natives",
-  "external-crates/move/historical-versions/v1/crates/move-vm-runtime",
-  "external-crates/move/historical-versions/v1/crates/move-vm-types",
-  "external-crates/move/historical-versions/v2/crates/move-abstract-interpreter",
-  "external-crates/move/historical-versions/v2/crates/move-bytecode-verifier",
-  "external-crates/move/historical-versions/v2/crates/move-stdlib-natives",
-  "external-crates/move/historical-versions/v2/crates/move-vm-runtime",
-  "external-crates/move/historical-versions/v2/crates/move-vm-types",
-  "external-crates/move/historical-versions/v3/crates/move-abstract-interpreter",
-  "external-crates/move/historical-versions/v3/crates/move-bytecode-verifier",
-  "external-crates/move/historical-versions/v3/crates/move-stdlib-natives",
-  "external-crates/move/historical-versions/v3/crates/move-vm-runtime",
-  "external-crates/move/historical-versions/v3/crates/move-vm-types",
+    "examples/custom-indexer/rust",
+    "examples/rust/basic-rtd-indexer",
+    "examples/rust/clickhouse-rtd-indexer",
+    "examples/rust/walrus-attributes-indexer",
+    "external-crates/move/crates/bytecode-interpreter-crypto",
+    "external-crates/move/crates/bytecode-verifier-libfuzzer",
+    "external-crates/move/crates/bytecode-verifier-prop-tests",
+    "external-crates/move/crates/bytecode-verifier-tests",
+    "external-crates/move/crates/bytecode-verifier-transactional-tests",
+    "external-crates/move/crates/enum-compat-util",
+    "external-crates/move/crates/invalid-mutations",
+    "external-crates/move/crates/jsonrpc",
+    "external-crates/move/crates/language-benchmarks",
+    "external-crates/move/crates/module-generation",
+    "external-crates/move/crates/move-abstract-interpreter",
+    "external-crates/move/crates/move-abstract-stack",
+    "external-crates/move/crates/move-analyzer",
+    "external-crates/move/crates/move-binary-format",
+    "external-crates/move/crates/move-borrow-graph",
+    "external-crates/move/crates/move-bytecode-source-map",
+    "external-crates/move/crates/move-bytecode-utils",
+    "external-crates/move/crates/move-bytecode-verifier",
+    "external-crates/move/crates/move-bytecode-verifier-meter",
+    "external-crates/move/crates/move-bytecode-viewer",
+    "external-crates/move/crates/move-cli",
+    "external-crates/move/crates/move-command-line-common",
+    "external-crates/move/crates/move-compiler",
+    "external-crates/move/crates/move-compiler-transactional-tests",
+    "external-crates/move/crates/move-core-types",
+    "external-crates/move/crates/move-coverage",
+    "external-crates/move/crates/move-disassembler",
+    "external-crates/move/crates/move-docgen",
+    "external-crates/move/crates/move-ir-compiler",
+    "external-crates/move/crates/move-ir-compiler-transactional-tests",
+    "external-crates/move/crates/move-ir-to-bytecode",
+    "external-crates/move/crates/move-ir-to-bytecode-syntax",
+    "external-crates/move/crates/move-ir-types",
+    "external-crates/move/crates/move-model-2",
+    "external-crates/move/crates/move-package",
+    "external-crates/move/crates/move-package-compilation",
+    "external-crates/move/crates/move-proc-macros",
+    "external-crates/move/crates/move-regex-borrow-graph",
+    "external-crates/move/crates/move-stackless-bytecode-2",
+    "external-crates/move/crates/move-stdlib",
+    "external-crates/move/crates/move-symbol-pool",
+    "external-crates/move/crates/move-trace-format",
+    "external-crates/move/crates/move-transactional-test-runner",
+    "external-crates/move/crates/move-unit-test",
+    "external-crates/move/crates/move-vm-config",
+    "external-crates/move/crates/move-vm-profiler",
+    "external-crates/move/crates/move-vm-runtime",
+    "external-crates/move/crates/move-vm-transactional-tests",
+    "external-crates/move/crates/serializer-tests",
+    "external-crates/move/crates/test-generation",
+    "external-crates/move/historical-versions/v0/crates/move-bytecode-verifier",
+    "external-crates/move/historical-versions/v0/crates/move-stdlib-natives",
+    "external-crates/move/historical-versions/v0/crates/move-vm-runtime",
+    "external-crates/move/historical-versions/v0/crates/move-vm-types",
+    "external-crates/move/historical-versions/v1/crates/move-bytecode-verifier",
+    "external-crates/move/historical-versions/v1/crates/move-stdlib-natives",
+    "external-crates/move/historical-versions/v1/crates/move-vm-runtime",
+    "external-crates/move/historical-versions/v1/crates/move-vm-types",
+    "external-crates/move/historical-versions/v2/crates/move-abstract-interpreter",
+    "external-crates/move/historical-versions/v2/crates/move-bytecode-verifier",
+    "external-crates/move/historical-versions/v2/crates/move-stdlib-natives",
+    "external-crates/move/historical-versions/v2/crates/move-vm-runtime",
+    "external-crates/move/historical-versions/v2/crates/move-vm-types",
+    "external-crates/move/historical-versions/v3/crates/move-abstract-interpreter",
+    "external-crates/move/historical-versions/v3/crates/move-bytecode-verifier",
+    "external-crates/move/historical-versions/v3/crates/move-stdlib-natives",
+    "external-crates/move/historical-versions/v3/crates/move-vm-runtime",
+    "external-crates/move/historical-versions/v3/crates/move-vm-types",
+    "external-crates/move/historical-versions/v4/crates/bytecode-verifier-tests",
+    "external-crates/move/historical-versions/v4/crates/move-abstract-interpreter",
+    "external-crates/move/historical-versions/v4/crates/move-bytecode-verifier",
+    "external-crates/move/historical-versions/v4/crates/move-vm-runtime",
 ]
 
 members = [
@@ -91,6 +92,8 @@ members = [
     "crates/linku-network",
     "crates/linku-service",
     "crates/prometheus-closure-metric",
+    "crates/rtd-bigtable-proto",
+    "crates/rtd-rpc-cursor",
     "crates/shared-crypto",
     "crates/simulacrum",
     "crates/rtd",
@@ -134,21 +137,16 @@ members = [
     "crates/rtd-indexer-alt-framework",
     "crates/rtd-indexer-alt-framework-store-traits",
     "crates/rtd-indexer-alt-graphql",
-    "crates/rtd-indexer-alt-jsonrpc",
     "crates/rtd-indexer-alt-metrics",
     "crates/rtd-indexer-alt-object-store",
     "crates/rtd-indexer-alt-reader",
     "crates/rtd-indexer-alt-schema",
     "crates/rtd-inverted-index",
     "crates/rtd-json",
-    "crates/rtd-json-rpc",
-    "crates/rtd-json-rpc-api",
-    "crates/rtd-json-rpc-tests",
     "crates/rtd-json-rpc-types",
     "crates/rtd-keys",
     "crates/rtd-kv-rpc",
     "crates/rtd-kvstore",
-    "crates/rtd-bigtable-proto",
     "crates/rtd-light-client",
     "crates/rtd-macros",
     "crates/rtd-metric-checker",
@@ -159,8 +157,6 @@ members = [
     "crates/rtd-name-service",
     "crates/rtd-network",
     "crates/rtd-node",
-    "crates/rtd-open-rpc",
-    "crates/rtd-open-rpc-macros",
     "crates/rtd-oracle",
     "crates/rtd-package-alt",
     "crates/rtd-package-dump",
@@ -176,8 +172,6 @@ members = [
     "crates/rtd-rosetta",
     "crates/rtd-rpc-api",
     "crates/rtd-rpc-benchmark",
-    "crates/rtd-rpc-cursor",
-    "crates/rtd-rpc-loadgen",
     "crates/rtd-rpc-resolver",
     "crates/rtd-rpc-store",
     "crates/rtd-sdk",
@@ -224,6 +218,9 @@ members = [
     "rtd-execution/historical-versions/v3/rtd-adapter",
     "rtd-execution/historical-versions/v3/rtd-move-natives",
     "rtd-execution/historical-versions/v3/rtd-verifier",
+    "rtd-execution/historical-versions/v4/rtd-adapter",
+    "rtd-execution/historical-versions/v4/rtd-move-natives",
+    "rtd-execution/historical-versions/v4/rtd-verifier",
     "rtd-execution/latest/rtd-adapter",
     "rtd-execution/latest/rtd-move-natives",
     "rtd-execution/latest/rtd-verifier",
@@ -231,7 +228,7 @@ members = [
 
 [workspace.package]
 # This version string will be inherited by rtd-core, rtd-faucet, rtd-node, rtd-tools, rtd-sdk, rtd-move-build, and rtd crates.
-version = "1.81.0"
+version = "1.85.0"
 
 [profile.release]
 # debug = 1 means line charts only, which is minimum needed for good stack traces
@@ -272,6 +269,89 @@ strip = 'none'
 # (recursive) stack frames by up to 10x, avoiding stack overflows.
 opt-level = 2
 
+# Tests spend most of their time compiling, verifying and running Move code, and doing
+# zkLogin and other cryptography. Unoptimized, these crates make test runs several times slower.
+[profile.test.package.move-symbol-pool]
+opt-level = 2
+
+[profile.test.package.move-core-types]
+opt-level = 2
+
+[profile.test.package.move-binary-format]
+opt-level = 2
+
+[profile.test.package.move-bytecode-verifier]
+opt-level = 2
+
+[profile.test.package.move-bytecode-verifier-meter]
+opt-level = 2
+
+[profile.test.package.move-borrow-graph]
+opt-level = 2
+
+[profile.test.package.move-regex-borrow-graph]
+opt-level = 2
+
+[profile.test.package.move-abstract-interpreter]
+opt-level = 2
+
+[profile.test.package.move-abstract-stack]
+opt-level = 2
+
+[profile.test.package.move-vm-runtime]
+opt-level = 2
+
+[profile.test.package.move-vm-config]
+opt-level = 2
+
+[profile.test.package.move-unit-test]
+opt-level = 2
+
+[profile.test.package.move-ir-types]
+opt-level = 2
+
+[profile.test.package.move-command-line-common]
+opt-level = 2
+
+[profile.test.package.move-bytecode-source-map]
+opt-level = 2
+
+[profile.test.package.ark-bn254]
+opt-level = 2
+
+[profile.test.package.ark-ec]
+opt-level = 2
+
+[profile.test.package.ark-ff]
+opt-level = 2
+
+[profile.test.package.ark-groth16]
+opt-level = 2
+
+[profile.test.package.ark-poly]
+opt-level = 2
+
+[profile.test.package.ark-serialize]
+opt-level = 2
+
+[profile.test.package.ark-std]
+opt-level = 2
+
+[profile.test.package.fastcrypto]
+opt-level = 2
+
+[profile.test.package.fastcrypto-zkp]
+opt-level = 2
+
+[profile.test.package.fastcrypto-tbls]
+opt-level = 2
+
+[profile.test.package.fastcrypto-vdf]
+opt-level = 2
+
+[profile.test.package.rtd-move-natives-latest]
+opt-level = 2
+
 [profile.simulator]
 inherits = "test"
 debug = true
@@ -301,6 +381,7 @@ anyhow = "1.0.71"
 arrow = "57.3"
 arrow-array = "57.3"
 arc-swap = { version = "1.5.1", features = ["serde"] }
+argon2 = { version = "0.6.0", default-features = false }
 assert_cmd = "2.0.6"
 async-graphql = "=7.0.1"
 async-graphql-axum = "=7.0.1"
@@ -309,6 +390,8 @@ async-recursion = "1.0.4"
 async-stream = "0.3.6"
 async-trait = "0.1.61"
 atomic_float = "0.1"
+aws-config = { version = "1.8", features = ["behavior-version-latest"] }
+aws-sdk-kms = { version = "1.97", default-features = false, features = ["rt-tokio"] }
 axum = { version = "0.8", default-features = false, features = [
   "macros",
   "tokio",
@@ -413,18 +496,12 @@ integer-encoding = "3.0.1"
 iso8601 = "0.6.3"
 itertools = "0.13.0"
 tikv-jemalloc-ctl = "^0.5"
+tikv-jemalloc-sys = "^0.5"
 tikv-jemallocator = { version = "^0.5", features = [
   "profiling",
   "disable_initial_exec_tls",
 ] }
-jsonrpsee = { version = "0.24.9", features = [
-  "server",
-  "macros",
-  "ws-client",
-  "http-client",
-  "jsonrpsee-core",
-] }
-json_to_table = { git = "https://github.com/zhiburt/tabled/", rev = "e449317a1c02eb6b29e409ad6617e5d9eb7b3bd4" }
+json_to_table ={ git = "https://github.com/zhiburt/tabled/", rev = "e449317a1c02eb6b29e409ad6617e5d9eb7b3bd4" }
 leb128 = "0.2.5"
 lru = "0.18.2"
 miette = { version = "7", features = ["fancy"] }
@@ -435,8 +512,8 @@ moka = { version = "0.12", default-features = false, features = [
   "atomic64",
 ] }
 more-asserts = "0.3.1"
-msim = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "6b8e1e8cdce408e73d46538773fc85a56c082db7", package = "msim" }
-msim-macros = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "6b8e1e8cdce408e73d46538773fc85a56c082db7", package = "msim-macros" }
+msim = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "e8545529dffab9388ffa5624fa1baf5be9b8a3e9", package = "msim" }
+msim-macros = { git = "https://github.com/LinkUVerse/linku-sim.git", rev = "e8545529dffab9388ffa5624fa1baf5be9b8a3e9", package = "msim-macros" }
 multiaddr = "0.18.2"
 nexlint = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
 nexlint-lints = { git = "https://github.com/nextest-rs/nexlint.git", rev = "7ce56bd591242a57660ed05f14ca2483c37d895b" }
@@ -530,7 +607,7 @@ tempfile = "3.20.0"
 test-fuzz = "3.0.4"
 thiserror = "1.0.40"
 tiny-bip39 = "1.0.0"
-tokio = "=1.52.1"
+tokio = "=1.54.1"
 tokio-rustls = { version = "0.26", default-features = false, features = [
   "tls12",
   "ring",
@@ -597,7 +674,6 @@ winnow = "0.7"
 wiremock = "0.6"
 x509-parser = { version = "0.17.0", features = ["verify"] }
 zstd = "0.13.2"
-versions = "4.1.0"
 shlex = "1.3.0"
 starlark = "0.13.0"
 
@@ -612,8 +688,7 @@ move-compiler = { path = "external-crates/move/crates/move-compiler" }
 move-core-types = { path = "external-crates/move/crates/move-core-types" }
 move-disassembler = { path = "external-crates/move/crates/move-disassembler" }
 move-package = { path = "external-crates/move/crates/move-package" }
-move-package-alt = { path = "external-crates/move/crates/move-package-alt" }
-move-package-alt-compilation = { path = "external-crates/move/crates/move-package-alt-compilation" }
+move-package-compilation = { path = "external-crates/move/crates/move-package-compilation" }
 move-unit-test = { path = "external-crates/move/crates/move-unit-test" }
 move-vm-config = { path = "external-crates/move/crates/move-vm-config" }
 move-vm-profiler = { path = "external-crates/move/crates/move-vm-profiler" }
@@ -627,12 +702,13 @@ move-abstract-stack = { path = "external-crates/move/crates/move-abstract-stack"
 move-analyzer = { path = "external-crates/move/crates/move-analyzer" }
 move-trace-format = { path = "external-crates/move/crates/move-trace-format" }
 
-fastcrypto = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce" }
-fastcrypto-tbls = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce" }
-fastcrypto-zkp = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce", package = "fastcrypto-zkp" }
-fastcrypto-vdf = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce", features = [
+fastcrypto = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "a58b2984d6ac827b40c48fc0f2478a46569b5b17" }
+fastcrypto-threshold = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "a58b2984d6ac827b40c48fc0f2478a46569b5b17" }
+fastcrypto-zkp = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "a58b2984d6ac827b40c48fc0f2478a46569b5b17", package = "fastcrypto-zkp" }
+fastcrypto-vdf = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "a58b2984d6ac827b40c48fc0f2478a46569b5b17", features = [
   "experimental",
 ] }
+fastcrypto-pq = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "a58b2984d6ac827b40c48fc0f2478a46569b5b17" }
 passkey-types = { version = "0.4.0" }
 passkey-client = { version = "0.4.0" }
 passkey-authenticator = { version = "0.4.0" }
@@ -645,17 +721,18 @@ p384 = { version = "0.13.0", default-features = false, features = [
   "sha384",
 ] }
 ciborium = "0.2"
+ciborium-ll = "0.2"
 
 # anemo dependencies
-anemo = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
-anemo-build = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
-anemo-cli = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
-anemo-tower = { git = "https://github.com/linkuverse/anemo.git", rev = "68adc31d4ea1f4573f08c2c75317fcb205b823de" }
+anemo = { git = "https://github.com/linkuverse/anemo.git", rev = "845a9b5aab1f8b78fb67c0e8e1998cb2e6a4d72e" }
+anemo-build = { git = "https://github.com/linkuverse/anemo.git", rev = "845a9b5aab1f8b78fb67c0e8e1998cb2e6a4d72e" }
+anemo-cli = { git = "https://github.com/linkuverse/anemo.git", rev = "845a9b5aab1f8b78fb67c0e8e1998cb2e6a4d72e" }
+anemo-tower = { git = "https://github.com/linkuverse/anemo.git", rev = "845a9b5aab1f8b78fb67c0e8e1998cb2e6a4d72e" }
 
 # core-types from the new sdk for use in gRPC
-rtd-sdk-types = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "hash", "serde" ] }
-rtd-crypto = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin" ] }
-rtd-rpc = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "fd95c4566e88cda3c4e5e590deda4e6aff864700", features = [ "unstable" ] }
+rtd-sdk-types = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "8c356d65b1c324590a3fd25990c382af308ea545", package = "sui-sdk-types", features = [ "hash", "serde" ] }
+rtd-crypto = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "8c356d65b1c324590a3fd25990c382af308ea545", package = "sui-crypto", features = [ "ed25519", "secp256r1", "secp256k1", "passkey", "zklogin", "mldsa65" ] }
+rtd-rpc = { git = "https://github.com/LinkUVerse/rtd-rust-sdk.git", rev = "8c356d65b1c324590a3fd25990c382af308ea545", package = "sui-rpc", features = [ "unstable" ] }
 
 ### Workspace Members ###
 anemo-benchmark = { path = "crates/anemo-benchmark" }
@@ -700,19 +777,15 @@ rtd-indexer-alt-consistent-store = { path = "crates/rtd-indexer-alt-consistent-s
 rtd-indexer-alt-framework = { path = "crates/rtd-indexer-alt-framework", default-features = false }
 rtd-indexer-alt-framework-store-traits = { path = "crates/rtd-indexer-alt-framework-store-traits" }
 rtd-indexer-alt-graphql = { path = "crates/rtd-indexer-alt-graphql" }
-rtd-indexer-alt-jsonrpc = { path = "crates/rtd-indexer-alt-jsonrpc" }
-rtd-indexer-alt-metrics = { path = "crates/rtd-indexer-alt-metrics" }
+rtd-indexer-alt-metrics = { path = "crates/rtd-indexer-alt-metrics", default-features = false }
 rtd-indexer-alt-reader = { path = "crates/rtd-indexer-alt-reader" }
 rtd-indexer-alt-schema = { path = "crates/rtd-indexer-alt-schema" }
 rtd-indexer-alt-object-store = { path = "crates/rtd-indexer-alt-object-store" }
 rtd-json = { path = "crates/rtd-json" }
-rtd-json-rpc = { path = "crates/rtd-json-rpc" }
-rtd-json-rpc-api = { path = "crates/rtd-json-rpc-api" }
 rtd-json-rpc-types = { path = "crates/rtd-json-rpc-types" }
 rtd-keys = { path = "crates/rtd-keys" }
 rtd-inverted-index = { path = "crates/rtd-inverted-index" }
 rtd-kvstore = { path = "crates/rtd-kvstore" }
-rtd-bigtable-proto = { path = "crates/rtd-bigtable-proto" }
 rtd-kv-rpc = { path = "crates/rtd-kv-rpc" }
 rtd-light-client = { path = "crates/rtd-light-client" }
 rtd-macros = { path = "crates/rtd-macros" }
@@ -724,8 +797,6 @@ rtd-move-lsp = { path = "crates/rtd-move-lsp" }
 rtd-name-service = { path = "crates/rtd-name-service" }
 rtd-network = { path = "crates/rtd-network" }
 rtd-node = { path = "crates/rtd-node" }
-rtd-open-rpc = { path = "crates/rtd-open-rpc" }
-rtd-open-rpc-macros = { path = "crates/rtd-open-rpc-macros" }
 rtd-package-dump = { path = "crates/rtd-package-dump" }
 rtd-package-alt = { path = "crates/rtd-package-alt" }
 rtd-package-management = { path = "crates/rtd-package-management" }
@@ -738,7 +809,6 @@ rtd-protocol-config-macros = { path = "crates/rtd-protocol-config-macros" }
 rtd-proxy = { path = "crates/rtd-proxy" }
 rtd-replay-2 = { path = "crates/rtd-replay-2" }
 rtd-rosetta = { path = "crates/rtd-rosetta" }
-rtd-rpc-loadgen = { path = "crates/rtd-rpc-loadgen" }
 rtd-sdk = { path = "crates/rtd-sdk" }
 rtd-simulator = { path = "crates/rtd-simulator" }
 rtd-snapshot = { path = "crates/rtd-snapshot" }
@@ -754,7 +824,6 @@ rtd-test-transaction-builder = { path = "crates/rtd-test-transaction-builder" }
 rtd-test-validator = { path = "crates/rtd-test-validator" }
 rtd-tls = { path = "crates/rtd-tls" }
 rtd-rpc-api = { path = "crates/rtd-rpc-api" }
-rtd-rpc-cursor = { path = "crates/rtd-rpc-cursor" }
 rtd-rpc-resolver = { path = "crates/rtd-rpc-resolver" }
 rtd-rpc-store = { path = "crates/rtd-rpc-store" }
 rtd-tool = { path = "crates/rtd-tool" }
@@ -784,7 +853,17 @@ rtd-execution = { path = "rtd-execution" }
 # move-vm-runtime = { path = "external-crates/move/move-vm/runtime" }
 # move-bytecode-verifier = { path = "external-crates/move/move-bytecode-verifier" }
 
+jsonrpsee = { version = "0.24.9", features = ["server", "macros", "ws-client", "http-client", "jsonrpsee-core"] }
+move-package-alt = { path = "external-crates/move/crates/move-package-alt" }
+move-package-alt-compilation = { path = "external-crates/move/crates/move-package-alt-compilation" }
+fastcrypto-tbls = { git = "https://github.com/LinkUVerse/fastcrypto", rev = "076bf5ad8cea140dc7cf5c5861c24a36acdf64ce" }
+rtd-bigtable-proto = { path = "crates/rtd-bigtable-proto" }
+rtd-rpc-cursor = { path = "crates/rtd-rpc-cursor" }
 [patch.crates-io]
 async-graphql = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
 async-graphql-axum = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
 async-graphql-value = { git = "https://github.com/amnn/async-graphql", branch = "v7.0.1-react-18-graphiql-4" }
+# h2 master plus hyperium/h2#983 (clients ignore frames on streams they reset and forgot), kept on
+# a fork branch so the commit stays fetchable while the PR is in review; remove once an h2 release
+# includes it.
+h2 = { git = "https://github.com/nickvikeras/h2", rev = "44260b15da7d6cf15c241295a2d27917c157f4c8" }

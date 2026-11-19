@@ -1,8 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use move_binary_format::errors::PartialVMResult;
 use move_binary_format::safe_unwrap;
+use move_binary_format::{errors::PartialVMResult, safe_assert_eq};
 use move_core_types::{
     gas_algebra::InternalGas,
     language_storage::TypeTag,
@@ -17,11 +17,7 @@ use std::collections::VecDeque;
 
 use crate::{NativesCostTable, get_extension};
 
-pub(crate) fn is_otw_struct(
-    struct_layout: &MoveStructLayout,
-    type_tag: &TypeTag,
-    hardened_check: bool,
-) -> bool {
+pub(crate) fn is_otw_struct(struct_layout: &MoveStructLayout, type_tag: &TypeTag) -> bool {
     let has_one_bool_field = matches!(struct_layout.0.as_slice(), [MoveTypeLayout::Bool]);
 
     // If a struct type has the same name as the module that defines it but capitalized, and it has
@@ -34,8 +30,7 @@ pub(crate) fn is_otw_struct(
         TypeTag::Struct(struct_tag) if
         has_one_bool_field &&
         struct_tag.name.to_string() == struct_tag.module.to_string().to_ascii_uppercase() &&
-        // hardened check ==> no generic types
-        (!hardened_check || struct_tag.type_params.is_empty())
+        struct_tag.type_params.is_empty()
     )
 }
 
@@ -57,8 +52,8 @@ pub fn is_one_time_witness(
     mut ty_args: Vec<Type>,
     args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.len() == 1);
-    debug_assert!(args.len() == 1);
+    safe_assert_eq!(ty_args.len(), 1);
+    safe_assert_eq!(args.len(), 1);
 
     let type_is_one_time_witness_cost_params = get_extension!(context, NativesCostTable)?
         .type_is_one_time_witness_cost_params
@@ -73,15 +68,17 @@ pub fn is_one_time_witness(
 
     native_charge_gas_early_exit!(
         context,
-        type_is_one_time_witness_cost_params.types_is_one_time_witness_type_cost_per_byte
-            * u64::from(ty.size()?).into()
+        type_is_one_time_witness_cost_params
+            .types_is_one_time_witness_type_cost_per_byte
+            .saturating_mul(u64::from(ty.size()?))
     );
 
     let type_tag = context.type_to_type_tag(&ty)?;
     native_charge_gas_early_exit!(
         context,
-        type_is_one_time_witness_cost_params.types_is_one_time_witness_type_tag_cost_per_byte
-            * u64::from(type_tag.abstract_size_for_gas_metering()).into()
+        type_is_one_time_witness_cost_params
+            .types_is_one_time_witness_type_tag_cost_per_byte
+            .saturating_mul(u64::from(type_tag.abstract_size_for_gas_metering()))
     );
 
     let type_layout = context.type_to_type_layout(&ty)?;
@@ -91,8 +88,7 @@ pub fn is_one_time_witness(
         return Ok(NativeResult::ok(cost, smallvec![Value::bool(false)]));
     };
 
-    let hardened_check = context.runtime_limits_config().hardened_otw_check;
-    let is_otw = is_otw_struct(&struct_layout, &type_tag, hardened_check);
+    let is_otw = is_otw_struct(&struct_layout, &type_tag);
 
     Ok(NativeResult::ok(cost, smallvec![Value::bool(is_otw)]))
 }

@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
+use std::path::PathBuf;
+use std::str::FromStr;
 use rtd_macros::sim_test;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetCoinInfoResponse;
-use rtd_rpc::proto::rtd::rpc::v2::coin_metadata::MetadataCapState;
-use rtd_rpc::proto::rtd::rpc::v2::coin_treasury::SupplyState;
-use rtd_rpc::proto::rtd::rpc::v2::regulated_coin_metadata::CoinRegulatedState;
-use rtd_rpc::proto::rtd::rpc::v2::state_service_client::StateServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetCoinInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::coin_metadata::MetadataCapState;
+use rtd_rpc::proto::sui::rpc::v2::coin_treasury::SupplyState;
+use rtd_rpc::proto::sui::rpc::v2::regulated_coin_metadata::CoinRegulatedState;
+use rtd_rpc::proto::sui::rpc::v2::state_service_client::StateServiceClient;
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::coin_registry::Currency;
 use rtd_types::effects::TransactionEffectsAPI;
@@ -17,8 +19,6 @@ use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::SharedObjectMutability;
 use rtd_types::transaction::{ObjectArg, TransactionData};
 use rtd_types::{RTD_COIN_REGISTRY_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID, TypeTag};
-use std::path::PathBuf;
-use std::str::FromStr;
 use test_cluster::TestClusterBuilder;
 
 // RTD doesn't use the CoinRegistry - it was created before the CoinRegistry system existed and has
@@ -897,13 +897,13 @@ async fn publish_non_otw_coin(
     // Get the CoinRegistry shared object
     let registry_obj_response = {
         let mut ledger_client = {
-            use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
+            use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
             LedgerServiceClient::connect(test_cluster.rpc_url().to_owned())
                 .await
                 .expect("Failed to connect to ledger service")
         };
 
-        use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
+        use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
         ledger_client
             .get_object({
                 let mut request = GetObjectRequest::default();
@@ -916,7 +916,7 @@ async fn publish_non_otw_coin(
             .into_inner()
     };
 
-    use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
+    use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
     let registry_initial_version = registry_obj_response
         .object
         .and_then(|obj| obj.owner)
@@ -996,9 +996,9 @@ async fn finalize_registration(
     _package_id: ObjectID,
     coin_type: &str,
 ) {
-    use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
-    use rtd_rpc::proto::rtd::rpc::v2::owner::OwnerKind;
-    use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};
+    use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
+    use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
+    use rtd_rpc::proto::sui::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};
     use rtd_types::base_types::SequenceNumber;
 
     let mut ledger_client = LedgerServiceClient::connect(test_cluster.rpc_url().to_owned())

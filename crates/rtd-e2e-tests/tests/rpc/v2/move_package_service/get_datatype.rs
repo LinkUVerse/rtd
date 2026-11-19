@@ -1,8 +1,8 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_rpc::proto::rtd::rpc::v2::GetDatatypeRequest;
-use rtd_rpc::proto::rtd::rpc::v2::move_package_service_client::MovePackageServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::GetDatatypeRequest;
+use rtd_rpc::proto::sui::rpc::v2::move_package_service_client::MovePackageServiceClient;
 use test_cluster::TestClusterBuilder;
 
 use crate::v2::move_package_service::system_package_expectations::validate_validator_operation_cap_datatype;

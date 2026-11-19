@@ -22,7 +22,6 @@
 //> 0: rtd::balance::redeem_funds<rtd::rtd::RTD>(Input(0));
 //> 1: rtd::balance::send_funds<rtd::rtd::RTD>(Result(0), Input(1));
 
-
 //# create-checkpoint
 
 //# view-funds rtd::balance::Balance<rtd::rtd::RTD> A
@@ -33,7 +32,6 @@
 //# programmable --sender B --inputs withdraw<rtd::balance::Balance<rtd::rtd::RTD>>(500) @B
 //> 0: rtd::balance::redeem_funds<rtd::rtd::RTD>(Input(0));
 //> 1: rtd::balance::send_funds<rtd::rtd::RTD>(Result(0), Input(1));
-
 
 //# create-checkpoint
 

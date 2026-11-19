@@ -11,7 +11,8 @@ use crate::{
 };
 use better_any::{Tid, TidAble};
 use indexmap::{IndexMap, IndexSet};
-use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::errors::PartialVMResult;
+use move_binary_format::partial_vm_error;
 use move_binary_format::{safe_assert, safe_unwrap};
 use move_core_types::{
     account_address::AccountAddress,
@@ -19,7 +20,6 @@ use move_core_types::{
     annotated_visitor as AV,
     language_storage::StructTag,
     u256::U256,
-    vm_status::StatusCode,
 };
 use move_vm_runtime::{
     execution::values::{Vector, VectorSpecialization},
@@ -35,9 +35,16 @@ use move_vm_runtime::{
     },
     pop_arg,
 };
+use smallvec::smallvec;
+use std::{
+    borrow::Borrow,
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, BTreeSet, VecDeque},
+};
 use rtd_types::{
-    TypeTag,
-    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
+    RTD_CLOCK_OBJECT_ID, RTD_CLOCK_OBJECT_SHARED_VERSION, TypeTag,
+    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
+    clock::Clock,
     config,
     digests::{ObjectDigest, TransactionDigest},
     dynamic_field::DynamicFieldInfo,
@@ -45,13 +52,9 @@ use rtd_types::{
     id::UID,
     in_memory_storage::InMemoryStorage,
     object::{MoveObject, Object, Owner},
-    storage::{BackingPackageStore, ObjectFundsResolver, PackageObject, RuntimeObjectResolver},
-};
-use smallvec::smallvec;
-use std::{
-    borrow::Borrow,
-    cell::RefCell,
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    storage::{
+        BackingPackageStore, ImplicitSystemObjectResolver, PackageObject, RuntimeObjectResolver,
+    },
 };
 
 const E_COULD_NOT_GENERATE_EFFECTS: u64 = 0;
@@ -61,6 +64,7 @@ const E_UNABLE_TO_ALLOCATE_RECEIVING_TICKET: u64 = 5;
 const E_RECEIVING_TICKET_ALREADY_ALLOCATED: u64 = 6;
 const E_UNABLE_TO_DEALLOCATE_RECEIVING_TICKET: u64 = 7;
 const E_INSUFFICIENT_FUNDS: u64 = 8;
+const E_UNBACKED_WITHDRAWAL: u64 = 11;
 
 type Set<K> = IndexSet<K>;
 
@@ -79,10 +83,17 @@ pub struct InMemoryTestStore {
     /// for a transaction's funds withdrawal inputs. Object withdrawals are reserved by the object
     /// runtime instead, under different rules.
     address_reservations: RefCell<BTreeMap<(RtdAddress, TypeTag), U256>>,
+    /// Timestamp of the Clock `clock::borrow` returns. Unit tests have no consensus commits,
+    /// so the test-only Clock helpers set it; it starts at the genesis Clock's 0.
+    clock_timestamp_ms: Cell<u64>,
 }
 impl<'a> NativeExtensionMarker<'a> for &'a InMemoryTestStore {}
 
 impl InMemoryTestStore {
+    pub(crate) fn set_clock_timestamp_ms(&self, timestamp_ms: u64) {
+        self.clock_timestamp_ms.set(timestamp_ms);
+    }
+
     fn settled_funds(&self, owner: RtdAddress, type_: &TypeTag) -> u128 {
         self.funds
             .borrow()
@@ -114,8 +125,10 @@ impl InMemoryTestStore {
     }
 
     /// Applies the ending transaction's accumulator events to the settled balances, and drops
-    /// the reservations it took, which only cover that transaction.
-    fn settle_funds(&self, accumulator_events: Vec<MoveAccumulatorEvent>) {
+    /// the reservations it took, which only cover that transaction. Returns false if the
+    /// transaction withdrew more from an owner than it had, which only a withdrawal that was not
+    /// reserved against these balances (e.g. one kept from an earlier transaction) can do.
+    fn settle_funds(&self, accumulator_events: Vec<MoveAccumulatorEvent>) -> bool {
         self.address_reservations.borrow_mut().clear();
         let mut changes: BTreeMap<(RtdAddress, TypeTag), (u128, u128)> = BTreeMap::new();
         for event in accumulator_events {
@@ -136,13 +149,12 @@ impl InMemoryTestStore {
         // them in test_scenario. Today it always returns zero there.
         for (key, (merged, split)) in changes {
             let balance = funds.entry(key).or_default();
-            // Reserved withdrawals cannot underflow, but withdrawals created without a
-            // reservation (e.g. `allowance::new_withdrawal_for_testing`) are never checked
-            // against this balance.
-            // TODO: abort instead of clamping once test-only withdrawals such as
-            // `allowance::new_withdrawal_for_testing` are reserved against the settled balance.
-            *balance = (*balance + merged).saturating_sub(split);
+            let Some(settled) = (*balance + merged).checked_sub(split) else {
+                return false;
+            };
+            *balance = settled;
         }
+        true
     }
 }
 
@@ -155,13 +167,37 @@ impl BackingPackageStore for InMemoryTestStore {
     }
 }
 
-impl ObjectFundsResolver for InMemoryTestStore {
+impl ImplicitSystemObjectResolver for InMemoryTestStore {
     fn object_available_balance(
         &self,
         owner: RtdAddress,
         type_: &TypeTag,
     ) -> rtd_types::error::RtdResult<u128> {
         Ok(self.settled_funds(owner, type_))
+    }
+
+    fn clock(&self) -> rtd_types::error::RtdResult<Object> {
+        let clock = Clock {
+            id: UID::new(RTD_CLOCK_OBJECT_ID),
+            timestamp_ms: self.clock_timestamp_ms.get(),
+        };
+        let move_object = unsafe {
+            MoveObject::new_from_execution_with_limit(
+                Clock::type_().into(),
+                false,
+                RTD_CLOCK_OBJECT_SHARED_VERSION,
+                bcs::to_bytes(&clock).expect("Clock serializes"),
+                250 * 1024,
+            )
+        }
+        .expect("Clock fits the object size limit");
+        Ok(Object::new_move(
+            move_object,
+            Owner::Shared {
+                initial_shared_version: RTD_CLOCK_OBJECT_SHARED_VERSION,
+            },
+            TransactionDigest::default(),
+        ))
     }
 }
 
@@ -369,7 +405,9 @@ pub fn end_transaction(
             ));
         }
     }
-    store.settle_funds(accumulator_events);
+    if !store.settle_funds(accumulator_events) {
+        return Ok(NativeResult::err(legacy_test_cost(), E_UNBACKED_WITHDRAWAL));
+    }
 
     // deletions already handled above, but we drop the delete kind for the effects
     let mut deleted = vec![];
@@ -962,9 +1000,7 @@ fn get_specified_ty(mut ty_args: Vec<Type>) -> PartialVMResult<Type> {
 fn pop_id(args: &mut VecDeque<Value>) -> PartialVMResult<ObjectID> {
     let v = match args.pop_back() {
         None => {
-            return Err(PartialVMError::new(
-                StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-            ));
+            return Err(partial_vm_error!(UNKNOWN_INVARIANT_VIOLATION_ERROR));
         }
         Some(v) => v,
     };
@@ -1044,9 +1080,7 @@ fn transaction_effects(
 
 fn object_type_of_type(context: &NativeContext, ty: &Type) -> PartialVMResult<MoveObjectType> {
     let TypeTag::Struct(s_tag) = context.type_to_type_tag(ty)? else {
-        return Err(PartialVMError::new(
-            StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR,
-        ));
+        return Err(partial_vm_error!(UNKNOWN_INVARIANT_VIOLATION_ERROR));
     };
     Ok(MoveObjectType::from(*s_tag))
 }

@@ -1,6 +1,9 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::path::PathBuf;
 use rtd_core::authority_client::AuthorityAPI;
 use rtd_macros::*;
 use rtd_test_transaction_builder::publish_package;
@@ -11,9 +14,6 @@ use rtd_types::error::{RtdErrorKind, UserInputError};
 use rtd_types::messages_grpc::SubmitTxRequest;
 use rtd_types::object::Owner;
 use rtd_types::transaction::{CallArg, ObjectArg, Transaction};
-use std::collections::HashSet;
-use std::net::SocketAddr;
-use std::path::PathBuf;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 #[sim_test]
@@ -266,8 +266,8 @@ impl TestEnvironment {
         child: ObjectRef,
         function: &'static str,
     ) -> anyhow::Result<()> {
-        use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
-        use rtd_rpc::proto::rtd::rpc::v2::{
+        use rtd_rpc::proto::sui::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+        use rtd_rpc::proto::sui::rpc::v2::{
             Argument, Command, Input, MoveCall, ProgrammableTransaction,
             SimulateTransactionRequest, Transaction, TransactionKind,
         };

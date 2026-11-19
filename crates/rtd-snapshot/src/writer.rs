@@ -14,6 +14,14 @@ use futures::StreamExt;
 use integer_encoding::VarInt;
 use object_store::DynObjectStore;
 use object_store::path::Path;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry::Vacant;
+use std::fs;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::sync::Arc;
 use rtd_config::object_storage_config::ObjectStoreConfig;
 use rtd_core::authority::authority_store_tables::{AuthorityPerpetualTables, LiveObject};
 use rtd_core::global_state_hasher::GlobalStateHasher;
@@ -26,14 +34,6 @@ use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::messages_checkpoint::ECMHLiveObjectSetDigest;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::get_rtd_system_state;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry::Vacant;
-use std::fs;
-use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Seek, SeekFrom, Write};
-use std::num::NonZeroUsize;
-use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -307,12 +307,12 @@ impl StateSnapshotWriterV1 {
         });
         write_handler.await?.context(format!(
             "Failed to write state snapshot for epoch: {}",
-            &epoch
+            epoch
         ))?;
 
         upload_handle.await?.context(format!(
             "Failed to upload state snapshot for epoch: {}",
-            &epoch
+            epoch
         ))?;
 
         Self::sync_file_to_remote(

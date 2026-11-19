@@ -17,6 +17,8 @@ use crate::{
 };
 use anyhow::{Context, Error, Result, anyhow, bail};
 use move_trace_format::format::MoveTraceBuilder;
+use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
+use std::time::Instant;
 use rtd_data_store::{
     EpochStore, ObjectKey, ObjectStore, ReadDataStore, TransactionStore, VersionQuery,
 };
@@ -35,11 +37,8 @@ use rtd_types::{
 };
 use rtd_types::{
     execution_status::{ExecutionErrorKind, ExecutionFailure, ExecutionStatus},
-    gas::RtdGasStatusAPI,
     transaction::{InputObjectKind, ObjectReadResult, ObjectReadResultKind},
 };
-use std::collections::{BTreeMap, BTreeSet, btree_map::Entry};
-use std::time::Instant;
 use tracing::{debug, error, info_span, trace, warn};
 
 pub type ObjectVersion = u64;
@@ -186,7 +185,7 @@ pub(crate) async fn replay_transaction<S: ReadDataStore>(
 
     artifact_manager
         .member(Artifact::TransactionGasReport)
-        .serialize_artifact(&context_and_effects.gas_status.gas_usage_report())
+        .serialize_artifact(&context_and_effects.gas_report)
         .transpose()?
         .unwrap();
 
@@ -746,6 +745,7 @@ fn is_early_execution_error(status: &ExecutionStatus) -> bool {
                 | ExecutionErrorKind::ExecutionCancelledDueToSharedObjectCongestion { .. }
                 | ExecutionErrorKind::ExecutionCancelledDueToRandomnessUnavailable
                 | ExecutionErrorKind::InsufficientFundsForWithdraw
+                | ExecutionErrorKind::TransactionExpired
         ),
         ExecutionStatus::Success => false,
     }

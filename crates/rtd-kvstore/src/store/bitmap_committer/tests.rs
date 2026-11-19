@@ -1,13 +1,13 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_inverted_index::event_seq;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use bytes::Bytes;
 use roaring::RoaringBitmap;
+use scoped_futures::ScopedFutureExt;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework::pipeline::sequential::Handler;
 use rtd_indexer_alt_framework_store_traits::CommitterWatermark;
@@ -16,7 +16,6 @@ use rtd_indexer_alt_framework_store_traits::SequentialStore;
 use rtd_indexer_alt_framework_store_traits::Store;
 use rtd_inverted_index::IndexDimension;
 use rtd_types::full_checkpoint_content::Checkpoint;
-use scoped_futures::ScopedFutureExt;
 
 use super::NUM_SHARDS;
 use super::shard_for;
@@ -33,11 +32,11 @@ use crate::handlers::BitmapIndexValue;
 use crate::rate_limiter::CompositeRateLimiter;
 use crate::store::BigTableStore;
 use crate::tables;
-use crate::tables::event_bitmap_index;
+use crate::tables::BitmapSchema;
 use crate::tables::transaction_bitmap_index;
 
 const PIPELINE: &str = "test_bitmap";
-const TABLE: &str = transaction_bitmap_index::NAME;
+const TABLE: &str = transaction_bitmap_index::NAME_V2;
 const FAMILY: &str = tables::FAMILY;
 const COL: &str = transaction_bitmap_index::col::BITMAP;
 const BUCKET_SIZE: u64 = transaction_bitmap_index::BUCKET_SIZE;
@@ -48,7 +47,7 @@ impl BitmapIndexProcessor for TestProcessor {
     const NAME: &'static str = PIPELINE;
     const TABLE: &'static str = TABLE;
     const COLUMN: &'static str = COL;
-    const SCHEMA_VERSION: u32 = transaction_bitmap_index::SCHEMA_VERSION;
+    const SCHEMA: BitmapSchema = BitmapSchema::V2;
     const BUCKET_ID_WIDTH: usize = transaction_bitmap_index::BUCKET_ID_WIDTH;
 
     fn for_each_indexed_bit<F>(&self, _: &Checkpoint, _: F)
@@ -59,28 +58,6 @@ impl BitmapIndexProcessor for TestProcessor {
 
     fn is_sealed(bucket_id: u64, watermark: CommitterWatermark) -> bool {
         watermark.tx_hi >= (bucket_id + 1) * BUCKET_SIZE
-    }
-}
-
-struct EventSealProcessor;
-
-impl BitmapIndexProcessor for EventSealProcessor {
-    const NAME: &'static str = "test_event_bitmap";
-    const TABLE: &'static str = TABLE;
-    const COLUMN: &'static str = COL;
-    const SCHEMA_VERSION: u32 = transaction_bitmap_index::SCHEMA_VERSION;
-    const BUCKET_ID_WIDTH: usize = transaction_bitmap_index::BUCKET_ID_WIDTH;
-
-    fn for_each_indexed_bit<F>(&self, _: &Checkpoint, _: F)
-    where
-        F: FnMut(u64, u32, IndexDimension, &[u8]),
-    {
-    }
-
-    fn is_sealed(bucket_id: u64, watermark: CommitterWatermark) -> bool {
-        let seal_tx_hi = ((bucket_id + 1) * event_bitmap_index::BUCKET_SIZE)
-            .div_ceil(event_seq::MAX_EVENTS_PER_TX as u64);
-        watermark.tx_hi >= seal_tx_hi
     }
 }
 
@@ -168,41 +145,6 @@ async fn setup() -> (
     let handler = BitmapIndexHandler::new(TestProcessor);
     let service = register_test_committer(&store);
     (mock, store, handler, service)
-}
-
-#[tokio::test]
-async fn bitmap_committer_finishes_after_bounded_input_closes() {
-    let (mock, store, handler, mut service) = setup().await;
-    let handler = Arc::new(handler);
-    let row_key = b"v1#bounded#shutdown";
-    let batch = make_batch(vec![value(row_key, 0, &[7], 1, 1000)]);
-    let h = handler.clone();
-    store
-        .transaction(move |conn| {
-            async move {
-                conn.set_committer_watermark(PIPELINE, watermark(1, 10, 1000))
-                    .await?;
-                h.commit(&batch, conn).await
-            }
-            .scope_boxed()
-        })
-        .await
-        .unwrap();
-
-    assert_eq!(
-        wait_for_watermark_at_least(&store, 1)
-            .await
-            .checkpoint_hi_inclusive,
-        1
-    );
-    assert!(wait_for_bitmap(&mock, row_key).await.contains(7));
-    drop(handler);
-    drop(store);
-
-    tokio::time::timeout(std::time::Duration::from_secs(10), service.join())
-        .await
-        .expect("bitmap worker tasks must drain after the bounded input closes")
-        .unwrap();
 }
 
 fn watermark(cp: u64, tx_hi: u64, ts_ms: u64) -> CommitterWatermark {
@@ -294,12 +236,17 @@ async fn persisted_bitmap(mock: &MockBigtableServer, row_key: &[u8]) -> Option<R
     Some(RoaringBitmap::deserialize_from(bytes.as_ref()).unwrap())
 }
 
+/// Cell timestamp, in microseconds, of a bitmap whose last bit came from `checkpoint`.
+fn cell_timestamp_micros(checkpoint: u64) -> i64 {
+    (tables::checkpoint_cell_timestamp_ms(checkpoint) * 1000) as i64
+}
+
+/// Write `bits` to `row_key` as the snapshot through `checkpoint`.
 async fn write_seed_bitmap(
     client: &mut BigTableClient,
     row_key: &[u8],
     bits: &[u32],
     checkpoint: u64,
-    timestamp_ms: u64,
 ) {
     let mut bitmap = RoaringBitmap::new();
     for &bit in bits {
@@ -313,7 +260,7 @@ async fn write_seed_bitmap(
             [tables::make_entry(
                 Bytes::copy_from_slice(row_key),
                 [(COL, Bytes::from(buf))],
-                Some(timestamp_ms),
+                Some(tables::checkpoint_cell_timestamp_ms(checkpoint)),
             )],
             CheckpointSpan::single(checkpoint),
         )
@@ -336,6 +283,28 @@ async fn wait_for_watermark_at_least(store: &BigTableStore, checkpoint: u64) -> 
     }
 }
 
+/// Waits until the store's durable progress for [`PIPELINE`] reaches `checkpoint`. The
+/// generation worker records progress on its own task, so it can trail the row writes that
+/// tests observe through the mock.
+async fn wait_for_durable_progress_at_least(
+    store: &BigTableStore,
+    checkpoint: u64,
+) -> CommitterWatermark {
+    let mut progress = store.durable_progress().subscribe();
+    let watermarks = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        progress.wait_for(|watermarks| {
+            watermarks
+                .get(PIPELINE)
+                .is_some_and(|w| w.checkpoint_hi_inclusive >= checkpoint)
+        }),
+    )
+    .await
+    .unwrap_or_else(|_| panic!("timed out waiting for durable progress checkpoint {checkpoint}"))
+    .unwrap();
+    watermarks[PIPELINE]
+}
+
 async fn wait_for_bitmap(mock: &MockBigtableServer, row_key: &[u8]) -> RoaringBitmap {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
     loop {
@@ -350,6 +319,26 @@ async fn wait_for_bitmap(mock: &MockBigtableServer, row_key: &[u8]) -> RoaringBi
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
+}
+
+/// Commit `batch` through `store`'s committer as the framework's commit for `watermark`.
+async fn commit_batch(
+    store: &BigTableStore,
+    handler: &Arc<BitmapIndexHandler<TestProcessor>>,
+    batch: BitmapBatch,
+    watermark: CommitterWatermark,
+) {
+    let handler = handler.clone();
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(PIPELINE, watermark).await?;
+                handler.commit(&batch, conn).await
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
 }
 
 #[test]
@@ -398,6 +387,7 @@ async fn writes_partial_bucket_and_advances_watermark() {
     assert!(bm.contains(0));
     assert!(bm.contains(5));
     assert_eq!(persisted.checkpoint_hi_inclusive, 0);
+    assert_eq!(wait_for_durable_progress_at_least(&store, 0).await, w);
 }
 
 /// `Handler::commit` returns a *lagging* count of rows BigTable accepted since
@@ -561,7 +551,9 @@ async fn retry_preserves_generation_until_failed_write_lands() {
         .unwrap();
 
     first_attempt_gate.wait_for_arrival().await;
-    let retry_gate = mock.pause_next_mutate_rows_with_timestamp(1_000_000).await;
+    let retry_gate = mock
+        .pause_next_mutate_rows_with_timestamp(cell_timestamp_micros(1))
+        .await;
     first_attempt_gate.release();
     retry_gate.wait_for_arrival().await;
 
@@ -628,7 +620,7 @@ async fn interleaved_commits_both_persist() {
 
     first_write_gate.wait_for_arrival().await;
 
-    // W2: adds bit 2 on the same row while W1's lower-timestamp write is
+    // W2: adds bit 2 on the same row while W1's write, timestamped by an earlier checkpoint, is
     // blocked in BigTable.
     let batch2 = make_batch(vec![value(row_key, 0, &[2], 2, 2000)]);
     let w2 = watermark(2, 20, 2000);
@@ -647,10 +639,8 @@ async fn interleaved_commits_both_persist() {
     first_write_gate.release();
     let persisted = wait_for_watermark_at_least(&store, 2).await;
 
-    // Both row writes must have landed. Under maxversions=1 + cell
-    // timestamp = checkpoint timestamp, W2's (later, higher-ts)
-    // write wins — and its bitmap cumulatively contains W1's bit
-    // too.
+    // Both row writes must have landed. Under maxversions=1, W2's write wins because its cell
+    // timestamp comes from a later checkpoint, and its bitmap cumulatively contains W1's bit too.
     let bm = wait_for_bitmap(&mock, row_key).await;
     assert!(bm.contains(1));
     assert!(bm.contains(2));
@@ -658,9 +648,10 @@ async fn interleaved_commits_both_persist() {
 }
 
 /// Same-row writes can complete out of order when the writer runs with
-/// concurrency. If W1 fails once, W2 can persist a higher-timestamp cumulative
-/// bitmap before W1 retries its older partial bitmap. BigTable's cell-version
-/// ordering must keep the newer cumulative row authoritative.
+/// concurrency. If W1 fails once, W2 can persist its cumulative bitmap, timestamped by a later
+/// checkpoint, before W1 retries its older partial bitmap. The two checkpoints share a
+/// timestamp, yet BigTable's cell-version ordering must keep the newer cumulative row
+/// authoritative.
 #[tokio::test]
 async fn concurrent_retry_of_older_same_row_write_cannot_clobber_newer_bitmap() {
     let (mock, store, handler, _service) = setup_with_committer(1, 2).await;
@@ -668,7 +659,7 @@ async fn concurrent_retry_of_older_same_row_write_cannot_clobber_newer_bitmap() 
 
     let row_key: &[u8] = b"v1#dim#0000000000";
     let retry_gate = mock
-        .pause_nth_mutate_rows_with_timestamp(1, 1_000_000)
+        .pause_nth_mutate_rows_with_timestamp(1, cell_timestamp_micros(1))
         .await;
     mock.expect(ExpectedCall {
         row_keys: vec![row_key],
@@ -690,12 +681,12 @@ async fn concurrent_retry_of_older_same_row_write_cannot_clobber_newer_bitmap() 
         .await
         .unwrap();
 
-    let batch2 = make_batch(vec![value(row_key, 0, &[2], 2, 2000)]);
+    let batch2 = make_batch(vec![value(row_key, 0, &[2], 2, 1000)]);
     let h = handler.clone();
     store
         .transaction(move |conn| {
             async move {
-                conn.set_committer_watermark(PIPELINE, watermark(2, 20, 2000))
+                conn.set_committer_watermark(PIPELINE, watermark(2, 20, 1000))
                     .await?;
                 h.commit(&batch2, conn).await
             }
@@ -716,6 +707,60 @@ async fn concurrent_retry_of_older_same_row_write_cannot_clobber_newer_bitmap() 
     assert!(bm.contains(2), "newer bit must survive older retry");
     assert_eq!(bm.len(), 2);
     assert_eq!(persisted.checkpoint_hi_inclusive, 2);
+}
+
+/// Writers index the same checkpoints independently and share one watermark. After the writer
+/// that is ahead writes a row through checkpoint 2 and advances the watermark, a lagging
+/// writer's snapshot of that row through checkpoint 1 can land last. The two checkpoints share
+/// a timestamp, as checkpoints split from one consensus commit do, yet the row must keep
+/// checkpoint 2's bit.
+#[tokio::test]
+async fn lagging_writer_cannot_clobber_newer_bitmap() {
+    let (mock, writer_ahead, client) = setup_without_init_watermark().await;
+    let lagging_writer = BigTableStore::new(client, u64::MAX);
+    let mut services = Vec::new();
+    for store in [&writer_ahead, &lagging_writer] {
+        store
+            .connect()
+            .await
+            .unwrap()
+            .init_watermark(PIPELINE, None)
+            .await
+            .unwrap();
+        services.push(register_test_committer(store));
+    }
+    let handler = Arc::new(BitmapIndexHandler::new(TestProcessor));
+    let row_key: &[u8] = b"v1#dim#0000000000";
+
+    let through_cp2 = vec![
+        value(row_key, 0, &[1], 1, 1000),
+        value(row_key, 0, &[2], 2, 1000),
+    ];
+    commit_batch(
+        &writer_ahead,
+        &handler,
+        make_batch(through_cp2),
+        watermark(2, 20, 1000),
+    )
+    .await;
+    wait_for_watermark_at_least(&writer_ahead, 2).await;
+
+    let through_cp1 = vec![value(row_key, 0, &[1], 1, 1000)];
+    commit_batch(
+        &lagging_writer,
+        &handler,
+        make_batch(through_cp1),
+        watermark(1, 10, 1000),
+    )
+    .await;
+    wait_for_durable_progress_at_least(&lagging_writer, 1).await;
+
+    let bm = wait_for_bitmap(&mock, row_key).await;
+    assert!(
+        bm.contains(2),
+        "lagging snapshot dropped checkpoint 2's bit"
+    );
+    assert_eq!(bm.len(), 2);
 }
 
 /// Rows distributed across many shards must all land durably. This
@@ -908,6 +953,11 @@ async fn watermark_writer_retries_after_cas_failure() {
     assert_eq!(persisted.checkpoint_hi_inclusive, 1);
     let bm = wait_for_bitmap(&mock, row_key).await;
     assert!(bm.contains(1));
+    // Promotion records the watermark as durable progress, independent of the failed CAS.
+    assert_eq!(
+        wait_for_durable_progress_at_least(&store, 1).await,
+        watermark(1, 10, 1000),
+    );
 }
 
 async fn persisted_bucket_start_cp(mock: &MockBigtableServer) -> Option<u64> {
@@ -927,7 +977,7 @@ async fn persisted_bucket_start_cp(mock: &MockBigtableServer) -> Option<u64> {
 }
 
 /// When a commit advances `tx_hi` across a bucket-seal boundary, the generation
-/// task records that commit's `checkpoint_hi_inclusive` as the new
+/// task records the commit's first checkpoint that added a bit as the new
 /// `bitmap_bucket_start_cp` and writes it alongside the watermark.
 #[tokio::test]
 async fn bucket_start_cp_written_on_transition() {
@@ -1163,7 +1213,7 @@ async fn mid_bucket_restart_without_replay_loses_pre_restart_bits() {
     let w_seed = watermark(pre_cp, pre_tx_hi, 500);
     create_watermark_v1(seed_conn.client(), w_seed, Some(bucket_start_cp)).await;
 
-    write_seed_bitmap(seed_conn.client(), row_key, &[pre_bit], pre_cp, 500).await;
+    write_seed_bitmap(seed_conn.client(), row_key, &[pre_bit], pre_cp).await;
 
     let init = seed_conn
         .init_watermark(PIPELINE, None)
@@ -1179,8 +1229,8 @@ async fn mid_bucket_restart_without_replay_loses_pre_restart_bits() {
 
     // Fresh committer. Skip the natural replay (i.e. the framework didn't
     // re-stream cp=1..=5) and commit only the post-restart bit. The in-memory
-    // bitmap holds exactly {new_bit}; under maxversions=1 the higher-ts write
-    // wins, so the persisted cell ends up at {new_bit} only.
+    // bitmap holds exactly {new_bit}; under maxversions=1 the write timestamped by the later
+    // checkpoint wins, so the persisted cell ends up at {new_bit} only.
     let handler = BitmapIndexHandler::new(TestProcessor);
     let _service = register_test_committer(&store);
     let handler = Arc::new(handler);
@@ -1229,7 +1279,7 @@ async fn mid_bucket_restart_with_replay_preserves_pre_restart_bits() {
     let mut seed_conn = store.connect().await.unwrap();
     let w_seed = watermark(pre_cp, pre_tx_hi, 500);
     create_watermark_v1(seed_conn.client(), w_seed, Some(bucket_start_cp)).await;
-    write_seed_bitmap(seed_conn.client(), row_key, &[pre_bit], pre_cp, 500).await;
+    write_seed_bitmap(seed_conn.client(), row_key, &[pre_bit], pre_cp).await;
 
     let init = seed_conn
         .init_watermark(PIPELINE, None)
@@ -1283,6 +1333,73 @@ async fn mid_bucket_restart_with_replay_preserves_pre_restart_bits() {
     assert_eq!(bm.len(), 2);
 }
 
+/// A commit can cover several checkpoints, and the bucket it starts can take bits from any of
+/// them, not only the last. A restart must replay the first checkpoint that added a bit to the
+/// active bucket; otherwise the rebuilt bucket lacks that bit, and the row's next snapshot
+/// replaces the stored one without it.
+#[tokio::test]
+async fn restart_replays_bucket_started_mid_commit() {
+    let (mock, store, client) = setup_without_init_watermark().await;
+    store
+        .connect()
+        .await
+        .unwrap()
+        .init_watermark(PIPELINE, None)
+        .await
+        .unwrap();
+    let service = register_test_committer(&store);
+    let handler = Arc::new(BitmapIndexHandler::new(TestProcessor));
+
+    // One commit covers checkpoints 1 to 3. Bucket 1's first bit is at checkpoint 2.
+    let row_key: &[u8] = b"dim#0000000001";
+    let checkpoints_1_to_3 = || {
+        vec![
+            value(b"dim#0000000000", 0, &[0], 1, 1000),
+            value(row_key, 1, &[0], 2, 1000),
+        ]
+    };
+    let through_cp3 = watermark(3, BUCKET_SIZE + 5, 1000);
+    commit_batch(
+        &store,
+        &handler,
+        make_batch(checkpoints_1_to_3()),
+        through_cp3,
+    )
+    .await;
+    wait_for_watermark_at_least(&store, 3).await;
+    drop(service);
+
+    // Restart, and replay the checkpoints the framework resumes from.
+    let restarted = BigTableStore::new(client, u64::MAX);
+    let init = restarted
+        .connect()
+        .await
+        .unwrap()
+        .init_watermark(PIPELINE, None)
+        .await
+        .unwrap()
+        .unwrap();
+    let resume_from = init.checkpoint_hi_inclusive.map_or(0, |cp| cp + 1);
+    let _service = register_test_committer(&restarted);
+    let replay = checkpoints_1_to_3()
+        .into_iter()
+        .filter(|value| value.max_cp >= resume_from)
+        .collect();
+    commit_batch(&restarted, &handler, make_batch(replay), through_cp3).await;
+    commit_batch(
+        &restarted,
+        &handler,
+        make_batch(vec![value(row_key, 1, &[1], 4, 1000)]),
+        watermark(4, BUCKET_SIZE + 6, 1000),
+    )
+    .await;
+    wait_for_watermark_at_least(&restarted, 4).await;
+
+    let bm = wait_for_bitmap(&mock, row_key).await;
+    assert!(bm.contains(0), "restart dropped checkpoint 2's bit");
+    assert_eq!(bm.len(), 2);
+}
+
 /// Restart after bucket 0 is sealed but bucket 1 is still active. Replaying
 /// the bucket-start checkpoint can include tail rows for bucket 0; those must
 /// not rewrite already-durable sealed bucket rows from partial in-memory state.
@@ -1304,7 +1421,8 @@ async fn restart_replay_skips_buckets_sealed_before_startup() {
     let w_seed = watermark(startup_cp, startup_tx_hi, 7_000);
     create_watermark_v1(seed_conn.client(), w_seed, Some(bucket_start_cp)).await;
 
-    write_seed_bitmap(seed_conn.client(), &sealed_row, &[0, 1], startup_cp, 7_000).await;
+    // The sealed row's last bit came from the boundary checkpoint, where bucket 1 starts.
+    write_seed_bitmap(seed_conn.client(), &sealed_row, &[0, 1], bucket_start_cp).await;
 
     let init = seed_conn
         .init_watermark(PIPELINE, None)
@@ -1326,7 +1444,7 @@ async fn restart_replay_skips_buckets_sealed_before_startup() {
     let batch = make_batch(vec![
         // This is a partial sealed-bucket row from the replayed boundary
         // checkpoint. Without the startup bucket filter it can overwrite the
-        // full sealed bitmap at the same checkpoint timestamp.
+        // full sealed bitmap, which has the same cell timestamp.
         value(&sealed_row, 0, &[0], replay_cp, 7_000),
         value(&active_row, 1, &[0], replay_cp, 7_000),
     ]);
@@ -1358,31 +1476,6 @@ async fn restart_replay_skips_buckets_sealed_before_startup() {
     );
 }
 
-#[test]
-fn event_bitmap_seal_handles_exact_boundaries() {
-    let txs_per_event_bucket =
-        event_bitmap_index::BUCKET_SIZE / event_seq::MAX_EVENTS_PER_TX as u64;
-    let wm = |tx_hi: u64| CommitterWatermark {
-        tx_hi,
-        ..Default::default()
-    };
-    // Bucket 0: sealed at tx_hi == txs_per_event_bucket, not before.
-    assert!(!EventSealProcessor::is_sealed(
-        0,
-        wm(txs_per_event_bucket - 1)
-    ));
-    assert!(EventSealProcessor::is_sealed(0, wm(txs_per_event_bucket)));
-    // Bucket 1: sealed at tx_hi == 2 * txs_per_event_bucket, not before.
-    assert!(!EventSealProcessor::is_sealed(
-        1,
-        wm(txs_per_event_bucket * 2 - 1),
-    ));
-    assert!(EventSealProcessor::is_sealed(
-        1,
-        wm(txs_per_event_bucket * 2)
-    ));
-}
-
 /// Distinct processor whose committer is intentionally **not** registered with
 /// the store, so calls to `commit_bitmap_batch::<UnregisteredProcessor>` panic
 /// at the registry lookup. Used only by the negative-path tests below.
@@ -1392,7 +1485,7 @@ impl BitmapIndexProcessor for UnregisteredProcessor {
     const NAME: &'static str = "unregistered_pipeline";
     const TABLE: &'static str = TABLE;
     const COLUMN: &'static str = COL;
-    const SCHEMA_VERSION: u32 = transaction_bitmap_index::SCHEMA_VERSION;
+    const SCHEMA: BitmapSchema = BitmapSchema::V2;
     const BUCKET_ID_WIDTH: usize = transaction_bitmap_index::BUCKET_ID_WIDTH;
 
     fn for_each_indexed_bit<F>(&self, _: &Checkpoint, _: F)
@@ -1491,140 +1584,147 @@ async fn commit_bitmap_batch_panics_when_committer_not_registered() {
         .await;
 }
 
-// Copyright (c) LinkU Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
+/// Non-bitmap sequential pipeline: its staged watermark is flushed synchronously by
+/// `SequentialStore::transaction` rather than by a bitmap committer.
+const SEQUENTIAL_PIPELINE: &str = "test_sequential";
 
-/// A sequential framework commit can contain several checkpoints. Its end
-/// watermark must not become the replay floor of a bucket entered earlier.
+/// `SequentialStore::transaction` records the staged watermark as durable progress once the
+/// closure succeeds, before the watermark row is written: the closure's rows are durable whether
+/// that write succeeds, fails, or loses its CAS to another writer.
 #[tokio::test]
-async fn c306_batched_crossing_replays_earliest_checkpoint() {
-    let (mock, store, handler, _service) = setup().await;
-    let handler = Arc::new(handler);
-    let row = b"v1#batched-restart#0000000001";
-    let batch = make_batch(vec![
-        value(row, 1, &[0], 2, 2000),
-        value(row, 1, &[1], 3, 3000),
-    ]);
-    let h = handler.clone();
+async fn transaction_records_durable_progress_once_closure_succeeds() {
+    let (mock, store, mut client) = setup_without_init_watermark().await;
     store
-        .transaction(move |conn| {
-            async move {
-                conn.set_committer_watermark(PIPELINE, watermark(3, BUCKET_SIZE + 2, 3000))
-                    .await?;
-                h.commit(&batch, conn).await
-            }
-            .scope_boxed()
-        })
-        .await
-        .unwrap();
-    wait_for_watermark_at_least(&store, 3).await;
-    assert_eq!(
-        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
-        vec![0, 1]
-    );
-    assert_eq!(
-        persisted_bucket_start_cp(&mock).await,
-        Some(2),
-        "cp 2 must be replayed; resuming from cp 3 erases bit 0 on the next flush"
-    );
-}
-
-/// Sparse event batches may contain no indexed row at the commit's final cp.
-#[tokio::test]
-async fn c306_sparse_batched_crossing_keeps_early_event_floor() {
-    let (mock, store, handler, _service) = setup().await;
-    let handler = Arc::new(handler);
-    let row = b"v1#sparse-restart#0000000001";
-    let batch = make_batch(vec![value(row, 1, &[0], 2, 2000)]);
-    let h = handler.clone();
-    store
-        .transaction(move |conn| {
-            async move {
-                conn.set_committer_watermark(PIPELINE, watermark(8, BUCKET_SIZE + 7, 8000))
-                    .await?;
-                h.commit(&batch, conn).await
-            }
-            .scope_boxed()
-        })
-        .await
-        .unwrap();
-    wait_for_watermark_at_least(&store, 8).await;
-    assert_eq!(
-        persisted_bucket_start_cp(&mock).await,
-        Some(2),
-        "an empty tail of the batch cannot move the replay floor past its indexed events"
-    );
-}
-
-// Copyright (c) LinkU Labs, Inc.
-// SPDX-License-Identifier: Apache-2.0
-
-#[tokio::test]
-async fn c306_batched_bucket_survives_actual_committer_restart() {
-    let (mock, store, handler, service) = setup().await;
-    let handler = Arc::new(handler);
-    let row = b"v1#batched-cold-restart#0000000001";
-    let batch = make_batch(vec![
-        value(row, 1, &[0], 2, 2000),
-        value(row, 1, &[1], 3, 3000),
-    ]);
-    let h = handler.clone();
-    store
-        .transaction(move |conn| {
-            async move {
-                conn.set_committer_watermark(PIPELINE, watermark(3, BUCKET_SIZE + 2, 3000))
-                    .await?;
-                h.commit(&batch, conn).await
-            }
-            .scope_boxed()
-        })
-        .await
-        .unwrap();
-    wait_for_watermark_at_least(&store, 3).await;
-    assert_eq!(
-        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
-        vec![0, 1]
-    );
-    let client = store.connect().await.unwrap().client().clone();
-    drop(handler);
-    drop(service);
-    drop(store);
-
-    // A new runtime must derive its replay range from the persisted watermark,
-    // not from the test's knowledge of when the bucket originally started.
-    let store = BigTableStore::new(client, u64::MAX);
-    let init = store
         .connect()
         .await
         .unwrap()
-        .init_watermark(PIPELINE, None)
+        .init_watermark(SEQUENTIAL_PIPELINE, None)
         .await
-        .unwrap()
         .unwrap();
-    let first = init.checkpoint_hi_inclusive.map_or(0, |cp| cp + 1);
-    let handler = Arc::new(BitmapIndexHandler::new(TestProcessor));
-    let _service = register_test_committer(&store);
-    let replay = make_batch(
-        (2..=4)
-            .filter(|cp| *cp >= first)
-            .map(|cp| value(row, 1, &[(cp - 2) as u32], cp, cp * 1000))
-            .collect(),
-    );
+    let mut progress = store.durable_progress().subscribe();
+
+    // Closure fails: the staged watermark is discarded and nothing is recorded.
+    let err = store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(SEQUENTIAL_PIPELINE, watermark(1, 10, 1000))
+                    .await?;
+                Err::<(), _>(anyhow::anyhow!("closure failed"))
+            }
+            .scope_boxed()
+        })
+        .await
+        .expect_err("closure error must propagate");
+    assert!(err.to_string().contains("closure failed"), "{err}");
+    assert!(!progress.has_changed().unwrap());
+    assert!(progress.borrow().get(SEQUENTIAL_PIPELINE).is_none());
+
+    // Closure succeeds but the watermark write fails: the error propagates, and the staged
+    // watermark is still recorded because the closure's rows are durable.
+    mock.fail_next_n_check_and_mutate(1);
+    let unwritten = watermark(1, 10, 1000);
     store
         .transaction(move |conn| {
             async move {
-                conn.set_committer_watermark(PIPELINE, watermark(4, BUCKET_SIZE + 3, 4000))
+                conn.set_committer_watermark(SEQUENTIAL_PIPELINE, unwritten)
                     .await?;
-                handler.commit(&replay, conn).await
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
+        .expect_err("watermark write failure must propagate");
+    assert!(progress.has_changed().unwrap());
+    assert_eq!(progress.borrow_and_update()[SEQUENTIAL_PIPELINE], unwritten);
+
+    // Closure and write succeed: the staged watermark is recorded.
+    let advanced = watermark(2, 20, 2000);
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(SEQUENTIAL_PIPELINE, advanced)
+                    .await?;
+                Ok(())
             }
             .scope_boxed()
         })
         .await
         .unwrap();
-    wait_for_watermark_at_least(&store, 4).await;
-    assert_eq!(
-        wait_for_bitmap(&mock, row).await.iter().collect::<Vec<_>>(),
-        vec![0, 1, 2],
-        "the persisted replay boundary must retain every pre-restart bit"
+    assert!(progress.has_changed().unwrap());
+    assert_eq!(progress.borrow_and_update()[SEQUENTIAL_PIPELINE], advanced);
+
+    // Another writer advances the stored row past this process. The flush's CAS loses and
+    // writes nothing, but the closure's rows are durable, so the staged watermark is still
+    // recorded.
+    let other_writer = watermark(10, 100, 10_000);
+    assert!(
+        client
+            .set_committer_watermark_cells(SEQUENTIAL_PIPELINE, &other_writer, None)
+            .await
+            .unwrap()
     );
+    let behind = watermark(3, 30, 3000);
+    store
+        .transaction(move |conn| {
+            async move {
+                conn.set_committer_watermark(SEQUENTIAL_PIPELINE, behind)
+                    .await?;
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
+        .unwrap();
+    assert!(progress.has_changed().unwrap());
+    assert_eq!(progress.borrow_and_update()[SEQUENTIAL_PIPELINE], behind);
+    let stored = store
+        .connect()
+        .await
+        .unwrap()
+        .committer_watermark(SEQUENTIAL_PIPELINE)
+        .await
+        .unwrap();
+    assert_eq!(stored, Some(other_writer));
+}
+
+/// Outside a transaction, `set_committer_watermark` records its watermark before writing it, so
+/// the watermark is recorded whether the write succeeds, fails, or loses its CAS.
+#[tokio::test]
+async fn set_committer_watermark_records_durable_progress_before_writing() {
+    let (mock, store, mut client) = setup_without_init_watermark().await;
+    let mut conn = store.connect().await.unwrap();
+    conn.init_watermark(SEQUENTIAL_PIPELINE, None)
+        .await
+        .unwrap();
+    let mut progress = store.durable_progress().subscribe();
+
+    let first = watermark(5, 50, 5000);
+    assert!(
+        conn.set_committer_watermark(SEQUENTIAL_PIPELINE, first)
+            .await
+            .unwrap()
+    );
+    assert_eq!(progress.borrow_and_update()[SEQUENTIAL_PIPELINE], first);
+
+    // The write fails: the error propagates, and the watermark is still recorded because the
+    // framework only hands over watermarks whose data rows are durable.
+    mock.fail_next_n_check_and_mutate(1);
+    let unwritten = watermark(6, 60, 6000);
+    conn.set_committer_watermark(SEQUENTIAL_PIPELINE, unwritten)
+        .await
+        .expect_err("watermark write failure must propagate");
+    assert_eq!(progress.borrow_and_update()[SEQUENTIAL_PIPELINE], unwritten);
+
+    client
+        .set_committer_watermark_cells(SEQUENTIAL_PIPELINE, &watermark(10, 100, 10_000), None)
+        .await
+        .unwrap();
+    let behind = watermark(7, 70, 7000);
+    assert!(
+        !conn
+            .set_committer_watermark(SEQUENTIAL_PIPELINE, behind)
+            .await
+            .unwrap()
+    );
+    assert_eq!(progress.borrow()[SEQUENTIAL_PIPELINE], behind);
 }

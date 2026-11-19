@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_graphql::SimpleObject;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 
 use crate::api::types::move_type::MoveType;
 use crate::api::types::move_value::MoveValue;

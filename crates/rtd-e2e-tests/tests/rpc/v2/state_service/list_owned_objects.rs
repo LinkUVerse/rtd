@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use prost_types::FieldMask;
+use std::path::PathBuf;
 use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
 use rtd_rpc::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::changed_object::{IdOperation, OutputObjectState};
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::changed_object::{IdOperation, OutputObjectState};
+use rtd_rpc::proto::sui::rpc::v2::{
     GetCoinInfoRequest, GetCoinInfoResponse, ListOwnedObjectsRequest,
 };
 use rtd_sdk_types::TypeTag;
 use rtd_types::Identifier;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::{CallArg, ObjectArg, TransactionData, TransactionKind};
-use std::path::PathBuf;
 use test_cluster::TestClusterBuilder;
 
 #[sim_test]
@@ -68,7 +68,7 @@ async fn test_indexing_with_tto() {
         )],
         owner: address,
         price: 1000,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);
@@ -336,7 +336,7 @@ async fn test_filter_by_type() {
         )],
         owner: address,
         price: 1000,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);

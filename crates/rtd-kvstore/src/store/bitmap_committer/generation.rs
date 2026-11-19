@@ -12,6 +12,7 @@ use tracing::debug;
 use tracing::info;
 use tracing::warn;
 
+use crate::DurableProgress;
 use crate::store::BitmapInitialWatermarks;
 
 use super::BucketId;
@@ -38,7 +39,9 @@ pub(super) enum Event {
     /// sequential checkpoint order.
     GenerationStarted {
         watermark: CommitterWatermark,
-        replay_floor_checkpoint: u64,
+        /// First checkpoint in this commit that added a bit to any row, `None` if the commit
+        /// added none.
+        first_checkpoint_with_bits: Option<u64>,
         framework_commit_time: Instant,
     },
     /// One shard has merged its input and sent every row flush it discovered to
@@ -60,6 +63,8 @@ pub(super) struct GenerationWorker {
     pub(super) watermark_commit_tx: mpsc::Sender<watermark::Commit>,
     pub(super) is_sealed: fn(u64, CommitterWatermark) -> bool,
     pub(super) initial_watermarks: BitmapInitialWatermarks,
+    /// Records each promoted watermark: every row scheduled through it is durable.
+    pub(super) durable_progress: DurableProgress,
 }
 
 struct GenerationState {
@@ -76,8 +81,10 @@ struct GenerationLoopState {
     current_bucket_id: BucketId,
     // Replay floor for `current_bucket_id`: `init_watermark` resumes from
     // just before this checkpoint so the active bucket is rebuilt after a
-    // crash. This can be the checkpoint that made the bucket active, even if
-    // the first transaction in that bucket appears in the next checkpoint.
+    // crash. It is the first checkpoint that added a bit to any row in the
+    // commit that made the bucket active, or that commit's last checkpoint if
+    // it added none. A commit can cover several checkpoints, and the bucket
+    // can take bits from any of them.
     current_bucket_start_cp: u64,
     next_bucket_to_evict: BucketId,
     generations: BTreeMap<u64, GenerationState>,
@@ -113,7 +120,7 @@ impl GenerationWorker {
         };
         let Event::GenerationStarted {
             watermark,
-            replay_floor_checkpoint,
+            first_checkpoint_with_bits,
             framework_commit_time,
         } = first_msg
         else {
@@ -139,7 +146,7 @@ impl GenerationWorker {
             GenerationLoopState::new(startup_watermark, startup_bucket_start_cp, self.is_sealed);
         state.record_generation_started(
             watermark,
-            replay_floor_checkpoint,
+            first_checkpoint_with_bits,
             framework_commit_time,
             self.is_sealed,
         );
@@ -150,12 +157,12 @@ impl GenerationWorker {
         match msg {
             Event::GenerationStarted {
                 watermark,
-                replay_floor_checkpoint,
+                first_checkpoint_with_bits,
                 framework_commit_time,
             } => {
                 state.record_generation_started(
                     watermark,
-                    replay_floor_checkpoint,
+                    first_checkpoint_with_bits,
                     framework_commit_time,
                     self.is_sealed,
                 );
@@ -228,6 +235,9 @@ impl GenerationWorker {
             }
         }
 
+        // Every row scheduled through `watermark` is durable, so it counts as durable progress
+        // before the watermark writer persists the watermark row.
+        self.durable_progress.record(self.pipeline, watermark);
         let req = watermark::Commit {
             watermark,
             bucket_start_cp,
@@ -316,16 +326,14 @@ impl GenerationLoopState {
     fn record_generation_started(
         &mut self,
         watermark: CommitterWatermark,
-        replay_floor_checkpoint: u64,
+        first_checkpoint_with_bits: Option<u64>,
         framework_commit_time: std::time::Instant,
         is_sealed: fn(u64, CommitterWatermark) -> bool,
     ) {
         let cp = watermark.checkpoint_hi_inclusive;
         while is_sealed(self.current_bucket_id, watermark) {
             self.current_bucket_id += 1;
-            // A commit can cross the boundary before its final checkpoint.
-            // Replay every indexed checkpoint in that batch after restart.
-            self.current_bucket_start_cp = replay_floor_checkpoint;
+            self.current_bucket_start_cp = first_checkpoint_with_bits.unwrap_or(cp);
         }
         self.generations.insert(
             cp,
@@ -404,6 +412,7 @@ mod tests {
             initial_watermarks: BitmapInitialWatermarks {
                 init_results: Arc::new(Mutex::new(init_results)),
             },
+            durable_progress: DurableProgress::new(),
         }
     }
 
@@ -444,11 +453,11 @@ mod tests {
     fn bucket_start_cp_tracks_commit_that_crosses_bucket_boundary() {
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), None, Instant::now(), is_sealed);
         assert_eq!(state.current_bucket_id, 0);
         assert_eq!(state.generations.get(&1).unwrap().bucket_start_cp, 0);
 
-        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), None, Instant::now(), is_sealed);
 
         assert_eq!(state.current_bucket_id, 2);
         assert_eq!(state.current_bucket_start_cp, 2);
@@ -462,9 +471,9 @@ mod tests {
         let worker = worker(watermark_tx, vec![seal_tx]);
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
-        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
-        state.record_generation_started(watermark(3, 35), 3, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), None, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), None, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(3, 35), None, Instant::now(), is_sealed);
         complete_generation(state.generations.get_mut(&1).unwrap(), 1);
         complete_generation(state.generations.get_mut(&2).unwrap(), 0);
 
@@ -487,8 +496,8 @@ mod tests {
         let worker = worker(watermark_tx, vec![seal_tx]);
         let mut state = GenerationLoopState::new(CommitterWatermark::default(), 0, is_sealed);
 
-        state.record_generation_started(watermark(1, 5), 1, Instant::now(), is_sealed);
-        state.record_generation_started(watermark(2, 25), 2, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(1, 5), None, Instant::now(), is_sealed);
+        state.record_generation_started(watermark(2, 25), None, Instant::now(), is_sealed);
         complete_generation(state.generations.get_mut(&2).unwrap(), 0);
 
         worker.try_promote(&mut state).await;

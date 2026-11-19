@@ -7,17 +7,13 @@ use serde::{Deserialize, Serialize};
 
 pub use balance_changes::*;
 pub use object_changes::*;
-pub use rtd_checkpoint::*;
+use serde_with::serde_as;
 pub use rtd_coin::*;
 pub use rtd_event::*;
-pub use rtd_extended::*;
-pub use rtd_governance::*;
 pub use rtd_move::*;
 pub use rtd_object::*;
-pub use rtd_protocol::*;
 pub use rtd_transaction::*;
 use rtd_types::base_types::ObjectID;
-use serde_with::serde_as;
 
 #[cfg(test)]
 #[path = "unit_tests/rpc_types_tests.rs"]
@@ -26,14 +22,10 @@ mod rpc_types_tests;
 mod balance_changes;
 mod displays;
 mod object_changes;
-mod rtd_checkpoint;
 mod rtd_coin;
 mod rtd_event;
-mod rtd_extended;
-mod rtd_governance;
 mod rtd_move;
 mod rtd_object;
-mod rtd_protocol;
 mod rtd_transaction;
 
 pub type DynamicFieldPage = Page<DynamicFieldInfo, ObjectID>;

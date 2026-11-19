@@ -15,23 +15,25 @@ import {
 import { Transaction } from "@linku/rtd/transactions";
 import { getFullnodeUrl } from "@linku/rtd/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import "@linku/dapp-kit/dist/index.css";
 // docs::/#setup
 
-const network = process.env.RTD_NETWORK || "localnet";
-const rpcUrl = process.env.RTD_JSON_RPC_URL ||
-  (network === "localnet" ? getFullnodeUrl("localnet") : undefined);
-if (!rpcUrl) throw new Error("RTD_JSON_RPC_URL is required for a remote RTD network");
-
 const { networkConfig } = createNetworkConfig({
-  [network]: { url: rpcUrl },
+  testnet: {
+    url: getFullnodeUrl("testnet"),
+  },
+  mainnet: {
+    url: getFullnodeUrl("mainnet"),
+  },
 });
 
 // Create a new QueryClient for managing and caching asynchronous queries
 const queryClient = new QueryClient();
 
-// Set this to the coin type actually deployed on the selected RTD network.
-const USDC_TYPE = process.env.RTD_USDC_TYPE;
+// Define the USDC token type on Rtd Testnet
+// This is the unique identifier for the USDC token on Rtd
+const USDC_TYPE = '0xa1ec7fc00a6f40db9693ad1415d0c193ad3906494428cf252621037bd7117e29::usdc::USDC';
 
 function HomeContent() {
   // docs::#state
@@ -56,10 +58,6 @@ function HomeContent() {
   const handleSendTokens = async () => {
     if (!currentAccount || !amount || !recipientAddress) {
       setTxStatus("Please connect wallet and fill in all fields");
-      return;
-    }
-    if (!USDC_TYPE || !/^0x[0-9a-fA-F]{1,64}::[A-Za-z_][A-Za-z_0-9]*::[A-Za-z_][A-Za-z_0-9]*$/.test(USDC_TYPE)) {
-      setTxStatus("Configure RTD_USDC_TYPE with a coin type deployed on this RTD network");
       return;
     }
     try {
@@ -111,7 +109,7 @@ function HomeContent() {
   return (
     <main className="mainwrapper">
       <div className="outerwrapper">
-        <h1 className="h1">RTD USDC Sender</h1>
+        <h1 className="h1">Rtd USDC Sender (Testnet)</h1>
         <ConnectButton />
         {connected && currentAccount && (
           <p className="status">Connected: {currentAccount.address}</p>
@@ -153,7 +151,7 @@ function HomeContent() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <RtdClientProvider networks={networkConfig} defaultNetwork={network}>
+      <RtdClientProvider networks={networkConfig} defaultNetwork="testnet">
         <WalletProvider>
           <HomeContent />
         </WalletProvider>

@@ -15,7 +15,7 @@ task 1, lines 11-48:
 //# publish
 created: object(1,0)
 mutated: object(0,1)
-gas summary: computation_cost: 1000000, storage_cost: 8785600,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1031000000, storage_cost: 8785600,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, line 50:
 //# run test::m1::create --sender A
@@ -26,9 +26,9 @@ gas summary: computation_cost: 1000000, storage_cost: 2242000,  storage_rebate: 
 task 3, line 52:
 //# run test::m1::test_dof --args object(2,0) --sender A
 mutated: object(0,0), object(2,0)
-gas summary: computation_cost: 1000000, storage_cost: 2242000,  storage_rebate: 2219580, non_refundable_storage_fee: 22420
+gas summary: computation_cost: 1000000, storage_cost: 2242000,  storage_rebate: 2241776, non_refundable_storage_fee: 224
 
 task 4, line 54:
 //# run test::m1::test_df --args object(2,0) --sender A
 mutated: object(0,0), object(2,0)
-gas summary: computation_cost: 1000000, storage_cost: 2242000,  storage_rebate: 2219580, non_refundable_storage_fee: 22420
+gas summary: computation_cost: 1000000, storage_cost: 2242000,  storage_rebate: 2241776, non_refundable_storage_fee: 224

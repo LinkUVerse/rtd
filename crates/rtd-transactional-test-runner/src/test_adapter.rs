@@ -7,7 +7,7 @@ use crate::offchain_state::OffchainStateReader;
 use crate::simulator_persisted_store::PersistedStore;
 use crate::{TransactionalAdapter, ValidatorWithFullnode, cursor};
 use crate::{args::*, programmable_transaction_test_parser::parser::ParsedCommand};
-use anyhow::{Context, anyhow, bail};
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use bimap::btree::BiBTreeMap;
 use criterion::Criterion;
@@ -40,22 +40,24 @@ use move_transactional_test_runner::{
 };
 use move_vm_runtime::dev_utils::vm_arguments::ValueFrame;
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use simulacrum::SimulatorStore;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::fmt::{self, Write};
+use std::path::PathBuf;
+use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::Path,
+    sync::{Arc, LazyLock},
+};
 use rtd_core::authority::AuthorityState;
 use rtd_core::authority::shared_object_version_manager::AssignedVersions;
 use rtd_core::authority::test_authority_builder::TestAuthorityBuilder;
 use rtd_framework::{BuiltInFramework, DEFAULT_FRAMEWORK_PATH};
-use rtd_json_rpc_api::QUERY_MAX_RESULT_LIMIT;
-use rtd_json_rpc_types::{
-    DevInspectResults, DryRunTransactionBlockResponse, RtdAccumulatorOperation,
-    RtdAccumulatorValue, RtdExecutionStatus, RtdTransactionBlockEffects,
-    RtdTransactionBlockEffectsAPI, RtdTransactionBlockEvents,
-};
 use rtd_protocol_config::{
     Chain, ExecutionTimeEstimateParams, PerObjectCongestionControlMode, ProtocolConfig,
     ProtocolVersion,
-};
-use rtd_storage::{
-    key_value_store::TransactionKeyValueStore, key_value_store_metrics::KeyValueStoreMetrics,
 };
 use rtd_swarm_config::genesis_config::AccountConfig;
 use rtd_swarm_config::network_config_builder::KeyPairWrapper;
@@ -82,6 +84,7 @@ use rtd_types::storage::ReadStore;
 use rtd_types::storage::{ObjectStore, RpcStateReader};
 use rtd_types::transaction::Command;
 use rtd_types::transaction::ProgrammableTransaction;
+use rtd_types::transaction_executor::SimulateTransactionResult;
 use rtd_types::utils::to_sender_signed_transaction_with_multi_signers;
 use rtd_types::{BRIDGE_ADDRESS, MOVE_STDLIB_PACKAGE_ID, RTD_DISPLAY_REGISTRY_OBJECT_ID};
 use rtd_types::{DEEPBOOK_ADDRESS, RTD_DENY_LIST_OBJECT_ID};
@@ -112,19 +115,6 @@ use rtd_types::{
     move_package::MovePackage,
     transaction::{Argument, CallArg, TransactionDataAPI, TransactionExpiration},
 };
-use serde::Deserialize;
-use serde_json::Value;
-use simulacrum::SimulatorStore;
-use std::borrow::Cow;
-use std::collections::HashSet;
-use std::fmt::{self, Write};
-use std::path::PathBuf;
-use std::time::Duration;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::Path,
-    sync::{Arc, LazyLock},
-};
 use tempfile::{NamedTempFile, tempdir};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -134,6 +124,10 @@ pub enum FakeID {
 }
 
 const DEFAULT_GAS_PRICE: u64 = 1_000;
+
+/// The maximum number of events summarized for a transaction, matching the page size the
+/// JSON-RPC event query used to apply.
+const QUERY_MAX_RESULT_LIMIT: usize = 50;
 
 const WELL_KNOWN_OBJECTS: &[ObjectID] = &[
     MOVE_STDLIB_PACKAGE_ID,
@@ -253,7 +247,7 @@ struct TxnSummary {
 }
 
 impl AdapterInitConfig {
-    fn from_args(init_cmd: InitCommand, rtd_args: RtdInitArgs) -> Self {
+    fn from_args(init_cmd: InitCommand, rtd_args: RtdInitArgs, is_graphql: bool) -> Self {
         let InitCommand { named_addresses } = init_cmd;
         let RtdInitArgs {
             accounts,
@@ -290,12 +284,16 @@ impl AdapterInitConfig {
                 ProtocolVersion::max().as_u64(),
             );
             assert!(
-                protocol_version != ProtocolVersion::max().as_u64(),
+                is_graphql || protocol_version != ProtocolVersion::max().as_u64(),
                 "Do not set the protocol version to the max {}. It can lead to unanticipated test changes once the max version is bumped. Instead, leave it unset to always use the max version.",
                 protocol_version,
             );
             ProtocolConfig::get_for_version(protocol_version.into(), chain)
         } else {
+            assert!(
+                !is_graphql,
+                "GraphQL tests must set --protocol-version, so that their output does not change with the framework once that version is released.",
+            );
             ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain)
         };
         if enable_gasless {
@@ -425,6 +423,15 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             )>,
         >,
         _path: &Path,
+        tasks: &[TaskInput<
+            TaskCommand<
+                Self::ExtraInitArgs,
+                Self::ExtraPublishArgs,
+                Self::ExtraValueArgs,
+                Self::ExtraRunArgs,
+                Self::Subcommand,
+            >,
+        >],
     ) -> (Self, Option<String>) {
         let rng = StdRng::from_seed(RNG_SEED);
         let pre_compiled_deps =
@@ -446,7 +453,17 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             offchain_config,
             file_format_version,
         } = match task_opt.map(|t| t.command) {
-            Some((init_cmd, rtd_args)) => AdapterInitConfig::from_args(init_cmd, rtd_args),
+            Some((init_cmd, rtd_args)) => {
+                // GraphQL tests must pin a version, and may pin the max, to keep a fixed framework
+                // snapshot once that version is released.
+                let is_graphql = tasks.iter().any(|t| {
+                    matches!(
+                        t.command,
+                        TaskCommand::Subcommand(RtdSubcommand::RunGraphql(_))
+                    )
+                });
+                AdapterInitConfig::from_args(init_cmd, rtd_args, is_graphql)
+            }
             None => AdapterInitConfig::default(),
         };
 
@@ -476,12 +493,14 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
             )
             .await
         } else {
+            let with_fullnode = tasks.iter().any(|task| needs_fullnode(&task.command));
             init_val_fullnode_executor(
                 rng,
                 account_names,
                 additional_mapping,
                 &protocol_config,
                 reference_gas_price,
+                with_fullnode,
             )
             .await
         };
@@ -758,7 +777,8 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 cursors,
             }) => {
                 let file = data.ok_or_else(|| anyhow::anyhow!("Missing GraphQL query"))?;
-                let contents = std::fs::read_to_string(file.path())?;
+                let text = std::fs::read_to_string(file.path())?;
+                let contents = unwrap_graphql_query(&text)?;
                 let offchain_reader = self
                     .offchain_reader
                     .as_ref()
@@ -775,7 +795,7 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 }
 
                 let interpolated =
-                    self.interpolate_query(&contents, &cursors, highest_checkpoint)?;
+                    self.interpolate_query(contents, &cursors, highest_checkpoint)?;
                 let resp = offchain_reader
                     .execute_graphql(interpolated.trim().to_owned(), show_usage)
                     .await?;
@@ -799,54 +819,6 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                 output.push(format!("Response: {}", resp.response_body));
 
                 Ok(Some(output.join("\n")))
-            }
-            RtdSubcommand::RunJsonRpc(RunJsonRpcCommand {
-                show_headers,
-                cursors,
-            }) => {
-                let file = data.ok_or_else(|| anyhow::anyhow!("Missing JSON-RPC query"))?;
-                let contents = std::fs::read_to_string(file.path())?;
-
-                let offchain_reader = self
-                    .offchain_reader
-                    .as_ref()
-                    .ok_or_else(|| anyhow::anyhow!("Offchain reader not set"))?;
-
-                let highest_checkpoint = self.executor.get_latest_checkpoint_sequence_number()?;
-                offchain_reader
-                    .wait_for_checkpoint_catchup(highest_checkpoint, Duration::from_secs(60))
-                    .await;
-
-                let interpolated =
-                    self.interpolate_query(&contents, &cursors, highest_checkpoint)?;
-
-                #[derive(Deserialize)]
-                struct Query {
-                    method: String,
-                    params: Value,
-                }
-
-                let query: Query = serde_json::from_str(&interpolated)
-                    .context("Failed to parse JSON-RPC query")?;
-
-                let resp = offchain_reader
-                    .execute_jsonrpc(query.method, query.params)
-                    .await?;
-
-                let mut output = String::new();
-
-                if show_headers {
-                    let headers_map: BTreeMap<_, _> = resp
-                        .http_headers
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|(h, v)| Some((h?.to_string(), v)))
-                        .collect();
-                    write!(&mut output, "Headers: {headers_map:#?}\n\n").unwrap();
-                }
-
-                write!(&mut output, "Response: {}", resp.response_body).unwrap();
-                Ok(Some(output))
             }
             RtdSubcommand::GaslessAllowToken(GaslessAllowTokenCommand {
                 token_type,
@@ -997,9 +969,9 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
                                 .unwrap();
 
                         let msg =
-                            format!("Owner: {}\nVersion: {}", &obj.owner, obj.version().value());
+                            format!("Owner: {}\nVersion: {}", obj.owner, obj.version().value());
                         let msg = if hide_contents {
-                            format!("{msg}\nType: {:#}", &move_struct.type_)
+                            format!("{msg}\nType: {:#}", move_struct.type_)
                         } else {
                             format!("{msg}\nContents: {move_struct:#}",)
                         };
@@ -1653,6 +1625,32 @@ impl MoveTestAdapter<'_> for RtdTestAdapter {
     }
 }
 
+/// Returns the query inside a `/* ... */` block comment, whose delimiters may carry a
+/// ```` ```graphql ```` fence.
+fn unwrap_graphql_query(text: &str) -> anyhow::Result<&str> {
+    let Some(rest) = text.trim().strip_prefix("/*") else {
+        bail!("GraphQL queries must be wrapped in a /* ... */ block comment");
+    };
+    let (opening, rest) = rest.split_once('\n').unwrap_or((rest, ""));
+    let fenced = match opening.trim() {
+        "" => false,
+        "```graphql" => true,
+        o => bail!("Unexpected text after /* in a GraphQL query: {o}"),
+    };
+    let Some(rest) = rest.strip_suffix("*/") else {
+        bail!("GraphQL queries must end with */ on its own line");
+    };
+    let (query, closing) = rest.rsplit_once('\n').unwrap_or(("", rest));
+    match (fenced, closing.trim()) {
+        (false, "") | (true, "```") => (),
+        (_, c) => bail!("Unexpected text before */ in a GraphQL query: {c}"),
+    }
+    if query.contains("/*") || query.contains("*/") {
+        bail!("GraphQL queries cannot contain /* or */");
+    }
+    Ok(query)
+}
+
 fn merge_output(left: Option<String>, right: Option<String>) -> Option<String> {
     match (left, right) {
         (None, right) => right,
@@ -1711,7 +1709,7 @@ impl RtdTestAdapter {
             .compiled_state
             .named_address_mapping
             .iter()
-            .map(|(name, addr)| (name.clone(), format!("{:#02x}", addr)));
+            .map(|(name, addr)| (name.clone(), format!("{:#x}", addr)));
 
         for (name, addr) in named_addrs {
             let addr = addr.to_string();
@@ -2161,7 +2159,7 @@ impl RtdTestAdapter {
             ExecutionStatus::Success => {
                 let events = self
                     .executor
-                    .query_tx_events_asc(digest, *QUERY_MAX_RESULT_LIMIT)
+                    .query_tx_events_asc(digest, QUERY_MAX_RESULT_LIMIT)
                     .await?;
                 Ok(TxnSummary {
                     events,
@@ -2204,12 +2202,11 @@ impl RtdTestAdapter {
     }
 
     async fn dry_run(&mut self, transaction: TransactionData) -> anyhow::Result<TxnSummary> {
-        let results = self.executor.dry_run_transaction_block(transaction).await?;
-        let DryRunTransactionBlockResponse {
+        let SimulateTransactionResult {
             effects, events, ..
-        } = results;
+        } = self.executor.dry_run_transaction_block(transaction).await?;
 
-        self.tx_summary_from_effects(effects, events)
+        self.tx_summary_from_effects(effects, events.unwrap_or_default())
     }
 
     async fn dev_inspect(
@@ -2218,98 +2215,79 @@ impl RtdTestAdapter {
         transaction_kind: TransactionKind,
         gas_price: Option<u64>,
     ) -> anyhow::Result<TxnSummary> {
-        let results = self
+        let SimulateTransactionResult {
+            effects, events, ..
+        } = self
             .executor
             .dev_inspect_transaction_block(sender, transaction_kind, gas_price)
             .await?;
-        let DevInspectResults {
-            effects, events, ..
-        } = results;
 
-        self.tx_summary_from_effects(effects, events)
+        self.tx_summary_from_effects(effects, events.unwrap_or_default())
     }
 
+    /// Summarize the effects of a simulated (dry-run or dev-inspect) transaction.
     fn tx_summary_from_effects(
         &mut self,
-        effects: RtdTransactionBlockEffects,
-        events: RtdTransactionBlockEvents,
+        effects: TransactionEffects,
+        events: TransactionEvents,
     ) -> anyhow::Result<TxnSummary> {
-        if let RtdExecutionStatus::Failure { error } = effects.status() {
+        if let ExecutionStatus::Failure(ExecutionFailure { error, command }) = effects.status() {
+            // Match the error rendering of the JSON-RPC effects these summaries used to be
+            // built from, so the expected test output is unchanged.
+            let error = match command {
+                Some(command) => format!("{error:?} in command {command}"),
+                None => format!("{error:?}"),
+            };
             return Err(anyhow::anyhow!(self.stabilize_str(format!(
                 "Transaction Effects Status: {error}\nExecution Error: {error}",
             ))));
         }
 
-        let mut created_ids: Vec<_> = effects.created().iter().map(|o| o.object_id()).collect();
-        let mut mutated_ids: Vec<_> = effects.mutated().iter().map(|o| o.object_id()).collect();
-        let mut unwrapped_ids: Vec<_> = effects.unwrapped().iter().map(|o| o.object_id()).collect();
-        let mut deleted_ids: Vec<_> = effects.deleted().iter().map(|o| o.object_id).collect();
+        let mut created_ids: Vec<_> = effects
+            .created()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut mutated_ids: Vec<_> = effects
+            .mutated()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut unwrapped_ids: Vec<_> = effects
+            .unwrapped()
+            .iter()
+            .map(|((id, _, _), _)| *id)
+            .collect();
+        let mut deleted_ids: Vec<_> = effects.deleted().iter().map(|(id, _, _)| *id).collect();
         let mut unwrapped_then_deleted_ids: Vec<_> = effects
             .unwrapped_then_deleted()
             .iter()
-            .map(|o| o.object_id)
+            .map(|(id, _, _)| *id)
             .collect();
-        let mut wrapped_ids: Vec<_> = effects.wrapped().iter().map(|o| o.object_id).collect();
+        let mut wrapped_ids: Vec<_> = effects.wrapped().iter().map(|(id, _, _)| *id).collect();
         let accumulator_events = effects.accumulator_events();
         let mut accumulators_written: Vec<_> = accumulator_events
             .iter()
             .map(|event| {
-                let operation = match event.operation {
-                    RtdAccumulatorOperation::Merge => AccumulatorOperation::Merge,
-                    RtdAccumulatorOperation::Split => AccumulatorOperation::Split,
-                };
-                let value = match &event.value {
-                    RtdAccumulatorValue::Integer(v) => EffectsAccumulatorValue::Integer(*v),
-                    RtdAccumulatorValue::IntegerTuple(a, b) => {
-                        EffectsAccumulatorValue::IntegerTuple(*a, *b)
-                    }
-                    RtdAccumulatorValue::EventDigest(digests) => {
-                        EffectsAccumulatorValue::EventDigest(digests.clone())
-                    }
-                };
                 (
-                    event.accumulator_obj,
-                    event.address,
-                    event
-                        .ty
-                        .clone()
-                        .try_into()
-                        .expect("Failed to parse accumulator type tag"),
-                    operation,
-                    value,
+                    *event.accumulator_obj.inner(),
+                    event.write.address.address,
+                    event.write.address.ty.clone(),
+                    event.write.operation.clone(),
+                    event.write.value.clone(),
                 )
             })
             .collect();
 
         let gas_summary = effects.gas_cost_summary();
 
-        self.record_creation_order(effects.transaction_digest(), &created_ids);
-
-        // make sure objects that have previously not been in storage get assigned a fake id.
-        let mut might_need_fake_id: Vec<_> = created_ids
-            .iter()
-            .chain(unwrapped_ids.iter())
-            .copied()
-            .collect();
-
-        // Use a stable sort before assigning fake ids, so test output remains stable.
-        might_need_fake_id.sort_by_key(|id| self.get_object_sorting_key(id));
+        // Simulated outputs are not persisted, so leave their IDs unnumbered.
         accumulators_written.sort_by_key(|(_, address, ty, _, _)| {
             (
                 self.stabilize_str(format!("{}", address)),
                 self.stabilize_str(format!("{}", ty)),
             )
         });
-
-        might_need_fake_id.extend(
-            accumulators_written
-                .iter()
-                .map(|(obj_id, _, _, _, _)| *obj_id),
-        );
-
-        for id in might_need_fake_id {
-            self.enumerate_fake(id);
-        }
 
         // Treat unwrapped objects as writes (even though sometimes this is the first time we can
         // refer to them at their id in storage).
@@ -2323,14 +2301,8 @@ impl RtdTestAdapter {
         wrapped_ids.sort_by_key(|id| self.real_to_fake_object_id(id));
         accumulators_written.sort_by_key(|(id, _, _, _, _)| self.real_to_fake_object_id(id));
 
-        let events = events
-            .data
-            .into_iter()
-            .map(|rtd_event| rtd_event.into())
-            .collect();
-
         Ok(TxnSummary {
-            events,
+            events: events.data,
             gas_summary: gas_summary.clone(),
             created: created_ids,
             mutated: mutated_ids,
@@ -2794,11 +2766,9 @@ pub static PRE_COMPILED: LazyLock<Arc<PreCompiledProgramInfo>> = LazyLock::new(|
         buf.extend(["packages", "deepbook", "sources"]);
         buf.to_string_lossy().to_string()
     };
-    let config = PackageConfig {
-        edition: Edition::E2024_BETA,
-        flavor: Flavor::Rtd,
-        ..Default::default()
-    };
+    let config = PackageConfig::default()
+        .set_edition(Edition::E2024_BETA)
+        .set_flavor(Flavor::Rtd);
     let bridge_sources = {
         let mut buf = rtd_files.to_path_buf();
         buf.extend(["packages", "bridge", "sources"]);
@@ -2831,11 +2801,45 @@ pub static PRE_COMPILED: LazyLock<Arc<PreCompiledProgramInfo>> = LazyLock::new(|
     }
 });
 
+/// Commands run for dry-run/dev-inspect send the transaction to a fullnode, rather than the
+/// validator itself. As such, we need to set up a fullnode only in the case that the test has
+/// those commands.
+fn needs_fullnode(
+    command: &TaskCommand<
+        RtdInitArgs,
+        RtdPublishArgs,
+        RtdExtraValueArgs,
+        RtdRunArgs,
+        RtdSubcommand<RtdExtraValueArgs, RtdRunArgs>,
+    >,
+) -> bool {
+    match command {
+        TaskCommand::Publish(_, RtdPublishArgs { dry_run, .. })
+        | TaskCommand::PublishAndCall(_, RtdPublishArgs { dry_run, .. }) => *dry_run,
+        TaskCommand::Subcommand(RtdSubcommand::ProgrammableTransaction(
+            ProgrammableTransactionCommand {
+                dev_inspect,
+                dry_run,
+                ..
+            },
+        )) => *dev_inspect || *dry_run,
+        TaskCommand::Subcommand(RtdSubcommand::UpgradePackage(UpgradePackageCommand {
+            dry_run,
+            ..
+        })) => *dry_run,
+        TaskCommand::Init(_, _)
+        | TaskCommand::PrintBytecode(_)
+        | TaskCommand::Run(_, _)
+        | TaskCommand::Subcommand(_) => false,
+    }
+}
+
 async fn create_validator_fullnode(
     protocol_config: &ProtocolConfig,
     objects: &[Object],
     reference_gas_price: Option<u64>,
-) -> (Arc<AuthorityState>, Arc<AuthorityState>) {
+    with_fullnode: bool,
+) -> (Arc<AuthorityState>, Option<Arc<AuthorityState>>) {
     // Build network config once and share it between validator and fullnode
     let network_config = {
         let mut builder =
@@ -2858,8 +2862,7 @@ async fn create_validator_fullnode(
             let mut builder = TestAuthorityBuilder::new()
                 .with_starting_objects(&objects)
                 .with_shared_network_config(&network_config)
-                .insert_genesis_checkpoint()
-                .skip_genesis_owner_index();
+                .insert_genesis_checkpoint();
             if let Some(keypair) = &keypair {
                 builder = builder.with_keypair(keypair);
             }
@@ -2867,29 +2870,30 @@ async fn create_validator_fullnode(
         })
     };
     let validator = build_node(None);
-    let fullnode = build_node(Some(get_authority_key_pair().1));
-    tokio::try_join!(validator, fullnode).expect("authority setup task panicked")
+    if with_fullnode {
+        let fullnode = build_node(Some(get_authority_key_pair().1));
+        let (validator, fullnode) =
+            tokio::try_join!(validator, fullnode).expect("authority setup task panicked");
+        (validator, Some(fullnode))
+    } else {
+        let validator = validator.await.expect("authority setup task panicked");
+        (validator, None)
+    }
 }
 
 async fn create_val_fullnode_executor(
     protocol_config: &ProtocolConfig,
     objects: &[Object],
     reference_gas_price: Option<u64>,
+    with_fullnode: bool,
 ) -> ValidatorWithFullnode {
     let (validator, fullnode) =
-        create_validator_fullnode(protocol_config, objects, reference_gas_price).await;
-
-    let metrics = KeyValueStoreMetrics::new_for_tests();
-    let kv_store = Arc::new(TransactionKeyValueStore::new(
-        "rocksdb",
-        metrics,
-        validator.clone(),
-    ));
+        create_validator_fullnode(protocol_config, objects, reference_gas_price, with_fullnode)
+            .await;
 
     ValidatorWithFullnode {
         validator,
         fullnode,
-        kv_store,
         pending_effects: Vec::new(),
         next_checkpoint_seq: 1, // 0 is genesis
     }
@@ -2912,6 +2916,7 @@ async fn init_val_fullnode_executor(
     additional_mapping: BTreeMap<String, NumericalAddress>,
     protocol_config: &ProtocolConfig,
     reference_gas_price: Option<u64>,
+    with_fullnode: bool,
 ) -> (
     Box<dyn TransactionalAdapter>,
     AccountSetup,
@@ -2952,7 +2957,13 @@ async fn init_val_fullnode_executor(
     let default_account = mk_account();
 
     let executor = Box::new(
-        create_val_fullnode_executor(protocol_config, &objects, reference_gas_price).await,
+        create_val_fullnode_executor(
+            protocol_config,
+            &objects,
+            reference_gas_price,
+            with_fullnode,
+        )
+        .await,
     );
 
     update_named_address_mapping(
@@ -3007,6 +3018,7 @@ async fn init_sim_executor(
 
     // Validators are sorted by their authority public key in tests. Sort before assigning
     // names so that validators are ordered by name (validator_0, validator_1, ..).
+    // See https://github.com/LinkUVerse/rtd/blob/272c471e3ad1f91b2564efdaaa17100e475f732e/crates/rtd-swarm-config/src/network_config_builder.rs#L443
     let addr_keys: Vec<_> = (0..num_custom_validator_accounts)
         // Make a validator account with a gas object
         .map(|_| {

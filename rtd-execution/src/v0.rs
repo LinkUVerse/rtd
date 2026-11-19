@@ -16,11 +16,10 @@ use rtd_types::{
     digests::TransactionDigest,
     effects::TransactionEffects,
     error::{ExecutionError, RtdError, RtdResult},
-    execution::{ExecutionResult, TypeLayoutStore},
+    execution::ExecutionResult,
     execution_status::ExecutionFailure,
-    gas::RtdGasStatus,
+    gas::{GasUsageReport, RtdGasStatus, RtdGasStatusAPI},
     inner_temporary_store::InnerTemporaryStore,
-    layout_resolver::LayoutResolver,
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
@@ -32,7 +31,6 @@ use rtd_adapter_v0::execution_engine::{
     execute_genesis_state_update, execute_transaction_to_effects,
 };
 use rtd_adapter_v0::execution_mode;
-use rtd_adapter_v0::type_layout_resolver::TypeLayoutResolver;
 use rtd_move_natives_v0::all_natives;
 use rtd_types::storage::BackingStore;
 use rtd_verifier_v0::meter::RtdVerifierMeter;
@@ -76,7 +74,7 @@ impl executor::Executor for Executor {
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -84,11 +82,17 @@ impl executor::Executor for Executor {
         _trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionFailure>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let gas_coins = gas.payment;
         let (inner_temp_store, gas_status, effects, result) =
             execute_transaction_to_effects::<execution_mode::Normal>(
@@ -113,7 +117,7 @@ impl executor::Executor for Executor {
         // note: old versions do not report timings.
         (
             inner_temp_store,
-            gas_status,
+            gas_status.gas_usage_report(),
             effects,
             vec![],
             result.map_err(ExecutionFailure::from),
@@ -132,7 +136,7 @@ impl executor::Executor for Executor {
         input_objects: CheckedInputObjects,
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -140,10 +144,16 @@ impl executor::Executor for Executor {
         skip_all_checks: bool,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Result<Vec<ExecutionResult>, ExecutionError>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let gas_coins = gas.payment;
         let (inner_temp_store, gas_status, effects, result) = if skip_all_checks {
             execute_transaction_to_effects::<execution_mode::DevInspect<true>>(
@@ -183,7 +193,12 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(transaction_digest, error);
         }
-        (inner_temp_store, gas_status, effects, result)
+        (
+            inner_temp_store,
+            gas_status.gas_usage_report(),
+            effects,
+            result,
+        )
     }
 
     fn execute_transaction_to_effects_and_execution_error(
@@ -199,7 +214,7 @@ impl executor::Executor for Executor {
         _system_object_versions: rtd_types::base_types::SystemObjectVersions,
         _unsettled_object_funds: &dyn rtd_types::accumulator_root::UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         _rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -207,11 +222,17 @@ impl executor::Executor for Executor {
         _trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionError>,
     ) {
+        let gas_status = RtdGasStatus::for_execution(
+            &gas,
+            &transaction_kind,
+            reference_gas_price,
+            protocol_config,
+        );
         let gas_coins = gas.payment;
         let (inner_temp_store, gas_status, effects, result) =
             execute_transaction_to_effects::<execution_mode::Normal>(
@@ -233,7 +254,13 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(transaction_digest, error);
         }
-        (inner_temp_store, gas_status, effects, vec![], result)
+        (
+            inner_temp_store,
+            gas_status.gas_usage_report(),
+            effects,
+            vec![],
+            result,
+        )
     }
 
     fn update_genesis_state(
@@ -269,14 +296,6 @@ impl executor::Executor for Executor {
             input_objects,
             pt,
         )
-    }
-
-    fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
-        &'vm self,
-        _protocol_config: &ProtocolConfig,
-        store: Box<dyn TypeLayoutStore + 'store>,
-    ) -> Box<dyn LayoutResolver + 'r> {
-        Box::new(TypeLayoutResolver::new(&self.0, store))
     }
 }
 

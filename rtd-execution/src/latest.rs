@@ -4,6 +4,7 @@
 use move_binary_format::CompiledModule;
 use move_trace_format::format::MoveTraceBuilder;
 use move_vm_config::verifier::{MeterConfig, VerifierConfig};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::execution::ExecutionTiming;
 use rtd_types::execution_params::ExecutionOrEarlyError;
@@ -15,24 +16,21 @@ use rtd_types::{
     digests::TransactionDigest,
     effects::TransactionEffects,
     error::{ExecutionError, ExecutionErrorTrait, RtdError, RtdResult},
-    execution::{ExecutionResult, TypeLayoutStore},
+    execution::ExecutionResult,
     execution_status::ExecutionFailure,
-    gas::RtdGasStatus,
+    gas::GasUsageReport,
     inner_temporary_store::InnerTemporaryStore,
-    layout_resolver::LayoutResolver,
     metrics::{BytecodeVerifierMetrics, ExecutionMetrics},
     transaction::{CheckedInputObjects, ProgrammableTransaction, TransactionKind},
 };
-use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-use linku_common::debug_fatal;
 use move_bytecode_verifier_meter::Meter;
 use move_vm_runtime_latest::runtime::MoveRuntime;
+use linku_common::debug_fatal;
 use rtd_adapter_latest::adapter::{new_move_runtime, run_metered_move_bytecode_verifier};
 use rtd_adapter_latest::execution_engine::{
     ExecutionOutput, execute_genesis_state_update, execute_transaction_to_effects,
 };
-use rtd_adapter_latest::type_layout_resolver::TypeLayoutResolver;
 use rtd_move_natives_latest::all_natives;
 use rtd_types::storage::BackingStore;
 use rtd_verifier_latest::meter::RtdVerifierMeter;
@@ -50,6 +48,52 @@ pub(crate) struct Verifier<'m> {
 
 impl Executor {
     pub(crate) fn new(protocol_config: &ProtocolConfig, silent: bool) -> Result<Self, RtdError> {
+        rtd_protocol_config::assert_set!(
+            protocol_config,
+            fix_ptb_generated_reads,
+            enable_group_ops_native_functions,
+            native_charging_v2,
+            uncompressed_g1_group_elements,
+            enable_poseidon,
+            limit_groth16_pvk_inputs,
+            enable_nitro_attestation_upgraded_parsing,
+            enable_nitro_attestation_all_nonzero_pcrs_parsing,
+            enable_nitro_attestation_always_include_required_pcrs_parsing,
+            simple_conservation_checks,
+            object_runtime_charge_cache_load_gas,
+            gasless_transaction_drop_safety,
+            early_return_receive_object_mismatched_type,
+            generate_df_type_layouts,
+            private_generics_verifier_v2,
+            disable_id_leak_verifier,
+            disable_effects_tx_dependencies,
+            framework_tx_context_mut_restrictions,
+            additional_borrow_checks,
+            disallow_jump_orphans,
+            include_function_signatures_in_instantiation_limits,
+            disallow_self_identifier,
+            hardened_otw_check,
+            no_extraneous_module_bytes,
+            rethrow_serialization_type_layout_errors,
+            variant_nodes,
+            normalize_depth_formula,
+            charge_ld_const_abstract_size,
+            granular_post_execution_checks,
+            enable_unified_linkage,
+            disable_entry_point_signature_check,
+            harden_linkage_consistency,
+            allow_references_in_ptbs,
+            enable_accumulators,
+            enable_address_balance_gas_payments,
+            enable_gasless,
+            enable_authenticated_event_streams,
+            convert_withdrawal_compatibility_ptb_arguments,
+            enable_init_on_upgrade,
+            enable_order_independent_upgrade_init_linkage,
+            ptb_tx_context_restrictions,
+            validate_ptb_argument_indices,
+        );
+
         Ok(Executor(Arc::new(new_move_runtime(
             all_natives(silent, protocol_config),
             protocol_config,
@@ -77,7 +121,7 @@ impl executor::Executor for Executor {
         system_object_versions: SystemObjectVersions,
         unsettled_object_funds: &dyn UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -85,14 +129,14 @@ impl executor::Executor for Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionFailure>,
     ) {
         let ExecutionOutput {
             inner_store: store_out,
-            gas_status: gas_status_out,
+            gas_report: gas_report_out,
             effects,
             timings,
             execution_result: result,
@@ -102,7 +146,7 @@ impl executor::Executor for Executor {
             system_object_versions,
             unsettled_object_funds,
             gas,
-            gas_status,
+            reference_gas_price,
             transaction_kind,
             rewritten_inputs,
             transaction_signer,
@@ -119,7 +163,7 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(transaction_digest, error);
         }
-        (store_out, gas_status_out, effects, timings, result)
+        (store_out, gas_report_out, effects, timings, result)
     }
 
     fn execute_transaction_to_effects_and_execution_error(
@@ -135,7 +179,7 @@ impl executor::Executor for Executor {
         system_object_versions: SystemObjectVersions,
         unsettled_object_funds: &dyn UnsettledObjectFundsRead,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -143,14 +187,14 @@ impl executor::Executor for Executor {
         trace_builder_opt: &mut Option<MoveTraceBuilder>,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Vec<ExecutionTiming>,
         Result<(), ExecutionError>,
     ) {
         let ExecutionOutput {
             inner_store: store_out,
-            gas_status: gas_status_out,
+            gas_report: gas_report_out,
             effects,
             timings,
             execution_result: result,
@@ -160,7 +204,7 @@ impl executor::Executor for Executor {
             system_object_versions,
             unsettled_object_funds,
             gas,
-            gas_status,
+            reference_gas_price,
             transaction_kind,
             rewritten_inputs,
             transaction_signer,
@@ -177,7 +221,7 @@ impl executor::Executor for Executor {
         if let Err(error) = &result {
             log_execution_error(transaction_digest, error);
         }
-        (store_out, gas_status_out, effects, timings, result)
+        (store_out, gas_report_out, effects, timings, result)
     }
 
     fn dev_inspect_transaction(
@@ -192,7 +236,7 @@ impl executor::Executor for Executor {
         input_objects: CheckedInputObjects,
         system_object_versions: SystemObjectVersions,
         gas: GasData,
-        gas_status: RtdGasStatus,
+        reference_gas_price: u64,
         transaction_kind: TransactionKind,
         rewritten_inputs: Option<Vec<bool>>,
         transaction_signer: RtdAddress,
@@ -200,16 +244,16 @@ impl executor::Executor for Executor {
         skip_all_checks: bool,
     ) -> (
         InnerTemporaryStore,
-        RtdGasStatus,
+        GasUsageReport,
         TransactionEffects,
         Result<Vec<ExecutionResult>, ExecutionError>,
     ) {
         // The two arms return different `ExecutionOutput<Mode>` types, so each destructures
         // into the common tuple.
-        let (inner_temp_store, gas_status, effects, result) = if skip_all_checks {
+        let (inner_temp_store, gas_report, effects, result) = if skip_all_checks {
             let ExecutionOutput {
                 inner_store,
-                gas_status,
+                gas_report,
                 effects,
                 timings: _,
                 execution_result,
@@ -221,7 +265,7 @@ impl executor::Executor for Executor {
                 // account for unsettled withdrawals from other transactions.
                 &EmptyUnsettledObjectFunds,
                 gas,
-                gas_status,
+                reference_gas_price,
                 transaction_kind,
                 rewritten_inputs,
                 transaction_signer,
@@ -235,11 +279,11 @@ impl executor::Executor for Executor {
                 execution_params,
                 &mut None,
             );
-            (inner_store, gas_status, effects, execution_result)
+            (inner_store, gas_report, effects, execution_result)
         } else {
             let ExecutionOutput {
                 inner_store,
-                gas_status,
+                gas_report,
                 effects,
                 timings: _,
                 execution_result,
@@ -251,7 +295,7 @@ impl executor::Executor for Executor {
                 // account for unsettled withdrawals from other transactions.
                 &EmptyUnsettledObjectFunds,
                 gas,
-                gas_status,
+                reference_gas_price,
                 transaction_kind,
                 rewritten_inputs,
                 transaction_signer,
@@ -265,12 +309,12 @@ impl executor::Executor for Executor {
                 execution_params,
                 &mut None,
             );
-            (inner_store, gas_status, effects, execution_result)
+            (inner_store, gas_report, effects, execution_result)
         };
         if let Err(error) = &result {
             log_execution_error(transaction_digest, error);
         }
-        (inner_temp_store, gas_status, effects, result)
+        (inner_temp_store, gas_report, effects, result)
     }
 
     fn update_genesis_state(
@@ -299,14 +343,6 @@ impl executor::Executor for Executor {
         );
         let tx_context = Rc::new(RefCell::new(tx_context));
         execute_genesis_state_update(store, protocol_config, metrics, &self.0, tx_context, pt)
-    }
-
-    fn type_layout_resolver<'r, 'vm: 'r, 'store: 'r>(
-        &'vm self,
-        protocol_config: &'vm ProtocolConfig,
-        store: Box<dyn TypeLayoutStore + 'store>,
-    ) -> Box<dyn LayoutResolver + 'r> {
-        Box::new(TypeLayoutResolver::new(&self.0, protocol_config, store))
     }
 }
 

@@ -4,6 +4,8 @@
 use crate::ValidatorProxy;
 use crate::workloads::Gas;
 use anyhow::Result;
+use std::path::PathBuf;
+use std::sync::Arc;
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore};
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::ObjectRef;
@@ -12,8 +14,6 @@ use rtd_types::object::Owner;
 use rtd_types::transaction::{TEST_ONLY_GAS_UNIT_FOR_TRANSFER, Transaction, TransactionData};
 use rtd_types::utils::to_sender_signed_transaction;
 use rtd_types::{base_types::RtdAddress, crypto::RtdKeyPair};
-use std::path::PathBuf;
-use std::sync::Arc;
 
 // This is the maximum gas we will transfer from primary coin into any gas coin
 // for running the benchmark

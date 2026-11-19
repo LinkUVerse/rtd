@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use async_graphql::dataloader::DataLoader;
 use prometheus::Registry;
-use rtd_rpc::proto::rtd::rpc::v2 as grpc;
+use rtd_rpc::proto::sui::rpc::v2 as grpc;
 use rtd_types::base_types::ObjectID;
 use rtd_types::crypto::AuthorityQuorumSignInfo;
 use rtd_types::digests::CheckpointDigest;

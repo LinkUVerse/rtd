@@ -18,8 +18,8 @@ mod consensus_tests {
     };
     use consensus_core::NoopTransactionVerifier;
     use consensus_core::{
-        BlockAPI, BlockStatus, CommitIndex, CommitRef, CommittedSubDag, Priority,
-        TransactionVerifier, ValidationError, storage::Store,
+        BlockAPI, BlockStatus, CommitConsumerArgs, CommitIndex, CommitRef, CommittedSubDag,
+        Priority, TransactionVerifier, ValidationError, storage::Store,
     };
     use consensus_simtests::node::{AuthorityNode, Config};
     use consensus_types::block::{BlockRef, BlockTimestampMs, TransactionIndex};
@@ -36,7 +36,6 @@ mod consensus_tests {
         SimConfig,
         configs::{bimodal_latency_ms, env_config, uniform_latency_ms},
     };
-    use tempfile::TempDir;
     use tokio::task::JoinSet;
     use tokio::time::{sleep, timeout};
     use typed_store::DBMetrics;
@@ -119,8 +118,8 @@ mod consensus_tests {
 
         // Wait for it to catch up
         sleep(Duration::from_secs(230)).await;
-        let commit_consumer_monitor = authorities[NUM_OF_AUTHORITIES - 1].commit_consumer_monitor();
-        let highest_committed_index = commit_consumer_monitor.highest_handled_commit();
+        let consumer_monitor = authorities[NUM_OF_AUTHORITIES - 1].consumer_monitor();
+        let highest_committed_index = consumer_monitor.highest_handled_commit();
         assert!(
             highest_committed_index >= 80,
             "Highest handled commit {highest_committed_index} < 80"
@@ -202,9 +201,8 @@ mod consensus_tests {
 
         // Every authority should commit past the 1st snapshot.
         for i in 0..NUM_OF_AUTHORITIES {
-            let current_committed_index = authorities[i]
-                .commit_consumer_monitor()
-                .highest_handled_commit();
+            let current_committed_index =
+                authorities[i].consumer_monitor().highest_handled_commit();
             let snapshotted_commit_index = snapshotted_commit_indexes[i];
             assert!(
                 current_committed_index > snapshotted_commit_index,
@@ -314,8 +312,7 @@ mod consensus_tests {
         // Every validator should commit past the 1st snapshot, proving the fully restarted
         // committee reconnected.
         for (authority_index, authority) in authorities.iter().enumerate() {
-            let current_committed_index =
-                authority.commit_consumer_monitor().highest_handled_commit();
+            let current_committed_index = authority.consumer_monitor().highest_handled_commit();
             let snapshotted_commit_index = snapshotted_commit_indexes[authority_index];
             assert!(
                 current_committed_index > snapshotted_commit_index,
@@ -325,6 +322,325 @@ mod consensus_tests {
         }
 
         load_handle.abort();
+    }
+
+    #[sim_test(config = "test_config()")]
+    async fn test_full_replay_restart_with_transaction_voting() {
+        full_replay_restart(true, false).await;
+    }
+
+    #[sim_test(config = "test_config()")]
+    async fn test_full_replay_restart_without_transaction_voting() {
+        full_replay_restart(false, false).await;
+    }
+
+    #[sim_test(config = "test_config()")]
+    #[ignore = "requires the v3 timestamp and finalizer fixes in https://github.com/LinkUVerse/rtd/pull/27655"]
+    async fn test_full_replay_restart_v3() {
+        full_replay_restart(true, true).await;
+    }
+
+    async fn full_replay_restart(voting: bool, v3: bool) {
+        telemetry_subscribers::init_for_testing();
+        DBMetrics::init(RegistryService::new(Registry::new()));
+        let (committee, keypairs) = local_committee_and_keys(0, vec![1; 4]);
+        // This scenario crashes one validator and does not inject equivocation.
+        // V3 requires its own certification threshold even when the quorum size
+        // matches v2; using v2 thresholds invalidates the v3 commit rules.
+        let committee = if v3 {
+            let committee = Committee::new_v3(
+                committee.epoch(),
+                committee.authorities_slice().to_vec(),
+                0,
+                1,
+            );
+            assert_eq!(committee.quorum_threshold(), 3);
+            assert_eq!(committee.certification_threshold(), 2);
+            committee
+        } else {
+            committee
+        };
+        let mut protocol_config = if voting {
+            ConsensusProtocolConfig::for_testing()
+        } else {
+            ConsensusProtocolConfig::default()
+        };
+        assert_eq!(protocol_config.transaction_voting_enabled(), voting);
+        protocol_config.set_enable_v3_for_testing(v3);
+        if !v3 {
+            protocol_config.set_gc_depth_for_testing(3);
+        }
+        let authorities = start_committee(
+            &committee,
+            &keypairs,
+            &protocol_config,
+            &test_clock_drifts::<4>(),
+            Arc::new(ReplayTransactionVerifier),
+            |_, _| {},
+        )
+        .await;
+        let mut receiver = authorities[0].commit_consumer_receiver();
+        let mut peer_receiver = authorities[1].commit_consumer_receiver();
+        let clients: Vec<_> = authorities[1..]
+            .iter()
+            .map(|authority| authority.transaction_client())
+            .collect();
+        let load = tokio::spawn(async move {
+            for id in 0u64.. {
+                clients[id as usize % clients.len()]
+                    .submit(vec![id.to_le_bytes().to_vec()], Priority::Normal)
+                    .await
+                    .unwrap();
+                sleep(Duration::from_millis(100)).await;
+            }
+        });
+
+        // Integration tests use the production recovery batch size. Persist
+        // more than one batch, and retain actual output as the recovery oracle.
+        const BATCH_SIZE: CommitIndex = 250;
+        const HISTORY: CommitIndex = BATCH_SIZE + 50;
+        let mut original = Vec::new();
+        timeout(Duration::from_secs(180), async {
+            for index in 1..=HISTORY {
+                let commit = receiver.recv().await.unwrap();
+                assert_eq!(commit.commit_ref.index, index);
+                original.push(commit);
+            }
+        })
+        .await
+        .expect("committee must build enough persisted history to span replay batches");
+        assert!(original.iter().any(|commit| {
+            commit
+                .blocks
+                .iter()
+                .any(|block| !block.transactions().is_empty())
+        }));
+        if voting {
+            assert!(original.iter().any(|commit| {
+                commit
+                    .rejected_transactions_by_block
+                    .values()
+                    .any(|rejected| !rejected.is_empty())
+            }));
+        }
+        authorities[0].stop().await;
+        drop(receiver);
+
+        let (args, mut receiver) = CommitConsumerArgs::new_with_full_replay();
+        let monitor = args.monitor();
+        assert_eq!(monitor.replay_target(), None);
+        let restarting = authorities[0].clone();
+        let startup =
+            tokio::spawn(async move { restarting.start_with_commit_consumer(args).await });
+        for index in 1..=BATCH_SIZE {
+            let commit = timeout(Duration::from_secs(60), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_replayed_commit(&commit, &original[index as usize - 1], voting);
+            if index < BATCH_SIZE {
+                monitor.set_highest_handled_commit(index);
+            }
+        }
+        let target = monitor.replay_target().unwrap();
+        let stored_head = monitor.progress().highest_committed_index;
+        assert!(target >= HISTORY);
+        assert!(stored_head >= target);
+        assert_eq!(monitor.highest_handled_commit(), BATCH_SIZE - 1);
+        assert!(
+            timeout(Duration::from_secs(1), receiver.recv())
+                .await
+                .is_err(),
+            "the next replay batch must wait for application, even after delivery"
+        );
+        assert!(
+            timeout(
+                Duration::from_secs(1),
+                monitor.replay_to_consumer_last_processed_commit_complete(),
+            )
+            .await
+            .is_err()
+        );
+        assert!(!startup.is_finished());
+        let peer_monitor = authorities[1].consumer_monitor();
+        let peer_head = peer_monitor.highest_handled_commit();
+        timeout(Duration::from_secs(30), async {
+            while peer_monitor.highest_handled_commit() <= peer_head {
+                sleep(Duration::from_millis(100)).await;
+            }
+        })
+        .await
+        .expect("the other validators must keep committing while replay is stalled");
+
+        // Kill the simulated process during paced recovery, without graceful
+        // ConsensusAuthority::stop, then rebuild from empty application state.
+        startup.abort();
+        assert!(startup.await.unwrap_err().is_cancelled());
+        // Cancellation is observed before the simulator drops the task future.
+        // Keep the consumer alive until the node guard has killed its producers.
+        assert!(
+            timeout(Duration::from_secs(60), receiver.recv())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        drop(receiver);
+        let (args, mut receiver) = CommitConsumerArgs::new_with_full_replay();
+        let monitor = args.monitor();
+        assert_eq!(monitor.highest_handled_commit(), 0);
+        assert_eq!(monitor.replay_target(), None);
+        let restarting = authorities[0].clone();
+        let startup =
+            tokio::spawn(async move { restarting.start_with_commit_consumer(args).await });
+        for index in 1..=target {
+            let commit = timeout(Duration::from_secs(60), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(commit.commit_ref.index, index);
+            if let Some(expected) = original.get(index as usize - 1) {
+                assert_replayed_commit(&commit, expected, voting);
+            }
+            assert_eq!(monitor.replay_target(), Some(target));
+            if index == target {
+                assert!(
+                    timeout(
+                        Duration::from_secs(1),
+                        monitor.replay_to_consumer_last_processed_commit_complete(),
+                    )
+                    .await
+                    .is_err(),
+                    "readiness must wait for the last application acknowledgement"
+                );
+                assert!(!startup.is_finished());
+            }
+            monitor.set_highest_handled_commit(index);
+        }
+        timeout(
+            Duration::from_secs(60),
+            monitor.replay_to_consumer_last_processed_commit_complete(),
+        )
+        .await
+        .unwrap();
+        timeout(Duration::from_secs(60), startup)
+            .await
+            .expect("acknowledged replay must reach live consensus")
+            .unwrap()
+            .unwrap();
+
+        // Submit through the restarted validator only after startup completes.
+        // Initial catch-up proposals may be garbage collected; retry those as
+        // required by the submission API until a new proposal is sequenced.
+        let marker = b"full-replay-live".to_vec();
+        let client = authorities[0].transaction_client();
+        let submitted_marker = marker.clone();
+        let submission = tokio::spawn(async move {
+            loop {
+                let (_, _, status) = client
+                    .submit(vec![submitted_marker.clone()], Priority::Normal)
+                    .await
+                    .unwrap();
+                match status.await.unwrap() {
+                    BlockStatus::Sequenced(block) => break block,
+                    BlockStatus::GarbageCollected(_) => continue,
+                }
+            }
+        });
+        let live_commit = timeout(Duration::from_secs(120), async {
+            let mut next_index = target + 1;
+            loop {
+                let commit = receiver.recv().await.unwrap();
+                assert_eq!(commit.commit_ref.index, next_index);
+                next_index += 1;
+                monitor.set_highest_handled_commit(commit.commit_ref.index);
+                if let Some(block) = commit.blocks.iter().find(|block| {
+                    commit.commit_ref.index > stored_head
+                        && block.author() == authorities[0].index()
+                        && block
+                            .transactions()
+                            .iter()
+                            .any(|transaction| transaction.data() == marker.as_slice())
+                }) {
+                    assert_eq!(submission.await.unwrap(), block.reference());
+                    break commit;
+                }
+            }
+        })
+        .await
+        .expect("restarted validator must propose and commit new blocks");
+        let peer_commit = timeout(Duration::from_secs(60), async {
+            loop {
+                let commit = peer_receiver.recv().await.unwrap();
+                if commit.commit_ref.index == live_commit.commit_ref.index {
+                    break commit;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(live_commit.commit_ref, peer_commit.commit_ref);
+        assert_eq!(
+            live_commit.rejected_transactions_by_block,
+            peer_commit.rejected_transactions_by_block
+        );
+        assert_eq!(monitor.replay_target(), Some(target));
+        assert!(monitor.progress().highest_committed_index >= live_commit.commit_ref.index);
+        load.abort();
+        for authority in authorities {
+            authority.stop().await;
+        }
+    }
+
+    fn assert_replayed_commit(
+        replayed: &CommittedSubDag,
+        original: &CommittedSubDag,
+        voting: bool,
+    ) {
+        assert_eq!(replayed.commit_ref, original.commit_ref);
+        assert_eq!(
+            replayed
+                .blocks
+                .iter()
+                .map(|block| block.reference())
+                .collect::<Vec<_>>(),
+            original
+                .blocks
+                .iter()
+                .map(|block| block.reference())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            replayed.rejected_transactions_by_block,
+            original.rejected_transactions_by_block
+        );
+        if voting {
+            assert!(replayed.recovered_rejected_transactions);
+        }
+    }
+
+    struct ReplayTransactionVerifier;
+
+    impl TransactionVerifier for ReplayTransactionVerifier {
+        fn verify_batch(
+            &self,
+            _block_ref: &BlockRef,
+            _transactions: &[&[u8]],
+        ) -> Result<(), ValidationError> {
+            Ok(())
+        }
+
+        fn verify_and_vote_batch(
+            &self,
+            _block_ref: &BlockRef,
+            transactions: &[&[u8]],
+        ) -> Result<Vec<TransactionIndex>, ValidationError> {
+            Ok(transactions
+                .iter()
+                .enumerate()
+                .filter(|(_, transaction)| transaction.first().is_some_and(|byte| byte % 3 == 0))
+                .map(|(index, _)| index as TransactionIndex)
+                .collect())
+        }
     }
 
     // Restart one validator as a new process without its local store. The new process must
@@ -498,7 +814,7 @@ mod consensus_tests {
             sleep(sleep_duration).await;
 
             // Exit when we have submitted the defined number of transactions.
-            if transaction_index as u16 >= NUM_TRANSACTIONS {
+            if transaction_index >= NUM_TRANSACTIONS {
                 break;
             }
         }
@@ -568,8 +884,8 @@ mod consensus_tests {
             let first_sub_dag = sub_dags[0].clone();
             total_rejected_transactions += first_sub_dag
                 .rejected_transactions_by_block
-                .iter()
-                .map(|(_, rejected_transactions)| rejected_transactions.len())
+                .values()
+                .map(|rejected_transactions| rejected_transactions.len())
                 .sum::<usize>();
 
             for sub_dag in sub_dags.iter().skip(1) {
@@ -645,7 +961,7 @@ mod consensus_tests {
         let observer2_ip = local_ip_utils::get_new_ip();
 
         // Create Observer 1 - connects to validator
-        let observer1_dir = Arc::new(TempDir::new().unwrap());
+        let observer1_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer1_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([42; 32]));
 
@@ -695,10 +1011,10 @@ mod consensus_tests {
         let observer1 = AuthorityNode::new(observer1_config);
         observer1.start().await.unwrap();
         observer1.spawn_committed_subdag_consumer().unwrap();
-        let observer1_monitor = observer1.commit_consumer_monitor();
+        let observer1_monitor = observer1.consumer_monitor();
 
         // Create Observer 2 - connects to Observer 1
-        let observer2_dir = Arc::new(TempDir::new().unwrap());
+        let observer2_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer2_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([99; 32]));
 
@@ -739,7 +1055,7 @@ mod consensus_tests {
         let observer2 = AuthorityNode::new(observer2_config);
         observer2.start().await.unwrap();
         observer2.spawn_committed_subdag_consumer().unwrap();
-        let observer2_monitor = observer2.commit_consumer_monitor();
+        let observer2_monitor = observer2.consumer_monitor();
 
         // Wait for all nodes to establish connections
         tracing::info!("Waiting for nodes to establish connections...");
@@ -763,9 +1079,7 @@ mod consensus_tests {
         sleep(Duration::from_secs(15)).await;
 
         // Check progress of all nodes
-        let validator_commits = authorities[0]
-            .commit_consumer_monitor()
-            .highest_handled_commit();
+        let validator_commits = authorities[0].consumer_monitor().highest_handled_commit();
         let observer1_commits = observer1_monitor.highest_handled_commit();
         let observer2_commits = observer2_monitor.highest_handled_commit();
 
@@ -824,7 +1138,7 @@ mod consensus_tests {
         let mut transaction_clients = Vec::with_capacity(committee.size());
 
         for (authority_index, _) in committee.authorities() {
-            let db_dir = Arc::new(TempDir::new().unwrap());
+            let db_dir = Arc::new(linku_common::tempdir().unwrap());
             let mut parameters = default_parameters();
             parameters.db_path = db_dir.path().to_path_buf();
             parameters.observer.server_port = Some(9600 + authority_index.value() as u16);
@@ -865,23 +1179,18 @@ mod consensus_tests {
             }
         }
         timeout(Duration::from_secs(120), async {
-            while authorities[0]
-                .commit_consumer_monitor()
-                .highest_handled_commit()
-                < CATCHUP_START_COMMITS
+            while authorities[0].consumer_monitor().highest_handled_commit() < CATCHUP_START_COMMITS
             {
                 sleep(Duration::from_millis(500)).await;
             }
         })
         .await
         .expect("Validators should reach the catch-up start commit index");
-        let catchup_target = authorities[0]
-            .commit_consumer_monitor()
-            .highest_handled_commit();
+        let catchup_target = authorities[0].consumer_monitor().highest_handled_commit();
         tracing::info!("Starting observer, catch-up target is commit {catchup_target}");
 
         // Late-start the observer against validator 0.
-        let observer_dir = Arc::new(TempDir::new().unwrap());
+        let observer_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([42; 32]));
         let observer_ip = local_ip_utils::get_new_ip();
@@ -917,7 +1226,7 @@ mod consensus_tests {
         let observer = AuthorityNode::new(observer_config);
         observer.start().await.unwrap();
         observer.spawn_committed_subdag_consumer().unwrap();
-        let observer_monitor = observer.commit_consumer_monitor();
+        let observer_monitor = observer.consumer_monitor();
 
         // The observer must catch up to the target even with its block stream suspended
         // during commit sync.
@@ -948,9 +1257,7 @@ mod consensus_tests {
             }
         }
         sleep(Duration::from_secs(10)).await;
-        let validator_commits = authorities[0]
-            .commit_consumer_monitor()
-            .highest_handled_commit();
+        let validator_commits = authorities[0].consumer_monitor().highest_handled_commit();
         let observer_commits = observer_monitor.highest_handled_commit();
         const MAX_COMMIT_DIFFERENCE: u32 = 10;
         assert!(
@@ -1022,7 +1329,7 @@ mod consensus_tests {
         transaction_verifier: Arc<dyn TransactionVerifier>,
         configure_params: impl FnOnce(&mut Parameters),
     ) -> AuthorityNode {
-        let db_dir = Arc::new(TempDir::new().unwrap());
+        let db_dir = Arc::new(linku_common::tempdir().unwrap());
         let mut parameters = default_parameters();
         parameters.db_path = db_dir.path().to_path_buf();
         configure_params(&mut parameters);
@@ -1251,7 +1558,7 @@ mod consensus_tests {
     fn commit_indexes(authorities: &[Arc<AuthorityNode>]) -> Vec<CommitIndex> {
         authorities
             .iter()
-            .map(|authority| authority.commit_consumer_monitor().highest_handled_commit())
+            .map(|authority| authority.consumer_monitor().highest_handled_commit())
             .collect()
     }
 

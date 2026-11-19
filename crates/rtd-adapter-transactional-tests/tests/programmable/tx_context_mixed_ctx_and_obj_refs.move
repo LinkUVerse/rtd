@@ -4,7 +4,7 @@
 // A purely TxContext-derived reference (digest) and an object-rooted `&mut Y` coexist
 // across mutable TxContext uses.
 
-//# init --addresses test=0x0 --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0
 
 //# publish
 module test::m;
@@ -30,8 +30,7 @@ public fun write(y: &mut Y, _ctx: &mut TxContext) {
     y.f = y.f + 1;
 }
 
-public fun mut_tx(_: &mut TxContext) {
-}
+public fun mut_tx(_: &mut TxContext) {}
 
 public fun eq_digests(a: &vector<u8>, b: &vector<u8>) {
     assert!(*a == *b, 0);

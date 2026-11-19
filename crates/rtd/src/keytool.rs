@@ -697,6 +697,7 @@ impl KeyToolCommand {
                             RtdKeyPair::Ed25519(kp) => kp.encode_base64(),
                             RtdKeyPair::Secp256k1(kp) => kp.encode_base64(),
                             RtdKeyPair::Secp256r1(kp) => kp.encode_base64(),
+                            RtdKeyPair::MLDSA65(kp) => kp.encode_base64(),
                         };
                         KeypairData {
                             account_keypair: keypair.encode_base64(),

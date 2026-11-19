@@ -15,6 +15,7 @@ use better_any::{Tid, TidAble};
 use indexmap::map::IndexMap;
 use indexmap::set::IndexSet;
 use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::partial_vm_error;
 use move_core_types::{
     account_address::AccountAddress,
     annotated_value::{MoveTypeLayout, MoveValue},
@@ -24,9 +25,13 @@ use move_core_types::{
     u256::U256,
     vm_status::StatusCode,
 };
-use move_vm_runtime::execution::values::{GlobalValue, Value};
+use move_vm_runtime::execution::values::{GlobalValue, Reference, StructRef, Value};
 use move_vm_runtime::natives::extensions::NativeExtensionMarker;
 use object_store::{ActiveChildObject, ChildObjectStore};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use rtd_protocol_config::{LimitThresholdCrossed, ProtocolConfig, check_limit_by_meter};
 use rtd_types::{
     RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID,
@@ -34,7 +39,7 @@ use rtd_types::{
     RTD_COIN_REGISTRY_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID, RTD_DISPLAY_REGISTRY_OBJECT_ID,
     RTD_FORWARDING_ADDRESS_REGISTRY_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID,
     RTD_SYSTEM_STATE_OBJECT_ID, TypeTag,
-    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
+    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
     committee::EpochId,
     error::{ExecutionError, VMMemoryLimitExceededSubStatusCode},
     execution::DynamicallyLoadedObjectMetadata,
@@ -43,11 +48,7 @@ use rtd_types::{
     metrics::ExecutionMetrics,
     move_package::MovePackage,
     object::{MoveObject, Owner},
-    storage::{ObjectFundsResolver, ObjectFundsSufficiency, RuntimeObjectResolver},
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
+    storage::{ImplicitSystemObjectResolver, ObjectFundsSufficiency, RuntimeObjectResolver},
 };
 use tracing::error;
 
@@ -138,7 +139,13 @@ pub(crate) struct ObjectRuntimeState {
 #[derive(Tid)]
 pub struct ObjectRuntime<'a> {
     child_object_store: ChildObjectStore<'a>,
-    object_funds_resolver: &'a dyn ObjectFundsResolver,
+    system_object_resolver: &'a dyn ImplicitSystemObjectResolver,
+    /// The Clock pinned for this transaction, loaded on first borrow. References handed out by
+    /// `borrow_clock` point into it, so it lives as long as the runtime; it is kept outside
+    /// `ObjectRuntimeState`, which test scenarios reset at the end of every transaction.
+    // TODO: if another implicitly read system object becomes borrowable, group these loaded
+    // values in a struct instead of adding more fields here.
+    clock: Option<GlobalValue>,
     // inventories for test scenario
     pub(crate) test_inventories: TestInventories,
     // the internal state
@@ -187,7 +194,7 @@ impl ObjectFundsAvailable {
 impl<'a> ObjectRuntime<'a> {
     pub fn new(
         object_resolver: &'a dyn RuntimeObjectResolver,
-        object_funds_resolver: &'a dyn ObjectFundsResolver,
+        system_object_resolver: &'a dyn ImplicitSystemObjectResolver,
         input_objects: BTreeMap<ObjectID, InputObject>,
         is_metered: bool,
         protocol_config: &'a ProtocolConfig,
@@ -223,7 +230,8 @@ impl<'a> ObjectRuntime<'a> {
                 metrics.clone(),
                 epoch_id,
             ),
-            object_funds_resolver,
+            system_object_resolver,
+            clock: None,
             test_inventories: TestInventories::new(),
             state: ObjectRuntimeState {
                 input_objects: input_object_owners,
@@ -248,6 +256,50 @@ impl<'a> ObjectRuntime<'a> {
         }
     }
 
+    pub fn borrow_clock(&mut self, layout: &R::MoveTypeLayout) -> PartialVMResult<Value> {
+        if self.clock.is_none() {
+            let clock = self.system_object_resolver.clock().map_err(|e| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                    .with_message(format!("Failed to read the Clock: {e}"))
+            })?;
+            let contents = clock
+                .data
+                .try_as_move()
+                .ok_or_else(|| {
+                    PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                        .with_message("The Clock is not a Move object".to_string())
+                })?
+                .contents();
+            let value = Value::simple_deserialize(contents, layout).ok_or_else(|| {
+                PartialVMError::new(StatusCode::FAILED_TO_DESERIALIZE_RESOURCE)
+                    .with_message("Failed to deserialize the Clock".to_string())
+            })?;
+            self.clock = Some(GlobalValue::create(value)?);
+        }
+        self.clock
+            .as_ref()
+            .ok_or_else(|| {
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                    .with_message("The Clock was not loaded".to_string())
+            })
+            .and_then(|clock| clock.borrow_global())
+    }
+
+    /// If the clock is loaded, we write `timestamp_ms` into the loaded Clock `Value` so any and all
+    /// live references see it. This means that they will observe the updated time, even without
+    /// calling `clock::borrow` again to get a "fresh" reference.
+    pub fn write_clock_timestamp_ms_for_testing(
+        &mut self,
+        timestamp_ms: u64,
+    ) -> PartialVMResult<()> {
+        let Some(clock) = &self.clock else {
+            return Ok(());
+        };
+        let clock: StructRef = clock.borrow_global()?.value_as()?;
+        let timestamp: Reference = clock.borrow_field(1)?.value_as()?;
+        timestamp.write_ref(Value::u64(timestamp_ms))
+    }
+
     pub fn check_object_funds_sufficiency(
         &mut self,
         owner: RtdAddress,
@@ -262,7 +314,7 @@ impl<'a> ObjectRuntime<'a> {
             .or_insert_with(ObjectFundsAvailable::init);
         if entry.needs_store_read(amount) {
             let settled_available = match self
-                .object_funds_resolver
+                .system_object_resolver
                 .object_available_balance(owner, type_)
             {
                 Ok(balance) => balance,
@@ -308,11 +360,14 @@ impl<'a> ObjectRuntime<'a> {
             self.protocol_config.max_num_new_move_object_ids_system_tx(),
             self.metrics.limits_metrics.excessive_new_move_object_ids
         ) {
-            return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
-                .with_message(format!("Creating more than {} IDs is not allowed", lim))
-                .with_sub_status(
-                    VMMemoryLimitExceededSubStatusCode::NEW_ID_COUNT_LIMIT_EXCEEDED as u64,
-                ));
+            return Err(partial_vm_error!(
+                MEMORY_LIMIT_EXCEEDED,
+                "Creating more than {} IDs is not allowed",
+                lim
+            )
+            .with_sub_status(
+                VMMemoryLimitExceededSubStatusCode::NEW_ID_COUNT_LIMIT_EXCEEDED as u64,
+            ));
         };
 
         // remove from deleted_ids for the case in dynamic fields where the Field object was deleted
@@ -327,9 +382,10 @@ impl<'a> ObjectRuntime<'a> {
         Ok(())
     }
 
-    /// Marks `id` as new via `new_id` and, when `parent` has a tracked root version, records the
-    /// same root version for `id`. When `parent` is untracked it must itself be newly created in
-    /// this transaction (and transitively to its root), so no root version is recorded.
+    /// Marks `id` as new via `new_id` and, when `parent` has a tracked root version and `id` does
+    /// not, records the same root version for `id`. When `parent` is untracked it must itself be
+    /// newly created in this transaction (and transitively to its root), so no root version is
+    /// recorded.
     pub fn new_id_from_hash(&mut self, parent: ObjectID, id: ObjectID) -> PartialVMResult<()> {
         self.new_id(id)?;
         self.child_object_store
@@ -352,11 +408,14 @@ impl<'a> ObjectRuntime<'a> {
                 .limits_metrics
                 .excessive_deleted_move_object_ids
         ) {
-            return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
-                .with_message(format!("Deleting more than {} IDs is not allowed", lim))
-                .with_sub_status(
-                    VMMemoryLimitExceededSubStatusCode::DELETED_ID_COUNT_LIMIT_EXCEEDED as u64,
-                ));
+            return Err(partial_vm_error!(
+                MEMORY_LIMIT_EXCEEDED,
+                "Deleting more than {} IDs is not allowed",
+                lim
+            )
+            .with_sub_status(
+                VMMemoryLimitExceededSubStatusCode::DELETED_ID_COUNT_LIMIT_EXCEEDED as u64,
+            ));
         };
 
         let was_new = self.state.new_ids.shift_remove(&id);
@@ -446,14 +505,11 @@ impl<'a> ObjectRuntime<'a> {
                 TransferResult::New | TransferResult::SameOwner
             )
         {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(
-                    format!(
-                        "Untransferred object {} had its owner change or was not new",
-                        id
-                    ),
-                ),
-            );
+            return Err(partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Untransferred object {} had its owner change or was not new",
+                id
+            ));
         }
 
         // Metered transactions don't have limits for now
@@ -472,11 +528,14 @@ impl<'a> ObjectRuntime<'a> {
                 .limits_metrics
                 .excessive_transferred_move_object_ids
         ) {
-            return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
-                .with_message(format!("Transferring more than {} IDs is not allowed", lim))
-                .with_sub_status(
-                    VMMemoryLimitExceededSubStatusCode::TRANSFER_ID_COUNT_LIMIT_EXCEEDED as u64,
-                ));
+            return Err(partial_vm_error!(
+                MEMORY_LIMIT_EXCEEDED,
+                "Transferring more than {} IDs is not allowed",
+                lim
+            )
+            .with_sub_status(
+                VMMemoryLimitExceededSubStatusCode::TRANSFER_ID_COUNT_LIMIT_EXCEEDED as u64,
+            ));
         };
 
         self.state.transfers.insert(id, (owner, ty, obj));
@@ -506,6 +565,19 @@ impl<'a> ObjectRuntime<'a> {
         target_ty: TypeTag,
         value: MoveAccumulatorValue,
     ) -> PartialVMResult<()> {
+        if let Some(max) = self.protocol_config.max_num_accumulator_events_as_option()
+            && self.state.accumulator_events.len() >= max as usize
+        {
+            return Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
+                .with_message(format!(
+                    "Emitting more than {max} accumulator events is not allowed"
+                ))
+                .with_sub_status(
+                    VMMemoryLimitExceededSubStatusCode::ACCUMULATOR_EVENT_COUNT_LIMIT_EXCEEDED
+                        as u64,
+                ));
+        }
+
         if let MoveAccumulatorValue::U64(amount) = value {
             let key = (target_addr, target_ty.clone());
 
@@ -519,11 +591,11 @@ impl<'a> ObjectRuntime<'a> {
                         .unwrap_or(0);
                     let new_total = current + amount as u128;
                     if new_total > u64::MAX as u128 {
-                        return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                            .with_message(format!(
-                                "accumulator merge overflow: total merges {} exceed u64::MAX",
-                                new_total
-                            )));
+                        return Err(partial_vm_error!(
+                            ARITHMETIC_ERROR,
+                            "accumulator merge overflow: total merges {} exceed u64::MAX",
+                            new_total
+                        ));
                     }
                     self.state.accumulator_merge_totals.insert(key, new_total);
                     if self
@@ -539,8 +611,10 @@ impl<'a> ObjectRuntime<'a> {
                             .available
                             .checked_add(U256::from(amount as u128))
                             .ok_or_else(|| {
-                            PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                                .with_message("object funds available balance overflow".to_string())
+                            partial_vm_error!(
+                                ARITHMETIC_ERROR,
+                                "object funds available balance overflow"
+                            )
                         })?;
                     }
                 }
@@ -553,11 +627,11 @@ impl<'a> ObjectRuntime<'a> {
                         .unwrap_or(0);
                     let new_total = current + amount as u128;
                     if new_total > u64::MAX as u128 {
-                        return Err(PartialVMError::new(StatusCode::ARITHMETIC_ERROR)
-                            .with_message(format!(
-                                "accumulator split overflow: total splits {} exceed u64::MAX",
-                                new_total
-                            )));
+                        return Err(partial_vm_error!(
+                            ARITHMETIC_ERROR,
+                            "accumulator split overflow: total splits {} exceed u64::MAX",
+                            new_total
+                        ));
                     }
                     self.state.accumulator_split_totals.insert(key, new_total);
                 }
@@ -614,10 +688,7 @@ impl<'a> ObjectRuntime<'a> {
             return Ok(None);
         };
 
-        if self
-            .protocol_config
-            .early_return_receive_object_mismatched_type()
-            && let ObjectResult::MismatchedType = &value
+        if let ObjectResult::MismatchedType = &value
             && self.state.received.contains_key(&child)
         {
             // New case due to the new adapter and being able to re-use receiving values at
@@ -630,12 +701,11 @@ impl<'a> ObjectRuntime<'a> {
         if self.state.received.insert(child, obj_meta).is_some() {
             // We should never hit this -- it means that we have received the same object twice which
             // means we have a duplicated a receiving ticket somehow.
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR).with_message(format!(
-                    "Object {child} at version {child_version} already received. This can only happen \
+            return Err(partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Object {child} at version {child_version} already received. This can only happen \
                     if multiple `Receiving` arguments exist for the same object in the transaction which is impossible."
-                )),
-            );
+            ));
         }
         Ok(Some(value))
     }
@@ -735,6 +805,10 @@ impl<'a> ObjectRuntime<'a> {
         self.state.deleted_ids.contains(id)
     }
 
+    pub fn input_owner(&self, id: &ObjectID) -> Option<&Owner> {
+        self.state.input_objects.get(id)
+    }
+
     pub fn is_transferred(&self, id: &ObjectID) -> Option<Owner> {
         self.state
             .transfers
@@ -755,8 +829,7 @@ impl<'a> ObjectRuntime<'a> {
     }
 
     pub fn loaded_runtime_objects(&self) -> BTreeMap<ObjectID, DynamicallyLoadedObjectMetadata> {
-        // The loaded child objects, and the received objects, should be disjoint. If they are not,
-        // this is an error since it could lead to incorrect transaction dependency computations.
+        // The loaded child objects and received objects must be disjoint.
         debug_assert!(
             self.child_object_store
                 .cached_objects()
@@ -808,12 +881,12 @@ impl<'a> ObjectRuntime<'a> {
 }
 
 pub fn max_event_error(max_events: u64) -> PartialVMError {
-    PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
-        .with_message(format!(
-            "Emitting more than {} events is not allowed",
-            max_events
-        ))
-        .with_sub_status(VMMemoryLimitExceededSubStatusCode::EVENT_COUNT_LIMIT_EXCEEDED as u64)
+    partial_vm_error!(
+        MEMORY_LIMIT_EXCEEDED,
+        "Emitting more than {} events is not allowed",
+        max_events
+    )
+    .with_sub_status(VMMemoryLimitExceededSubStatusCode::EVENT_COUNT_LIMIT_EXCEEDED as u64)
 }
 
 impl ObjectRuntimeState {

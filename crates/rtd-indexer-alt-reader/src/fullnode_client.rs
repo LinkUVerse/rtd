@@ -9,7 +9,7 @@ use prometheus::Registry;
 use prost_types::FieldMask;
 use rtd_rpc::Client;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_sdk_types::Address;
 use rtd_types::signature::GenericSignature;
 use rtd_types::transaction::Transaction;

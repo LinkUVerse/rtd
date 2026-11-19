@@ -4,7 +4,7 @@
 use move_core_types::ident_str;
 use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     ListPackageVersionsRequest, move_package_service_client::MovePackageServiceClient,
 };
 use rtd_types::{

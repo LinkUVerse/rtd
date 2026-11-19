@@ -68,11 +68,11 @@ use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcReader;
 use rtd_package_resolver::Package;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::Checkpoint as ProtoCheckpoint;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction as ProtoExecutedTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::SubscribeCheckpointsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::SubscribeCheckpointsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::subscription_service_client::SubscriptionServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::Checkpoint as ProtoCheckpoint;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction as ProtoExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::SubscribeCheckpointsRequest;
+use rtd_rpc::proto::sui::rpc::v2::SubscribeCheckpointsResponse;
+use rtd_rpc::proto::sui::rpc::v2::subscription_service_client::SubscriptionServiceClient;
 use rtd_sdk_types::ValidatorAggregatedSignature;
 use rtd_types::crypto::AuthorityStrongQuorumSignInfo;
 use rtd_types::crypto::ToFromBytes;
@@ -106,7 +106,7 @@ use super::processed_checkpoint::ProcessedTransaction;
 
 use std::collections::BTreeMap;
 
-use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
+use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::SequenceNumber;
 

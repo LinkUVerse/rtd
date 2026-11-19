@@ -6,7 +6,7 @@
 //! impl'd in sibling modules) into the top-level trait
 //! `rtd-rpc-api` consumes.
 //!
-//! Adds three rpc-api-specific entry points:
+//! Adds rpc-api-specific entry points:
 //!
 //! - [`get_lowest_available_checkpoint_objects`]: returns the
 //!   pruning watermark's `tx_seq_lo`-derived checkpoint floor. We
@@ -18,15 +18,15 @@
 //!   records the same chain id on first contact).
 //! - [`indexes`]: returns `Some(self)` so callers reach the
 //!   [`RpcIndexes`] impl through the same handle.
-//! - [`get_struct_layout_with_overlay`]: delegates to the
-//!   [`resolve_struct_layout`] shim in `layout.rs`.
+//! - [`layout_package_store`]: supplies the package source in `layout.rs`
+//!   for response-local layout resolution.
 
 use rtd_consistent_store::FrameworkSchema;
 use rtd_consistent_store::reader::Reader;
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::digests::CheckpointDigest;
-use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
+use rtd_types::storage::BackingPackageStore;
 use rtd_types::storage::RpcIndexes;
 use rtd_types::storage::RpcStateReader;
 use rtd_types::storage::error::Error as StorageError;
@@ -70,11 +70,28 @@ impl<R: Reader + Send + Sync> RpcStateReader for RpcStoreReader<R> {
         Some(self)
     }
 
+    fn layout_package_store(&self) -> Box<dyn BackingPackageStore + Send + Sync + '_> {
+        Box::new(super::layout::PackageStoreOverObjects {
+            schema: self.schema(),
+        })
+    }
+
     fn get_struct_layout_with_overlay(
         &self,
         struct_tag: &move_core_types::language_storage::StructTag,
-        overlay: &ObjectSet,
+        overlay: &rtd_types::full_checkpoint_content::ObjectSet,
     ) -> StorageResult<Option<move_core_types::annotated_value::MoveTypeLayout>> {
-        self.resolve_struct_layout(struct_tag, overlay)
+        let backing = super::layout::PackageStoreOverObjects {
+            schema: self.schema(),
+        };
+        let overlay_store =
+            rtd_types::storage::OverlayBackingPackageStore::new(overlay, &backing);
+        let resolver = rtd_package_resolver::SyncResolver::new(overlay_store);
+        match resolver.type_layout(move_core_types::language_storage::TypeTag::Struct(
+            Box::new(struct_tag.clone()),
+        )) {
+            Ok(layout) => Ok(Some(layout)),
+            Err(e) => Err(StorageError::custom(e)),
+        }
     }
 }

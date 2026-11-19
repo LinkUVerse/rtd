@@ -24,7 +24,7 @@ impl TestCaseImpl for SharedCounterTest {
     async fn run(&self, ctx: &mut TestContext) -> Result<(), anyhow::Error> {
         info!("Testing shared object transactions.");
 
-        let rtd_objs = ctx.get_rtd_from_faucet(Some(1)).await;
+        let rtd_objs = ctx.get_rtd(Some(1)).await;
         assert!(!rtd_objs.is_empty());
 
         let wallet_context: &WalletContext = ctx.get_wallet();

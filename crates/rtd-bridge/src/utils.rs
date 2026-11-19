@@ -21,6 +21,10 @@ use fastcrypto::secp256k1::Secp256k1KeyPair;
 use fastcrypto::traits::{EncodeDecodeBase64, KeyPair};
 use futures::future::join_all;
 use move_core_types::language_storage::StructTag;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::str::FromStr;
+use std::sync::Arc;
 use rtd_config::Config;
 use rtd_keys::keypair_file::read_key;
 use rtd_sdk::wallet_context::WalletContext;
@@ -36,10 +40,6 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::rtd_system_state::rtd_system_state_summary::RtdSystemStateSummary;
 use rtd_types::transaction::{ObjectArg, TransactionData};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
 use url::Url;
 
 pub struct EthBridgeContracts {
@@ -290,6 +290,10 @@ pub fn examine_key(path: &PathBuf, is_validator_key: bool) -> Result<(), anyhow:
             println!("Secp256r1 key:");
             kp.public().as_bytes().to_vec()
         }
+        RtdKeyPair::MLDSA65(kp) => {
+            println!("ML-DSA-65 key:");
+            kp.public().as_bytes().to_vec()
+        }
     };
     println!("Corresponding Rtd address: {:?}", rtd_address);
     println!("Corresponding PublicKey: {:?}", Hex::encode(pubkey));
@@ -399,7 +403,7 @@ pub async fn publish_and_register_coins_return_add_coins_on_rtd_action(
         let mut uc = None;
         let mut metadata = None;
         for o in &response.changed_objects {
-            use rtd_rpc::proto::rtd::rpc::v2::changed_object::IdOperation;
+            use rtd_rpc::proto::sui::rpc::v2::changed_object::IdOperation;
             if matches!(o.id_operation(), IdOperation::Created) {
                 let Ok(object_type) = o.object_type().parse::<StructTag>() else {
                     continue;

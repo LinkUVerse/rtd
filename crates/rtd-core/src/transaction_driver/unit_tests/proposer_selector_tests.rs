@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use prometheus::Registry;
-use rtd_types::transaction_executor::ProposerSelector as _;
 
 use super::*;
 use crate::authority_aggregator::AuthorityAggregatorBuilder;
@@ -53,6 +52,7 @@ fn observe_latencies(driver: &TransactionDriver<MockAuthorityApi>) {
                 authority_name: *validator,
                 display_name: auth_agg.get_display_name(validator),
                 operation: OperationType::SharedObjectFinality,
+                tx_class: None,
                 ping_type: None,
                 result: Ok(Duration::from_millis((i as u64 + 1) * 100)),
             });

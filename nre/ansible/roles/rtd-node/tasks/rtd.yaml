@@ -77,9 +77,8 @@
 
 - name: Place binary
   ansible.builtin.get_url:
-    url: "{{ rtd_node_binary_url }}"
+    url: "https://releases.rtd.io/{{ rtd_release }}/rtd-node"
     dest: /opt/rtd/bin/rtd-node
-    checksum: "sha256:{{ rtd_node_binary_sha256 }}"
     force: true
     mode: "0755"
 

@@ -9,7 +9,7 @@ use crate::{
         object_store::{CacheInfo, ObjectResult},
     },
 };
-use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::errors::PartialVMResult;
 use move_binary_format::{partial_vm_error, safe_assert, safe_assert_eq, safe_unwrap};
 use move_core_types::{
     account_address::AccountAddress,
@@ -28,9 +28,9 @@ use move_vm_runtime::{
     pop_arg,
     shared::views::{SizeConfig, ValueView},
 };
-use rtd_types::{base_types::MoveObjectType, dynamic_field::derive_dynamic_field_id};
 use smallvec::smallvec;
 use std::collections::VecDeque;
+use rtd_types::{base_types::MoveObjectType, dynamic_field::derive_dynamic_field_id};
 use tracing::instrument;
 
 const E_KEY_DOES_NOT_EXIST: u64 = 1;
@@ -47,7 +47,7 @@ macro_rules! get_or_fetch_object {
         let child_ty = safe_unwrap!($ty_args.pop());
         native_charge_gas_early_exit!(
             $context,
-            $ty_cost_per_byte * u64::from(child_ty.size()?).into()
+            $ty_cost_per_byte.saturating_mul(u64::from(child_ty.size()?))
         );
 
         safe_assert!($ty_args.is_empty());
@@ -122,10 +122,10 @@ pub fn hash_type_and_key(
         context,
         dynamic_field_hash_type_and_key_cost_params
             .dynamic_field_hash_type_and_key_type_cost_per_byte
-            * k_ty_size.into()
+            .saturating_mul(k_ty_size)
             + dynamic_field_hash_type_and_key_cost_params
                 .dynamic_field_hash_type_and_key_value_cost_per_byte
-                * k_value_size.into()
+                .saturating_mul(k_value_size)
     );
 
     let k_tag = context.type_to_type_tag(&k_ty)?;
@@ -135,15 +135,20 @@ pub fn hash_type_and_key(
         context,
         dynamic_field_hash_type_and_key_cost_params
             .dynamic_field_hash_type_and_key_type_tag_cost_per_byte
-            * k_tag_size.into()
+            .saturating_mul(k_tag_size)
     );
-
-    let cost = context.gas_used();
 
     let k_layout = match context.type_to_type_layout(&k_ty) {
         Ok(Some(layout)) => layout,
-        _ => return Ok(NativeResult::err(cost, E_BCS_SERIALIZATION_FAILURE)),
+        Err(err) if err.major_status() == StatusCode::OUT_OF_GAS => return Err(err),
+        _ => {
+            return Ok(NativeResult::err(
+                context.gas_used(),
+                E_BCS_SERIALIZATION_FAILURE,
+            ));
+        }
     };
+    let cost = context.gas_used();
     let Some(k_bytes) = k.typed_serialize(&k_layout) else {
         return Ok(NativeResult::err(cost, E_BCS_SERIALIZATION_FAILURE));
     };
@@ -201,7 +206,7 @@ pub fn add_child_object(
         context,
         dynamic_field_add_child_object_cost_params
             .dynamic_field_add_child_object_value_cost_per_byte
-            * child_value_size.into()
+            .saturating_mul(child_value_size)
     );
 
     // TODO remove this copy_value, which will require VM changes
@@ -216,17 +221,17 @@ pub fn add_child_object(
         context,
         dynamic_field_add_child_object_cost_params
             .dynamic_field_add_child_object_type_cost_per_byte
-            * child_type_size.into()
+            .saturating_mul(child_type_size)
     );
 
     safe_assert!(ty_args.is_empty());
     let tag = match context.type_to_type_tag(&child_ty)? {
         TypeTag::Struct(s) => *s,
         _ => {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("Rtd verifier guarantees this is a struct".to_string()),
-            );
+            return Err(partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Rtd verifier guarantees this is a struct"
+            ));
         }
     };
 
@@ -235,15 +240,10 @@ pub fn add_child_object(
         context,
         dynamic_field_add_child_object_cost_params
             .dynamic_field_add_child_object_struct_tag_cost_per_byte
-            * struct_tag_size.into()
+            .saturating_mul(struct_tag_size)
     );
 
-    if get_extension!(context, ObjectRuntime)?
-        .protocol_config
-        .generate_df_type_layouts()
-    {
-        context.type_to_type_layout(&child_ty)?;
-    }
+    context.type_to_type_layout(&child_ty)?;
 
     let object_runtime: &mut ObjectRuntime = get_extension_mut!(context)?;
     object_runtime.add_child_object(parent, child_id, MoveObjectType::from(tag), child)?;
@@ -312,7 +312,6 @@ pub fn borrow_child_object(
     }
     let child_ref = global_value.borrow_global().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
-            debug_assert!(false);
             partial_vm_error!(
                 UNKNOWN_INVARIANT_VIOLATION_ERROR,
                 "borrow_global returned MISSING_DATA after exists() was true"
@@ -342,7 +341,7 @@ pub fn borrow_child_object(
         context,
         dynamic_field_borrow_child_object_cost_params
             .dynamic_field_borrow_child_object_child_ref_cost_per_byte
-            * u64::from(child_ref_size).into()
+            .saturating_mul(u64::from(child_ref_size))
     );
 
     Ok(NativeResult::ok(context.gas_used(), smallvec![child_ref]))
@@ -403,7 +402,6 @@ pub fn remove_child_object(
     }
     let child = global_value.move_from().map_err(|err| {
         if err.major_status() == StatusCode::MISSING_DATA {
-            debug_assert!(false);
             partial_vm_error!(
                 UNKNOWN_INVARIANT_VIOLATION_ERROR,
                 "move_from returned MISSING_DATA after exists() was true"
@@ -433,7 +431,7 @@ pub fn remove_child_object(
         context,
         dynamic_field_remove_child_object_cost_params
             .dynamic_field_remove_child_object_child_cost_per_byte
-            * u64::from(child_size).into()
+            .saturating_mul(u64::from(child_size))
     );
 
     Ok(NativeResult::ok(context.gas_used(), smallvec![child]))
@@ -518,16 +516,16 @@ pub fn has_child_object_with_ty(
         context,
         dynamic_field_has_child_object_with_ty_cost_params
             .dynamic_field_has_child_object_with_ty_type_cost_per_byte
-            * u64::from(ty.size()?).into()
+            .saturating_mul(u64::from(ty.size()?))
     );
 
     let tag: StructTag = match context.type_to_type_tag(&ty)? {
         TypeTag::Struct(s) => *s,
         _ => {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("Rtd verifier guarantees this is a struct".to_string()),
-            );
+            return Err(partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "Rtd verifier guarantees this is a struct"
+            ));
         }
     };
 
@@ -535,7 +533,7 @@ pub fn has_child_object_with_ty(
         context,
         dynamic_field_has_child_object_with_ty_cost_params
             .dynamic_field_has_child_object_with_ty_type_tag_cost_per_byte
-            * u64::from(tag.abstract_size_for_gas_metering()).into()
+            .saturating_mul(u64::from(tag.abstract_size_for_gas_metering()))
     );
 
     let object_runtime: &mut ObjectRuntime = get_extension_mut!(context)?;

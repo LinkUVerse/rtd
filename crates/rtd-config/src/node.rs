@@ -14,6 +14,14 @@ use linku_common::fatal;
 use nonzero_ext::nonzero;
 use once_cell::sync::OnceCell;
 use rand::rngs::OsRng;
+use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
+use std::collections::{BTreeMap, BTreeSet};
+use std::net::SocketAddr;
+use std::num::{NonZeroU32, NonZeroUsize};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 use rtd_keys::keypair_file::{read_authority_keypair_from_file, read_keypair_from_file};
 use rtd_types::base_types::{ObjectID, RtdAddress};
 use rtd_types::committee::EpochId;
@@ -25,14 +33,6 @@ use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::node_role::{FullNodeSyncMode, NodeRole};
 use rtd_types::supported_protocol_versions::{Chain, SupportedProtocolVersions};
 use rtd_types::traffic_control::{PolicyConfig, RemoteFirewallConfig};
-use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use std::collections::{BTreeMap, BTreeSet};
-use std::net::SocketAddr;
-use std::num::{NonZeroU32, NonZeroUsize};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
 
 use rtd_types::crypto::{AccountKeyPair, AuthorityKeyPair, get_key_pair_from_rng};
 use rtd_types::multiaddr::Multiaddr;
@@ -71,6 +71,9 @@ pub struct NodeConfig {
     pub db_path: PathBuf,
     #[serde(default = "default_grpc_address")]
     pub network_address: Multiaddr,
+    /// The address the fullnode's HTTP server (gRPC and REST) listens on. The
+    /// key keeps its historical name from when the JSON-RPC service was also
+    /// served on this address, so that existing configs keep working.
     #[serde(default = "default_json_rpc_address")]
     pub json_rpc_address: SocketAddr,
 
@@ -90,36 +93,6 @@ pub struct NodeConfig {
     /// For validator nodes this is expected to be `None`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fullnode_sync_mode: Option<FullNodeSyncMode>,
-
-    #[serde(default = "default_enable_index_processing")]
-    pub enable_index_processing: bool,
-
-    /// When true, post-processing (JSON-RPC indexing and event emission) runs
-    /// synchronously on the execution path instead of being spawned to a
-    /// background thread. This is the legacy behavior and can be used as a
-    /// rollback mechanism or for testing.
-    #[serde(default)]
-    pub sync_post_process_one_tx: bool,
-
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub remove_deprecated_tables: bool,
-
-    #[serde(default)]
-    /// Determines the jsonrpc server type as either:
-    /// - 'websocket' for a websocket based service (deprecated)
-    /// - 'http' for an http based service
-    /// - 'both' for both a websocket and http based service (deprecated)
-    pub jsonrpc_server_type: Option<ServerType>,
-
-    /// When true, the JSON-RPC HTTP service is not started. This only stops the
-    /// node from serving JSON-RPC requests; it is independent of JSON-RPC
-    /// indexing (see `enable_index_processing`), which continues to run. This
-    /// lets a node keep indexing while no longer exposing the JSON-RPC service,
-    /// and it does not affect the gRPC/REST service served on the same address.
-    /// Defaults to false so the service stays enabled unless explicitly turned
-    /// off.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub disable_json_rpc: bool,
 
     #[serde(default)]
     pub grpc_load_shed: Option<bool>,
@@ -159,15 +132,6 @@ pub struct NodeConfig {
     #[serde(default)]
     pub expensive_safety_check_config: ExpensiveSafetyCheckConfig,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name_service_package_address: Option<RtdAddress>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name_service_registry_id: Option<ObjectID>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name_service_reverse_registry_id: Option<ObjectID>,
-
     #[serde(default)]
     pub transaction_deny_config: TransactionDenyConfig,
 
@@ -192,15 +156,6 @@ pub struct NodeConfig {
 
     #[serde(default)]
     pub state_snapshot_write_config: StateSnapshotConfig,
-
-    #[serde(default)]
-    pub indexer_max_subscriptions: Option<usize>,
-
-    #[serde(default = "default_transaction_kv_store_config")]
-    pub transaction_kv_store_read_config: TransactionKeyValueStoreReadConfig,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction_kv_store_write_config: Option<TransactionKeyValueStoreWriteConfig>,
 
     #[serde(default = "default_jwk_fetch_interval_seconds")]
     pub jwk_fetch_interval_seconds: u64,
@@ -247,6 +202,13 @@ pub struct NodeConfig {
     #[serde(default)]
     pub enable_simulate_allowed_proposers: bool,
 
+    /// Lets an operator disable staggered submission on this node. The
+    /// `staggered_submission_signal` protocol flag controls the network-wide rollout.
+    /// Staggering runs only when both are enabled. When this is false, the signal is
+    /// still computed and logged but never turns staggering on.
+    #[serde(default = "bool_true")]
+    pub enable_staggered_submission_signal: bool,
+
     #[serde(default)]
     pub verifier_signing_config: VerifierSigningConfig,
 
@@ -288,11 +250,11 @@ pub struct NodeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_driver_config: Option<TransactionDriverConfig>,
 
-    /// When set, consensus pulls transactions directly from a validator-side pool
-    /// instead of the admission-queue drain thread pushing them. This takes
+    /// Consensus pulls transactions directly from a validator-side pool instead of
+    /// the admission-queue drain thread pushing them. Enabled by default; this takes
     /// precedence over `authority_overload_config.admission_queue_enabled`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consensus_transaction_pool: Option<ConsensusTransactionPoolConfig>,
+    #[serde(default)]
+    pub consensus_transaction_pool: ConsensusTransactionPoolConfig,
 
     /// Configuration for congestion tracker binary logging.
     /// When set, enables per-commit binary logs of congestion tracker state.
@@ -335,19 +297,70 @@ impl Default for TransactionDriverConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct ConsensusTransactionPoolConfig {
+    /// Set false to fall back to the push-based admission queue.
+    #[serde(default = "bool_true")]
+    pub enabled: bool,
+
     /// Maximum queued user-lane entries. A soft bundle counts as one entry,
     /// matching the existing admission queue. Defaults to the consensus
     /// `max_pending_transactions` setting.
     pub max_pending_transactions: Option<usize>,
+
+    /// Set false to disable the rate limit on proposed user transaction bytes.
+    #[serde(default = "bool_true")]
+    pub rate_limit_user_bytes: bool,
+
+    /// Rate limit on serialized user transaction bytes this validator proposes,
+    /// as a token bucket that holds one second of budget or one full block,
+    /// whichever is larger. System transactions are not limited. Defaults to
+    /// two maximum-size blocks per second (`max_transactions_in_block_bytes`).
+    /// Must be greater than zero.
+    pub max_user_bytes_per_second: Option<u64>,
+
+    /// Drop user-lane entries that have waited at least this many seconds,
+    /// bounding how long a transaction sits in the pool rather than only how many
+    /// are queued. Defaults to 60 seconds when unset or `~`; 0 disables expiry.
+    /// A value below the longest staggered-submission hold (about 5 seconds)
+    /// expires held entries before this validator can propose them.
+    pub max_queue_age_secs: Option<u64>,
+}
+
+impl Default for ConsensusTransactionPoolConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_pending_transactions: None,
+            rate_limit_user_bytes: true,
+            max_user_bytes_per_second: None,
+            max_queue_age_secs: None,
+        }
+    }
 }
 
 impl ConsensusTransactionPoolConfig {
     pub fn max_pending_transactions(&self, consensus_config: &ConsensusConfig) -> usize {
         self.max_pending_transactions
             .unwrap_or_else(|| consensus_config.max_pending_transactions())
+    }
+
+    pub fn max_user_bytes_per_second(&self, max_transactions_in_block_bytes: u64) -> Option<u64> {
+        self.rate_limit_user_bytes.then(|| {
+            self.max_user_bytes_per_second
+                .unwrap_or(max_transactions_in_block_bytes.saturating_mul(2))
+        })
+    }
+
+    pub const MIN_RECOMMENDED_MAX_QUEUE_AGE: Duration = Duration::from_secs(10);
+
+    pub fn max_queue_age(&self) -> Option<Duration> {
+        match self.max_queue_age_secs {
+            Some(0) => None,
+            Some(secs) => Some(Duration::from_secs(secs)),
+            None => Some(Duration::from_secs(60)),
+        }
     }
 }
 
@@ -863,47 +876,38 @@ impl ExecutionCacheConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ServerType {
-    WebSocket,
-    Http,
-    Both,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct TransactionKeyValueStoreReadConfig {
-    #[serde(default = "default_base_url")]
-    pub base_url: String,
-
-    #[serde(default = "default_cache_size")]
-    pub cache_size: u64,
-}
-
-impl Default for TransactionKeyValueStoreReadConfig {
-    fn default() -> Self {
-        Self {
-            base_url: default_base_url(),
-            cache_size: default_cache_size(),
-        }
-    }
-}
-
-fn default_base_url() -> String {
-    String::new()
-}
-
-fn default_cache_size() -> u64 {
-    100_000
-}
-
 fn default_jwk_fetch_interval_seconds() -> u64 {
     3600
 }
 
 pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
     let mut map = BTreeMap::new();
+
+    // providers that are available on devnet only.
+    let experimental_providers = BTreeSet::from([
+        "Google".to_string(),
+        "Facebook".to_string(),
+        "Twitch".to_string(),
+        "Kakao".to_string(),
+        "Apple".to_string(),
+        "Slack".to_string(),
+        "TestIssuer".to_string(),
+        "TestIssuerKey8192".to_string(),
+        "Microsoft".to_string(),
+        "KarrierOne".to_string(),
+        "Credenza3".to_string(),
+        "Playtron".to_string(),
+        "Threedos".to_string(),
+        "Onefc".to_string(),
+        "FanTV".to_string(),
+        "Arden".to_string(), // Arden partner
+        "AwsTenant-region:eu-west-3-tenant_id:eu-west-3_gGVCx53Es".to_string(), // Trace, external partner
+        "EveFrontier".to_string(),
+        "TestEveFrontier".to_string(),
+        "AwsTenant-region:ap-southeast-1-tenant_id:ap-southeast-1_2QQPyQXDz".to_string(), // Decot, external partner
+        "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_Bpct2JyBg".to_string(), // test Gamma Prime, external partner
+        "AwsTenant-region:eu-north-1-tenant_id:eu-north-1_4HdQTpt3E".to_string(), // Gamma Prime, external partner
+    ]);
 
     // providers that are available for mainnet and testnet.
     let providers = BTreeSet::from([
@@ -927,22 +931,12 @@ pub fn default_zklogin_oauth_providers() -> BTreeMap<Chain, BTreeSet<String>> {
     ]);
     map.insert(Chain::Mainnet, providers.clone());
     map.insert(Chain::Testnet, providers);
-    // An RTD genesis has its own chain ID. Do not automatically fetch upstream
-    // test issuers or partner JWKs before their RTD use has been verified.
-    map.insert(Chain::Unknown, BTreeSet::new());
+    map.insert(Chain::Unknown, experimental_providers);
     map
-}
-
-fn default_transaction_kv_store_config() -> TransactionKeyValueStoreReadConfig {
-    TransactionKeyValueStoreReadConfig::default()
 }
 
 fn default_authority_store_pruning_config() -> AuthorityStorePruningConfig {
     AuthorityStorePruningConfig::default()
-}
-
-pub fn default_enable_index_processing() -> bool {
-    true
 }
 
 fn default_grpc_address() -> Multiaddr {
@@ -990,9 +984,19 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
 impl Config for NodeConfig {}
 
 impl NodeConfig {
+    /// Same as `Config::load`, but not generic, so the deserializer is compiled in this crate
+    /// instead of in each binary that loads a node config.
+    pub fn load_from_path(path: &Path) -> Result<Self, anyhow::Error> {
+        <Self as Config>::load(path)
+    }
+
     pub fn protocol_key_pair(&self) -> &AuthorityKeyPair {
         self.protocol_key_pair.authority_keypair()
     }
@@ -1108,17 +1112,6 @@ impl NodeConfig {
                     .unwrap_or(NonZeroUsize::new(5).unwrap()),
                 remote_store_config: ObjectStoreConfig::default(),
             })
-    }
-
-    pub fn jsonrpc_server_type(&self) -> ServerType {
-        self.jsonrpc_server_type.unwrap_or(ServerType::Http)
-    }
-
-    /// Whether the JSON-RPC HTTP service should be served. This gates only the
-    /// JSON-RPC endpoints; the gRPC/REST service and JSON-RPC indexing are
-    /// unaffected.
-    pub fn json_rpc_enabled(&self) -> bool {
-        !self.disable_json_rpc
     }
 
     pub fn rpc(&self) -> Option<&crate::RpcConfig> {
@@ -1241,9 +1234,6 @@ pub struct ExpensiveSafetyCheckConfig {
     /// Disable state consistency check even when we are running in debug mode.
     #[serde(default)]
     force_disable_state_consistency_check: bool,
-
-    #[serde(default)]
-    enable_secondary_index_checks: bool,
     // TODO: Add more expensive checks here
 }
 
@@ -1255,14 +1245,6 @@ impl ExpensiveSafetyCheckConfig {
             force_disable_epoch_rtd_conservation_check: false,
             enable_state_consistency_check: true,
             force_disable_state_consistency_check: false,
-            enable_secondary_index_checks: false, // Disable by default for now
-        }
-    }
-
-    pub fn new_enable_all_with_secondary_index_checks() -> Self {
-        Self {
-            enable_secondary_index_checks: true,
-            ..Self::new_enable_all()
         }
     }
 
@@ -1273,7 +1255,6 @@ impl ExpensiveSafetyCheckConfig {
             force_disable_epoch_rtd_conservation_check: true,
             enable_state_consistency_check: false,
             force_disable_state_consistency_check: true,
-            enable_secondary_index_checks: false,
         }
     }
 
@@ -1297,10 +1278,6 @@ impl ExpensiveSafetyCheckConfig {
 
     pub fn enable_deep_per_tx_rtd_conservation_check(&self) -> bool {
         self.enable_deep_per_tx_rtd_conservation_check || cfg!(debug_assertions)
-    }
-
-    pub fn enable_secondary_index_checks(&self) -> bool {
-        self.enable_secondary_index_checks
     }
 }
 
@@ -1365,6 +1342,23 @@ pub struct AuthorityStorePruningConfig {
     /// wall-clock deletion SLA.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rpc_store_bitmap_periodic_compaction_days: Option<u64>,
+    /// Number of per-checkpoint RocksDB snapshots the embedded RPC store
+    /// retains in memory. The store's synchronizer takes a snapshot each
+    /// time every pipeline in its cohort has committed a checkpoint; once
+    /// this many are retained, each new one evicts the oldest. Zero (the
+    /// default) disables snapshotting.
+    ///
+    /// Nothing reads these snapshots yet; they are intended to back
+    /// consistent pagination for the RPC store's live-index reads.
+    /// Retaining them prevents compaction from dropping keys overwritten
+    /// or deleted after the oldest retained snapshot, and from combining
+    /// merge operands that a snapshot separates, so a key merged in many
+    /// checkpoints (a balance, the current bitmap bucket) keeps up to one
+    /// operand per checkpoint in the window for reads to fold. Larger
+    /// values therefore cost disk space, compaction work, and read latency.
+    /// At ~4 checkpoints per second, 15,000 snapshots span about an hour.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rpc_store_num_checkpoint_snapshots_to_retain: usize,
     /// number of epochs to keep the latest version of transactions and effects for
     #[serde(skip_serializing_if = "Option::is_none")]
     pub num_epochs_to_retain_for_checkpoints: Option<u64>,
@@ -1373,8 +1367,6 @@ pub struct AuthorityStorePruningConfig {
     pub killswitch_tombstone_pruning: bool,
     #[serde(default = "default_smoothing", skip_serializing_if = "is_true")]
     pub smooth: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub num_epochs_to_retain_for_indexes: Option<u64>,
 }
 
 fn default_num_latest_epoch_dbs_to_retain() -> usize {
@@ -1412,10 +1404,10 @@ impl Default for AuthorityStorePruningConfig {
             max_transactions_in_batch: default_max_transactions_in_batch(),
             periodic_compaction_threshold_days: None,
             rpc_store_bitmap_periodic_compaction_days: None,
+            rpc_store_num_checkpoint_snapshots_to_retain: 0,
             num_epochs_to_retain_for_checkpoints: if cfg!(msim) { Some(2) } else { None },
             killswitch_tombstone_pruning: false,
             smooth: true,
-            num_epochs_to_retain_for_indexes: None,
         }
     }
 }
@@ -1466,8 +1458,6 @@ pub struct DBCheckpointConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub object_store_config: Option<ObjectStoreConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub perform_index_db_checkpoints_at_epoch_end: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub prune_and_compact_before_upload: Option<bool>,
 }
 
@@ -1512,17 +1502,6 @@ pub struct StateSnapshotConfig {
     /// and are intended to be kept indefinitely.
     #[serde(default)]
     pub archive_interval_epochs: u64,
-}
-
-#[derive(Default, Debug, Clone, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub struct TransactionKeyValueStoreWriteConfig {
-    pub aws_access_key_id: String,
-    pub aws_secret_access_key: String,
-    pub aws_region: String,
-    pub table_name: String,
-    pub bucket_name: String,
-    pub concurrency: usize,
 }
 
 /// Configuration for the threshold(s) at which we consider the system
@@ -1584,8 +1563,8 @@ pub struct AuthorityOverloadConfig {
 
     // Enables use of a gas-price-based priority queue for load shedding of
     // transactions at admission time. If false, when consensus is saturated, transactions
-    // are rejected with TooManyTransactionsPendingConsensus. Ignored when
-    // `consensus_transaction_pool` is configured.
+    // are rejected with TooManyTransactionsPendingConsensus. Ignored unless
+    // `consensus_transaction_pool.enabled` is set false.
     #[serde(default = "default_admission_queue_enabled")]
     pub admission_queue_enabled: bool,
 
@@ -1770,7 +1749,7 @@ impl KeyPairWithPath {
         let cell: OnceCell<Arc<RtdKeyPair>> = OnceCell::new();
         // OK to unwrap panic because authority should not start without all keypairs loaded.
         cell.set(Arc::new(read_keypair_from_file(&path).unwrap_or_else(
-            |e| panic!("Invalid keypair file at path {:?}: {e}", &path),
+            |e| panic!("Invalid keypair file at path {:?}: {e}", path),
         )))
         .expect("Failed to set keypair");
         Self {
@@ -1832,7 +1811,7 @@ impl AuthorityKeyPairWithPath {
         // OK to unwrap panic because authority should not start without all keypairs loaded.
         cell.set(Arc::new(
             read_authority_keypair_from_file(&path)
-                .unwrap_or_else(|_| panic!("Invalid authority keypair file at path {:?}", &path)),
+                .unwrap_or_else(|_| panic!("Invalid authority keypair file at path {:?}", path)),
         ))
         .expect("Failed to set authority keypair");
         Self {
@@ -1849,7 +1828,7 @@ impl AuthorityKeyPairWithPath {
                     // OK to unwrap panic because authority should not start without all keypairs loaded.
                     Arc::new(
                         read_authority_keypair_from_file(path).unwrap_or_else(|_| {
-                            panic!("Invalid authority keypair file {:?}", &path)
+                            panic!("Invalid authority keypair file {:?}", path)
                         }),
                     )
                 }
@@ -1922,17 +1901,17 @@ where
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::time::Duration;
 
     use fastcrypto::traits::KeyPair;
     use rand::{SeedableRng, rngs::StdRng};
     use rtd_keys::keypair_file::{write_authority_keypair_to_file, write_keypair_to_file};
     use rtd_types::base_types::ObjectID;
     use rtd_types::crypto::{AuthorityKeyPair, NetworkKeyPair, RtdKeyPair, get_key_pair_from_rng};
-    use rtd_types::supported_protocol_versions::Chain;
 
     use super::{
-        AuthorityStorePruningConfig, ExecutionTimeObserverConfig, Genesis, StateArchiveConfig,
-        TransactionKeyValueStoreReadConfig, default_zklogin_oauth_providers,
+        AuthorityStorePruningConfig, ConsensusTransactionPoolConfig, ExecutionTimeObserverConfig,
+        Genesis, StateArchiveConfig,
     };
     use crate::NodeConfig;
 
@@ -1950,31 +1929,7 @@ mod tests {
     fn fullnode_template() {
         const TEMPLATE: &str = include_str!("../data/fullnode-template.yaml");
 
-        let template: NodeConfig = serde_yaml::from_str(TEMPLATE).unwrap();
-        assert!(
-            template
-                .transaction_kv_store_read_config
-                .base_url
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn transaction_kv_store_has_no_remote_default() {
-        assert!(
-            TransactionKeyValueStoreReadConfig::default()
-                .base_url
-                .is_empty()
-        );
-        let omitted: TransactionKeyValueStoreReadConfig = serde_yaml::from_str("{}").unwrap();
-        assert!(omitted.base_url.is_empty());
-    }
-
-    #[test]
-    fn unknown_chain_does_not_fetch_unverified_issuers() {
-        let providers = default_zklogin_oauth_providers();
-        let unknown = providers.get(&Chain::Unknown).unwrap();
-        assert!(unknown.is_empty());
+        let _template: NodeConfig = serde_yaml::from_str(TEMPLATE).unwrap();
     }
 
     /// Tests that a legacy validator config (captured on 12/06/2024) can be parsed.
@@ -1983,24 +1938,11 @@ mod tests {
         const FILE: &str = include_str!("../data/rtd-node-legacy.yaml");
 
         let template: NodeConfig = serde_yaml::from_str(FILE).unwrap();
-        assert!(
-            template
-                .transaction_kv_store_read_config
-                .base_url
-                .is_empty()
-        );
         assert_eq!(
             template
                 .authority_store_pruning_config
                 .rpc_store_bitmap_periodic_compaction_days,
             None
-        );
-        assert!(
-            template
-                .zklogin_oauth_providers
-                .get(&Chain::Unknown)
-                .unwrap()
-                .is_empty()
         );
     }
 
@@ -2026,6 +1968,33 @@ mod tests {
             round_tripped.rpc_store_bitmap_periodic_compaction_days,
             Some(17)
         );
+    }
+
+    #[test]
+    fn max_queue_age_defaults_and_disable() {
+        let default = ConsensusTransactionPoolConfig::default();
+        assert_eq!(default.max_queue_age(), Some(Duration::from_secs(60)));
+
+        let configured = ConsensusTransactionPoolConfig {
+            max_queue_age_secs: Some(120),
+            ..Default::default()
+        };
+        assert_eq!(configured.max_queue_age(), Some(Duration::from_secs(120)));
+
+        let disabled = ConsensusTransactionPoolConfig {
+            max_queue_age_secs: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(disabled.max_queue_age(), None);
+
+        let parsed: ConsensusTransactionPoolConfig =
+            serde_yaml::from_str("max-queue-age-secs: 0").unwrap();
+        assert_eq!(parsed.max_queue_age(), None);
+        let parsed: ConsensusTransactionPoolConfig =
+            serde_yaml::from_str("max-queue-age-secs: 5").unwrap();
+        assert_eq!(parsed.max_queue_age(), Some(Duration::from_secs(5)));
+        let omitted: ConsensusTransactionPoolConfig = serde_yaml::from_str("{}").unwrap();
+        assert_eq!(omitted.max_queue_age(), Some(Duration::from_secs(60)));
     }
 
     #[test]

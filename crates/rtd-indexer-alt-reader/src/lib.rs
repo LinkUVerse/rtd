@@ -16,6 +16,7 @@ pub mod historical_displays;
 pub mod kv_loader;
 pub mod ledger_grpc_reader;
 pub(crate) mod metrics;
+pub mod monotonic_read;
 pub mod object_versions;
 pub mod objects;
 pub mod package_resolver;

@@ -5,14 +5,14 @@ use super::*;
 #[cfg(tidehunter)]
 use crate::authority::epoch_marker_key::EPOCH_MARKER_KEY_SIZE;
 use crate::authority::epoch_marker_key::EpochMarkerKey;
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::sync::atomic::AtomicU64;
 use rtd_types::base_types::SequenceNumber;
 use rtd_types::effects::{TransactionEffects, TransactionEvents};
 use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::messages_consensus::SharedTransactionDenyConfig;
 use rtd_types::storage::MarkerValue;
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-use std::sync::atomic::AtomicU64;
 use typed_store::metrics::SamplingInterval;
 use typed_store::rocks::{DBBatch, DBMap, MetricConf};
 #[cfg(not(tidehunter))]
@@ -46,6 +46,13 @@ pub struct AuthorityPerpetualTablesOptions {
 }
 
 impl AuthorityPerpetualTablesOptions {
+    /// Whether a node runs the tidehunter objects compactor: validators, which never prune, and
+    /// any node configured with `num_epochs_to_retain = 0`, the setting the compactor replaces.
+    /// Always `false` on RocksDB builds, which have no compactor.
+    pub fn objects_compactor_enabled(is_validator: bool, num_epochs_to_retain: u64) -> bool {
+        cfg!(tidehunter) && (is_validator || num_epochs_to_retain == 0)
+    }
+
     #[cfg(not(tidehunter))]
     fn apply_to(&self, mut db_options: DBOptions) -> DBOptions {
         if !self.enable_write_stall {
@@ -253,7 +260,7 @@ impl AuthorityPerpetualTables {
         let object_indexing = KeyIndexing::fixed(32 + 8); //  KeyIndexing::key_reduction(32 + 8, 16..(32 + 8));
         let mut objects_config = KeySpaceConfig::new()
             .with_max_dirty_keys(16 * default_max_dirty_keys())
-            .with_value_cache_size(value_cache_size);
+            .with_value_cache_size(2 * value_cache_size);
         if matches!(db_options_override, Some(options) if options.enable_objects_compactor) {
             objects_config = objects_config.with_compactor(Box::new(objects_compactor));
         }
@@ -275,7 +282,7 @@ impl AuthorityPerpetualTables {
                     transaction_mutexes,
                     uniform_key,
                     KeySpaceConfig::new()
-                        .with_value_cache_size(value_cache_size)
+                        .with_value_cache_size(2 * value_cache_size)
                         .with_relocation_filter(|_, _| Decision::Remove),
                     digest_prefix.clone(),
                 ),
@@ -965,4 +972,19 @@ fn effects_table_config(db_options: DBOptions) -> DBOptions {
         .optimize_for_point_lookup(
             read_size_from_env(ENV_VAR_EFFECTS_BLOCK_CACHE_SIZE).unwrap_or(1024),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuthorityPerpetualTablesOptions;
+
+    #[test]
+    fn objects_compactor_enabled_only_on_tidehunter() {
+        let enabled = AuthorityPerpetualTablesOptions::objects_compactor_enabled;
+        // RocksDB has no compactor, so its full nodes may combine retention 0 with rpc indexing.
+        assert_eq!(enabled(false, 0), cfg!(tidehunter));
+        assert_eq!(enabled(true, 2), cfg!(tidehunter));
+        // Full nodes that retain old object versions keep the object pruner.
+        assert!(!enabled(false, 2));
+    }
 }

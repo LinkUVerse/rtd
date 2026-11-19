@@ -14,7 +14,7 @@ use move_core_types::language_storage::StructTag;
 use rtd_kvstore::{CheckpointData, TransactionData};
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Checkpoint, Event, ExecutedTransaction, Object as ProtoObject, ObjectSet as ProtoObjectSet,
     Transaction, TransactionEffects, TransactionEvents, UserSignature,
 };
@@ -341,8 +341,8 @@ mod tests {
     use rtd_kvstore::TransactionData as KvTransactionData;
     use rtd_package_resolver::{Package, PackageStore, Resolver};
     use rtd_rpc::field::{FieldMask, FieldMaskUtil};
-    use rtd_rpc::proto::rtd::rpc::v2::BalanceChange as ProtoBalanceChange;
-    use rtd_rpc::proto::rtd::rpc::v2::ObjectReference;
+    use rtd_rpc::proto::sui::rpc::v2::BalanceChange as ProtoBalanceChange;
+    use rtd_rpc::proto::sui::rpc::v2::ObjectReference;
     use rtd_types::TypeTag;
     use rtd_types::balance_change::BalanceChange;
     use rtd_types::base_types::{ObjectID, RtdAddress};

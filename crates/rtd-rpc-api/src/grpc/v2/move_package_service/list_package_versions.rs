@@ -5,7 +5,7 @@ use super::load_package;
 use crate::{ErrorReason, Result, RpcError, RpcService};
 use bytes::Bytes;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     ListPackageVersionsRequest, ListPackageVersionsResponse, PackageVersion,
 };
 use rtd_types::base_types::ObjectID;

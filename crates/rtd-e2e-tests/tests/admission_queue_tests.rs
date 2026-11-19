@@ -1,7 +1,10 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_config::node::AuthorityOverloadConfig;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use rtd_config::node::{AuthorityOverloadConfig, ConsensusTransactionPoolConfig};
 use rtd_core::authority_client::{
     AuthorityAPI, make_network_authority_clients_with_network_config,
 };
@@ -12,9 +15,6 @@ use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::ObjectRef;
 use rtd_types::messages_grpc::SubmitTxRequest;
 use rtd_types::transaction::Transaction;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use test_cluster::TestClusterBuilder;
 
 async fn make_transfer_tx_with_gas_price(
@@ -43,6 +43,15 @@ async fn make_transfer_tx_with_gas(
     cluster.wallet.sign_transaction(&tx_data).await
 }
 
+/// The consensus transaction pool is enabled by default and supersedes the admission
+/// queue, so these tests must opt out to exercise the queue at all.
+fn pool_disabled() -> ConsensusTransactionPoolConfig {
+    ConsensusTransactionPoolConfig {
+        enabled: false,
+        ..Default::default()
+    }
+}
+
 /// Verify that transactions flow through the admission queue successfully.
 #[sim_test]
 async fn test_admission_queue_basic() {
@@ -53,7 +62,9 @@ async fn test_admission_queue_basic() {
     };
 
     let cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_authority_overload_config(config)
+        .with_consensus_transaction_pool_config(pool_disabled())
         .build()
         .await;
 
@@ -88,6 +99,7 @@ async fn test_admission_queue_eviction_and_rejection() {
     let network_config = ConfigBuilder::new_with_temp_dir()
         .committee_size(NonZeroUsize::new(4).unwrap())
         .with_authority_overload_config(overload_config)
+        .with_consensus_transaction_pool_config(pool_disabled())
         .build();
     let committee = network_config.committee_with_network();
 
@@ -211,6 +223,7 @@ async fn test_admission_queue_epoch_boundary_cleanup() {
 
     let cluster = TestClusterBuilder::new()
         .with_authority_overload_config(config)
+        .with_consensus_transaction_pool_config(pool_disabled())
         .build()
         .await;
 
@@ -261,6 +274,7 @@ async fn test_admission_queue_reconfig_with_pending_entries() {
     let network_config = ConfigBuilder::new_with_temp_dir()
         .committee_size(NonZeroUsize::new(4).unwrap())
         .with_authority_overload_config(overload_config)
+        .with_consensus_transaction_pool_config(pool_disabled())
         .build();
     let committee = network_config.committee_with_network();
 

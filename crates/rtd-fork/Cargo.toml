@@ -1,14 +1,16 @@
 [package]
 name = "rtd-fork"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
 
 [dependencies]
+rtd-package-resolver.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+backoff.workspace = true
 bcs.workspace = true
 chrono.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }

@@ -32,7 +32,7 @@ use rtd_indexer_alt_schema::schema::obj_versions;
 use rtd_pg_db::Db;
 use rtd_pg_db::DbArgs;
 use rtd_pg_db::temp::TempDb;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
 use rtd_types::base_types::ObjectID;
 use rtd_types::collection_types::Entry;
 use rtd_types::collection_types::VecMap;

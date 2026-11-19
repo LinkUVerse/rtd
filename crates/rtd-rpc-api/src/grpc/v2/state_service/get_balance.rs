@@ -3,7 +3,7 @@
 
 use crate::{ErrorReason, Result, RpcError, RpcService};
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::{Balance, GetBalanceRequest, GetBalanceResponse};
+use rtd_rpc::proto::sui::rpc::v2::{Balance, GetBalanceRequest, GetBalanceResponse};
 use rtd_sdk_types::Address;
 use rtd_sdk_types::StructTag;
 use rtd_types::base_types::RtdAddress;

@@ -61,14 +61,6 @@ use crate::{
     node::Node,
 };
 use anyhow::{Context, Error, Result, anyhow};
-use rtd_types::{
-    base_types::ObjectID,
-    committee::ProtocolVersion,
-    effects::TransactionEffects,
-    object::Object,
-    supported_protocol_versions::{Chain, ProtocolConfig},
-    transaction::TransactionData,
-};
 use std::{
     collections::BTreeMap,
     fs,
@@ -77,6 +69,14 @@ use std::{
         RwLock,
         atomic::{AtomicU64, Ordering},
     },
+};
+use rtd_types::{
+    base_types::ObjectID,
+    committee::ProtocolVersion,
+    effects::TransactionEffects,
+    object::Object,
+    supported_protocol_versions::{Chain, ProtocolConfig},
+    transaction::TransactionData,
 };
 
 // Public constants for file system paths

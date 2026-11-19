@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
+use rtd_macros::sim_test;
 
 use move_core_types::language_storage::TypeTag;
 use rtd_protocol_config::ProtocolConfig;
@@ -17,7 +18,7 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::execution_params::FundsWithdrawStatus;
 use rtd_types::{
-    base_types::{RtdAddress, SequenceNumber},
+    base_types::{SequenceNumber, RtdAddress},
     crypto::{AccountKeyPair, get_account_key_pair},
     executable_transaction::VerifiedExecutableTransaction,
     gas_coin::GAS,
@@ -208,7 +209,7 @@ impl TestEnv {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_withdraw_schedule_e2e() {
     telemetry_subscribers::init_for_testing();
     let mut test_env = create_test_env(BTreeMap::from([(GAS::type_tag(), 1000)])).await;

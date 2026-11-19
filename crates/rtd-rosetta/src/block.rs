@@ -6,7 +6,7 @@ use axum::{Extension, Json};
 use axum_extra::extract::WithRejection;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest;
 use tracing::debug;
 
 use crate::operations::Operations;

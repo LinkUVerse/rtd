@@ -1,5 +1,2 @@
 [package]
 name = "a"
-
-[environments]
-testnet = "01234567"

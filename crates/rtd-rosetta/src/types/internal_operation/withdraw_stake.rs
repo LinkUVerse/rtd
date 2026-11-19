@@ -3,12 +3,12 @@
 
 use async_trait::async_trait;
 use prost_types::FieldMask;
-use rtd_rpc::client::Client;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use rtd_rpc::client::Client;
 
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};
+use rtd_rpc::proto::sui::rpc::v2::{GetObjectRequest, ListOwnedObjectsRequest};
 use rtd_types::RTD_SYSTEM_PACKAGE_ID;
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_types::governance::WITHDRAW_STAKE_FUN_NAME;

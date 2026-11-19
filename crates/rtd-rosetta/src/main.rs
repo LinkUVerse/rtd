@@ -13,16 +13,16 @@ use anyhow::anyhow;
 use clap::Parser;
 use fastcrypto::encoding::{Encoding, Hex};
 use fastcrypto::traits::EncodeDecodeBase64;
+use serde_json::{Value, json};
 use rtd_config::{RTD_KEYSTORE_FILENAME, rtd_config_dir};
 use rtd_rosetta::types::{CurveType, PrefundedAccount, RtdEnv};
-use rtd_rosetta::{RTD, RosettaOfflineServer, RosettaOnlineServer};
+use rtd_rosetta::{RosettaOfflineServer, RosettaOnlineServer, RTD};
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::client::HeadersInterceptor;
-use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetServiceInfoRequest;
 use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::{KeypairTraits, RtdKeyPair, ToFromBytes};
 use rtd_types::digests::{ChainIdentifier, CheckpointDigest};
-use serde_json::{Value, json};
 use tonic::metadata::Ascii;
 use tonic::metadata::MetadataKey;
 use tonic::metadata::MetadataValue;
@@ -212,6 +212,8 @@ fn read_prefunded_account(path: &Path) -> Result<Vec<PrefundedAccount>, anyhow::
                 RtdKeyPair::Secp256r1(k) => {
                     (Hex::encode(k.private().as_bytes()), CurveType::Secp256r1)
                 }
+                // The ML-DSA private key is the 32-byte seed, not the expanded key.
+                RtdKeyPair::MLDSA65(k) => (Hex::encode(k.private().as_bytes()), CurveType::MLDSA65),
             };
             PrefundedAccount {
                 privkey,

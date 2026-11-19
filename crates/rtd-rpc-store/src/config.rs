@@ -19,9 +19,10 @@
 
 use std::time::Duration;
 
-use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 use serde::Deserialize;
 use serde::Serialize;
+use rtd_indexer_alt_framework::config::warn_ignored_config_key;
+use rtd_indexer_alt_framework::pipeline::CommitterConfig;
 
 /// Top-level configuration for the `rtd-rpc-store` indexer
 /// service. Parses from TOML; every field has a sensible default
@@ -197,8 +198,19 @@ pub struct PipelineLayer {
 #[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CommitterLayer {
     pub write_concurrency: Option<usize>,
-    pub collect_interval_ms: Option<u64>,
     pub watermark_interval_ms: Option<u64>,
+
+    /// Minimum number of pending rows the collector waits for before cutting a batch. `0` cuts a
+    /// batch as soon as the committer has room for it.
+    pub min_batch_rows: Option<usize>,
+
+    /// Longest time, in milliseconds, the oldest pending row waits for `min-batch-rows` to
+    /// accumulate before a batch is cut anyway.
+    pub max_batch_delay_ms: Option<u64>,
+
+    /// Deprecated and ignored: batches are cut as soon as the committer has room; see
+    /// `min-batch-rows` and `max-batch-delay-ms`.
+    pub collect_interval_ms: Option<u64>,
 }
 
 impl ServiceConfig {
@@ -252,10 +264,12 @@ impl PipelineLayer {
     /// already holds that data and serves it directly, so this indexer
     /// must not double-write it.
     ///
-    /// The enabled pipelines form two cohorts. The
-    /// [`Synchronizer`](rtd_consistent_store::Synchronizer)
-    /// distinguishes them by their persisted watermark at startup,
-    /// not by this layer, so both are simply registered here:
+    /// The enabled pipelines form two cohorts, both simply registered
+    /// here. The [`Indexer`](crate::Indexer) makes every live-cohort
+    /// pipeline a required member of each snapshot; the
+    /// [`Synchronizer`](rtd_consistent_store::Synchronizer) admits
+    /// history-cohort pipelines to snapshots by their persisted
+    /// watermark, once they catch up:
     ///
     /// - **Live cohort** — restored to the fullnode's tip and
     ///   following live from there: `object_by_owner`,
@@ -367,13 +381,18 @@ impl CommitterLayer {
     /// Fold the override layer onto a shared default
     /// [`CommitterConfig`]. Unset fields inherit from `base`.
     pub fn finish(self, base: CommitterConfig) -> CommitterConfig {
+        if self.collect_interval_ms.is_some() {
+            warn_ignored_config_key("collect-interval-ms");
+        }
+
         CommitterConfig {
             write_concurrency: self.write_concurrency.unwrap_or(base.write_concurrency),
-            collect_interval_ms: self.collect_interval_ms.unwrap_or(base.collect_interval_ms),
             watermark_interval_ms: self
                 .watermark_interval_ms
                 .unwrap_or(base.watermark_interval_ms),
-            ..Default::default()
+            min_batch_rows: self.min_batch_rows.unwrap_or(base.min_batch_rows),
+            max_batch_delay_ms: self.max_batch_delay_ms.unwrap_or(base.max_batch_delay_ms),
+            ..base
         }
     }
 }
@@ -382,8 +401,10 @@ impl From<CommitterConfig> for CommitterLayer {
     fn from(config: CommitterConfig) -> Self {
         Self {
             write_concurrency: Some(config.write_concurrency),
-            collect_interval_ms: Some(config.collect_interval_ms),
             watermark_interval_ms: Some(config.watermark_interval_ms),
+            min_batch_rows: Some(config.min_batch_rows),
+            max_batch_delay_ms: Some(config.max_batch_delay_ms),
+            collect_interval_ms: None,
         }
     }
 }
@@ -457,19 +478,22 @@ mod tests {
     fn committer_layer_overrides_base() {
         let base = CommitterConfig {
             write_concurrency: 4,
-            collect_interval_ms: 200,
             watermark_interval_ms: 200,
+            min_batch_rows: 100,
+            max_batch_delay_ms: 200,
             ..Default::default()
         };
         let layer = CommitterLayer {
             write_concurrency: Some(8),
-            collect_interval_ms: None,
             watermark_interval_ms: Some(500),
+            min_batch_rows: Some(50),
+            ..Default::default()
         };
         let merged = layer.finish(base);
         assert_eq!(merged.write_concurrency, 8);
-        // Unset fields inherit from `base`.
-        assert_eq!(merged.collect_interval_ms, 200);
         assert_eq!(merged.watermark_interval_ms, 500);
+        assert_eq!(merged.min_batch_rows, 50);
+        // Unset fields inherit from `base`.
+        assert_eq!(merged.max_batch_delay_ms, 200);
     }
 }

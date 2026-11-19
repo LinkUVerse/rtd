@@ -13,9 +13,21 @@ use anyhow::anyhow;
 use arc_swap::ArcSwap;
 use fastcrypto_zkp::bn254::zk_login::JwkId;
 use fastcrypto_zkp::bn254::zk_login::OIDCProvider;
+use futures::FutureExt;
 use futures::future::BoxFuture;
+use linku_common::debug_fatal;
 use linku_common::in_test_configuration;
 use prometheus::Registry;
+use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::future::Future;
+use std::path::Path;
+use std::path::PathBuf;
+use std::str::FromStr;
+#[cfg(msim)]
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, OnceLock, Weak};
+use std::time::Duration;
 use rtd_core::admission_queue::{
     AdmissionQueueContext, AdmissionQueueManager, AdmissionQueueMetrics,
 };
@@ -34,20 +46,9 @@ use rtd_network::endpoint_manager::{AddressSource, EndpointId};
 use rtd_network::validator::server::RTD_TLS_SERVER_NAME;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::node_role::NodeRole;
-use std::collections::{BTreeSet, HashMap, HashSet};
-use std::fmt;
-use std::future::Future;
-use std::path::Path;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock, Weak};
-use std::time::Duration;
 
 use rtd_core::global_state_hasher::GlobalStateHashMetrics;
 use rtd_core::storage::RestReadStore;
-use rtd_json_rpc::bridge_api::BridgeReadApi;
-use rtd_json_rpc_api::JsonRpcMetrics;
 use rtd_network::randomness;
 use rtd_rpc_api::ServerVersion;
 use rtd_rpc_api::subscription::SubscriptionService;
@@ -59,8 +60,7 @@ use rtd_types::digests::{
 use rtd_types::messages_consensus::AuthorityCapabilitiesV2;
 use rtd_types::rtd_system_state::RtdSystemState;
 use tap::tap::TapFallible;
-use tokio::sync::oneshot;
-use tokio::sync::{Mutex, broadcast, mpsc, watch};
+use tokio::sync::{Mutex, broadcast, mpsc};
 use tokio::task::JoinHandle;
 use tower::ServiceBuilder;
 use tracing::{Instrument, error_span, info};
@@ -110,9 +110,7 @@ use rtd_core::epoch::consensus_store_pruner::ConsensusStorePruner;
 use rtd_core::epoch::epoch_metrics::EpochMetrics;
 use rtd_core::epoch::reconfiguration::ReconfigurationInitiator;
 use rtd_core::global_state_hasher::GlobalStateHasher;
-use rtd_core::jsonrpc_index::IndexStore;
 use rtd_core::module_cache_metrics::ResolverMetrics;
-use rtd_core::node_readiness::FullnodeReadiness;
 use rtd_core::overload_monitor::overload_monitor;
 use rtd_core::rpc_store_embed::EmbeddedRpcStore;
 use rtd_core::signature_verifier::SignatureVerifierMetrics;
@@ -123,14 +121,6 @@ use rtd_core::{
     authority::{AuthorityState, AuthorityStore},
     authority_client::NetworkAuthorityClient,
 };
-use rtd_json_rpc::JsonRpcServerBuilder;
-use rtd_json_rpc::coin_api::CoinReadApi;
-use rtd_json_rpc::governance_api::GovernanceReadApi;
-use rtd_json_rpc::indexer_api::IndexerApi;
-use rtd_json_rpc::move_utils::MoveUtils;
-use rtd_json_rpc::read_api::ReadApi;
-use rtd_json_rpc::transaction_builder_api::TransactionBuilderApi;
-use rtd_json_rpc::transaction_execution_api::TransactionExecutionApi;
 use rtd_macros::fail_point;
 use rtd_macros::{fail_point_arg, fail_point_async, replay_log};
 use rtd_network::api::ValidatorServer;
@@ -138,22 +128,17 @@ use rtd_network::discovery;
 use rtd_network::endpoint_manager::EndpointManager;
 use rtd_network::state_sync;
 use rtd_network::validator::server::ServerBuilder;
-use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+use rtd_protocol_config::{ProtocolConfig, ProtocolVersion};
 use rtd_snapshot::uploader::StateSnapshotUploader;
-use rtd_storage::{
-    http_key_value_store::HttpKVStore,
-    key_value_store::{FallbackTransactionKVStore, TransactionKeyValueStore},
-    key_value_store_metrics::KeyValueStoreMetrics,
-};
 use rtd_types::base_types::{AuthorityName, EpochId};
 use rtd_types::committee::Committee;
 use rtd_types::crypto::KeypairTraits;
 use rtd_types::error::{RtdError, RtdResult};
 use rtd_types::messages_consensus::{ConsensusTransaction, check_total_jwk_size};
+use rtd_types::storage::RpcStateReader;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemState;
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
-use rtd_types::storage::RpcStateReader;
 use rtd_types::supported_protocol_versions::SupportedProtocolVersions;
 use typed_store::DBMetrics;
 use typed_store::rocks::default_db_options;
@@ -167,7 +152,7 @@ mod handle;
 pub mod metrics;
 
 pub struct ValidatorComponents {
-    validator_server_handle: Option<SpawnOnce>,
+    validator_server_handle: Option<ValidatorGrpcServer>,
     validator_overload_monitor_handle: Option<JoinHandle<()>>,
     consensus_manager: Arc<ConsensusManager>,
     consensus_store_pruner: ConsensusStorePruner,
@@ -176,8 +161,6 @@ pub struct ValidatorComponents {
     rtd_tx_validator_metrics: Arc<RtdTxValidatorMetrics>,
     admission_queue: Option<AdmissionQueueContext>,
     transaction_pool_context: Option<Arc<TransactionPoolContext>>,
-    checkpoint_builder_startup_receiver: watch::Receiver<Option<u64>>,
-    checkpoint_service_failure_receiver: watch::Receiver<Option<String>>,
 }
 
 pub struct P2pComponents {
@@ -191,9 +174,9 @@ pub struct P2pComponents {
 
 #[cfg(msim)]
 mod simulator {
-    use rtd_types::error::RtdErrorKind;
     use std::sync::Mutex;
     use std::sync::atomic::AtomicBool;
+    use rtd_types::error::RtdErrorKind;
 
     use super::*;
     pub(super) struct SimState {
@@ -246,22 +229,35 @@ mod simulator {
     }
 }
 
-use rtd_core::authority::authority_store_pruner::PrunerWatermarks;
-use rtd_core::{
-    consensus_handler::ConsensusHandlerInitializer, safe_client::SafeClientMetricsBase,
-};
 #[cfg(msim)]
 pub use simulator::set_jwk_injector;
 #[cfg(msim)]
 use simulator::*;
+use rtd_core::authority::authority_store_pruner::PrunerWatermarks;
+use rtd_core::{
+    consensus_handler::ConsensusHandlerInitializer, safe_client::SafeClientMetricsBase,
+};
 
 const DEFAULT_GRPC_CONNECT_TIMEOUT: Duration = Duration::from_secs(60);
+const VALIDATOR_GRPC_SERVER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// How long after reconfiguration every reference to the previous epoch's store must be gone.
+/// The longest legitimate holder is an RPC handler on a fullnode waiting up to the local
+/// execution timeout (10s) for a transaction to be checkpointed. Simtests use a shorter period
+/// so that the check is exercised even by tests with short epochs.
+fn epoch_store_release_grace_period() -> Duration {
+    if cfg!(msim) {
+        Duration::from_secs(15)
+    } else {
+        Duration::from_secs(60)
+    }
+}
 
 pub struct RtdNode {
     config: NodeConfig,
     validator_components: Mutex<Option<ValidatorComponents>>,
 
-    /// The http servers responsible for serving RPC traffic (gRPC and JSON-RPC)
+    /// The http servers responsible for serving RPC traffic.
     #[allow(unused)]
     http_servers: HttpServers,
 
@@ -320,8 +316,6 @@ pub struct RtdNode {
     /// indexer keeps running (dropping it aborts the indexer). Exposed
     /// through [`RtdNode::embedded_rpc_store`] for introspection.
     embedded_rpc_store: Option<EmbeddedRpcStore>,
-    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
-    checkpoint_service_failed: AtomicBool,
 }
 
 impl fmt::Debug for RtdNode {
@@ -339,19 +333,10 @@ impl RtdNode {
         config: NodeConfig,
         registry_service: RegistryService,
     ) -> Result<Arc<RtdNode>> {
-        Self::start_with_startup_target(config, registry_service, None).await
-    }
-
-    pub async fn start_with_startup_target(
-        config: NodeConfig,
-        registry_service: RegistryService,
-        startup_target: Option<u64>,
-    ) -> Result<Arc<RtdNode>> {
-        Self::start_async_with_startup_target(
+        Self::start_async(
             config,
             registry_service,
             ServerVersion::new("rtd-node", "unknown"),
-            startup_target,
         )
         .await
     }
@@ -491,19 +476,20 @@ impl RtdNode {
         }
     }
 
-    pub async fn start_async(
+    /// Returns a boxed future so that node startup is compiled in this crate rather than in every
+    /// binary that starts a node.
+    pub fn start_async(
         config: NodeConfig,
         registry_service: RegistryService,
         server_version: ServerVersion,
-    ) -> Result<Arc<RtdNode>> {
-        Self::start_async_with_startup_target(config, registry_service, server_version, None).await
+    ) -> BoxFuture<'static, Result<Arc<RtdNode>>> {
+        Self::start_async_impl(config, registry_service, server_version).boxed()
     }
 
-    async fn start_async_with_startup_target(
+    async fn start_async_impl(
         config: NodeConfig,
         registry_service: RegistryService,
         server_version: ServerVersion,
-        startup_target: Option<u64>,
     ) -> Result<Arc<RtdNode>> {
         // Fail fast on config errors before starting any node components.
         if let Some(prober_config) = &config.address_prober {
@@ -589,13 +575,23 @@ impl RtdNode {
             .enable_db_write_stall
             .unwrap_or(node_role.runs_consensus());
         // The tidehunter objects compactor retains only the latest version per
-        // ObjectID and is mutually exclusive with the object pruner. Enable it
-        // for validators (which always disable the pruner), and also for any
-        // node configured with `num_epochs_to_retain = 0` — that aggressive
-        // setting is what the compactor replaces. The pruner is force-disabled
-        // in `AuthorityStorePruner::new` whenever this is true.
-        let enable_objects_compactor = node_role.is_validator()
-            || config.authority_store_pruning_config.num_epochs_to_retain == 0;
+        // ObjectID and is mutually exclusive with the object pruner, which
+        // `AuthorityStorePruner::new` force-disables whenever it runs.
+        let enable_objects_compactor = AuthorityPerpetualTablesOptions::objects_compactor_enabled(
+            node_role.is_validator(),
+            config.authority_store_pruning_config.num_epochs_to_retain,
+        );
+        let enable_rpc_indexing =
+            node_role.is_fullnode() && config.rpc().is_some_and(|rpc| rpc.enable_indexing());
+        // The compactor drops object versions without regard to the embedded rpc-store, whose
+        // indexes expect every object version they reference to remain readable.
+        anyhow::ensure!(
+            !(enable_objects_compactor && enable_rpc_indexing),
+            "authority-store-pruning-config.num-epochs-to-retain = 0 attaches the tidehunter \
+             objects compactor, which drops non-latest object versions that rpc indexes \
+             (rpc.enable-indexing = true) depend on. Set num-epochs-to-retain > 0 on a full node \
+             that serves rpc indexes, or set rpc.enable-indexing = false."
+        );
         let perpetual_tables_options = AuthorityPerpetualTablesOptions {
             enable_write_stall,
             enable_objects_compactor,
@@ -676,6 +672,7 @@ impl RtdNode {
             cache_metrics,
             signature_verifier_metrics,
             &config.expensive_safety_check_config,
+            &config,
             (chain_id, chain),
             highest_executed_checkpoint,
             previous_epoch_last_checkpoint,
@@ -731,19 +728,12 @@ impl RtdNode {
             checkpoint_store.clone(),
         );
 
-        let index_store = if node_role.is_fullnode() && config.enable_index_processing {
-            info!("creating jsonrpc index store");
-            Some(Arc::new(IndexStore::new(
-                config.db_path().join("indexes"),
-                &prometheus_registry,
-                epoch_store
-                    .protocol_config()
-                    .max_move_identifier_len_as_option(),
-                config.remove_deprecated_tables,
-            )))
-        } else {
-            None
-        };
+        if node_role.is_fullnode() {
+            // Fullnodes upgraded from a version that still ran the legacy
+            // index backends may have their now-dead on-disk directories
+            // lying around; remove them so they stop wasting disk.
+            remove_legacy_index_stores(&config.db_path());
+        }
 
         let chain_identifier = epoch_store.get_chain_identifier();
 
@@ -752,46 +742,28 @@ impl RtdNode {
         // column families (indexed independently of the authority store) and
         // serves the index read paths from the embedded store. Raw chain data
         // is still served from the perpetual store.
-        let mut embedded_rpc_store =
-            if node_role.is_fullnode() && config.rpc().is_some_and(|rpc| rpc.enable_indexing()) {
-                info!("creating embedded rpc-store");
-                // The embedded `rtd-rpc-store` replaced the legacy `rpc-index`
-                // backend; remove its now-dead on-disk directory if a prior
-                // version left one behind.
-                remove_legacy_rpc_index_store(&config.db_path());
-                // The tip indexer pulls checkpoints from the node's local
-                // checkpoint / perpetual stores via a dedicated read handle.
-                let ingestion_source = RocksDbStore::new(
-                    cache_traits.clone(),
-                    committee_store.clone(),
-                    checkpoint_store.clone(),
-                );
-                let embedded_rpc_store = EmbeddedRpcStore::bootstrap(
-                    &config,
-                    &store,
-                    &checkpoint_store,
-                    ingestion_source,
-                    chain_identifier,
-                    &prometheus_registry,
-                )
-                .await?;
-                Some(embedded_rpc_store)
-            } else {
-                None
-            };
-
-        let fullnode_readiness = node_role.is_fullnode().then(|| {
-            Arc::new(FullnodeReadiness::new(
-                startup_target.unwrap_or(highest_executed_checkpoint),
+        let mut embedded_rpc_store = if enable_rpc_indexing {
+            info!("creating embedded rpc-store");
+            // The tip indexer pulls checkpoints from the node's local
+            // checkpoint / perpetual stores via a dedicated read handle.
+            let ingestion_source = RocksDbStore::new(
+                cache_traits.clone(),
+                committee_store.clone(),
                 checkpoint_store.clone(),
-                embedded_rpc_store
-                    .as_ref()
-                    .map(EmbeddedRpcStore::indexed_checkpoint_fn),
-                index_store.is_some(),
-                startup_target.is_some(),
-                run_with_range.is_none(),
-            ))
-        });
+            );
+            let embedded_rpc_store = EmbeddedRpcStore::bootstrap(
+                &config,
+                &store,
+                &checkpoint_store,
+                ingestion_source,
+                chain_identifier,
+                &prometheus_registry,
+            )
+            .await?;
+            Some(embedded_rpc_store)
+        } else {
+            None
+        };
 
         info!("creating archive reader");
         // Create network
@@ -875,11 +847,9 @@ impl RtdNode {
             cache_traits.clone(),
             epoch_store.clone(),
             committee_store.clone(),
-            index_store.clone(),
             embedded_rpc_store.as_ref().map(|embedded| embedded.store()),
             checkpoint_store.clone(),
             &prometheus_registry,
-            genesis.objects(),
             &db_checkpoint_config,
             config.clone(),
             chain_identifier,
@@ -921,7 +891,6 @@ impl RtdNode {
                 &config.db_path(),
                 &prometheus_registry,
                 &config,
-                fullnode_readiness.clone(),
             )))
         } else {
             None
@@ -936,7 +905,6 @@ impl RtdNode {
             server_version,
             node_role,
             embedded_rpc_store.as_ref(),
-            fullnode_readiness.clone(),
         )
         .await?;
 
@@ -980,7 +948,7 @@ impl RtdNode {
             .set(config.supported_protocol_versions.unwrap().max.as_u64() as i64);
 
         let consensus_adapter_metrics = OnceLock::new();
-        let transaction_pool_context = config.consensus_transaction_pool.as_ref().map(|_| {
+        let transaction_pool_context = config.consensus_transaction_pool.enabled.then(|| {
             Arc::new(TransactionPoolContext::new(
                 Arc::new(AdmissionQueueMetrics::new(
                     &registry_service.default_registry(),
@@ -990,6 +958,7 @@ impl RtdNode {
                         ConsensusAdapterMetrics::new(&registry_service.default_registry())
                     })
                     .clone(),
+                state.get_cache_writer().clone(),
             ))
         });
         let node_role = epoch_store.node_role();
@@ -1073,12 +1042,6 @@ impl RtdNode {
 
         // setup shutdown channel
         let (shutdown_channel, _) = broadcast::channel::<Option<RunWithRange>>(1);
-        let checkpoint_service_failure_monitor = validator_components.as_ref().map(|components| {
-            (
-                epoch_store.epoch(),
-                components.checkpoint_service_failure_receiver.clone(),
-            )
-        });
 
         let node = Self {
             config,
@@ -1115,15 +1078,10 @@ impl RtdNode {
             auth_agg,
             subscription_service_checkpoint_sender,
             embedded_rpc_store,
-            fullnode_readiness,
-            checkpoint_service_failed: AtomicBool::new(false),
         };
 
         info!("RtdNode started!");
         let node = Arc::new(node);
-        if let Some((epoch, receiver)) = checkpoint_service_failure_monitor {
-            node.spawn_checkpoint_service_failure_monitor(epoch, receiver);
-        }
         let node_copy = node.clone();
         spawn_monitored_task!(async move {
             let result = Self::monitor_reconfiguration(node_copy, epoch_store).await;
@@ -1135,81 +1093,12 @@ impl RtdNode {
         Ok(node)
     }
 
-    pub fn fullnode_readiness(&self) -> Option<&Arc<FullnodeReadiness>> {
-        self.fullnode_readiness.as_ref()
-    }
-
-    pub fn highest_executed_checkpoint(&self) -> u64 {
-        self.checkpoint_store
-            .get_highest_executed_checkpoint_seq_number()
-            .expect("checkpoint store read cannot fail")
-            .unwrap_or(0)
-    }
-
-    pub async fn checkpoint_builder_startup_receiver(
-        &self,
-    ) -> Option<watch::Receiver<Option<u64>>> {
-        self.validator_components
-            .lock()
-            .await
-            .as_ref()
-            .map(|components| components.checkpoint_builder_startup_receiver.clone())
-    }
-
-    pub async fn checkpoint_service_failure(&self) -> Option<String> {
-        let components = self.validator_components.lock().await;
-        components.as_ref().and_then(|components| {
-            components
-                .checkpoint_service_failure_receiver
-                .borrow()
-                .clone()
-        })
-    }
-
-    fn spawn_checkpoint_service_failure_monitor(
-        self: &Arc<Self>,
-        epoch: EpochId,
-        mut receiver: watch::Receiver<Option<String>>,
-    ) {
-        let node = Arc::downgrade(self);
-        spawn_monitored_task!(async move {
-            loop {
-                let failure = receiver.borrow_and_update().clone();
-                if let Some(failure) = failure {
-                    error!(
-                        target: "rtd_startup",
-                        epoch,
-                        %failure,
-                        "Checkpoint service failed; stopping the node before consensus can build an unbounded recovery tail"
-                    );
-                    if let Some(node) = node.upgrade() {
-                        node.checkpoint_service_failed
-                            .store(true, Ordering::Release);
-                        let _ = node.shutdown_channel_tx.send(None);
-                    }
-                    return;
-                }
-
-                if receiver.changed().await.is_err() {
-                    return;
-                }
-            }
-        });
-    }
-
     pub fn subscribe_to_epoch_change(&self) -> broadcast::Receiver<RtdSystemState> {
         self.end_of_epoch_channel.subscribe()
     }
 
     pub fn subscribe_to_shutdown_channel(&self) -> broadcast::Receiver<Option<RunWithRange>> {
-        let receiver = self.shutdown_channel_tx.subscribe();
-        // A checkpoint failure can be reported during startup, before the
-        // process or in-memory container has subscribed to the broadcast.
-        // Re-emit that terminal signal for late subscribers.
-        if self.checkpoint_service_failed.load(Ordering::Acquire) {
-            let _ = self.shutdown_channel_tx.send(None);
-        }
-        receiver
+        self.shutdown_channel_tx.subscribe()
     }
 
     pub fn current_epoch_for_testing(&self) -> EpochId {
@@ -1399,8 +1288,11 @@ impl RtdNode {
 
             let inbound_network_metrics =
                 linku_network::metrics::NetworkMetrics::new("rtd", "inbound", prometheus_registry);
-            let outbound_network_metrics =
-                linku_network::metrics::NetworkMetrics::new("rtd", "outbound", prometheus_registry);
+            let outbound_network_metrics = linku_network::metrics::NetworkMetrics::new(
+                "rtd",
+                "outbound",
+                prometheus_registry,
+            );
 
             let service = ServiceBuilder::new()
                 .layer(
@@ -1670,7 +1562,7 @@ impl RtdNode {
         consensus_store_pruner: ConsensusStorePruner,
         state_hasher: Weak<GlobalStateHasher>,
         backpressure_manager: Arc<BackpressureManager>,
-        validator_server_handle: Option<SpawnOnce>,
+        validator_server_handle: Option<ValidatorGrpcServer>,
         validator_overload_monitor_handle: Option<JoinHandle<()>>,
         checkpoint_metrics: Arc<CheckpointMetrics>,
         rtd_node_metrics: Arc<RtdNodeMetrics>,
@@ -1690,10 +1582,6 @@ impl RtdNode {
             checkpoint_metrics.clone(),
             node_role,
         );
-        let checkpoint_service_failure_receiver =
-            checkpoint_service.checkpoint_service_failure_receiver();
-        let checkpoint_builder_startup_receiver =
-            checkpoint_service.checkpoint_builder_startup_receiver();
 
         // Clear the VSS public key from the previous epoch so any randomness round
         // signatures buffer in the channel until the new DKG completes.
@@ -1747,8 +1635,8 @@ impl RtdNode {
 
         info!("Starting consensus manager asynchronously");
 
-        // Subscribe before consensus startup can publish its recovery monitor.
-        // The broadcast channel does not retain values for later subscribers.
+        // Subscribe before starting consensus so that the replay waiter cannot miss the
+        // one-shot consumer monitor broadcast if consensus starts immediately.
         let replay_waiter = consensus_manager.replay_waiter();
 
         // Spawn consensus startup asynchronously to avoid blocking other components
@@ -1808,8 +1696,6 @@ impl RtdNode {
             rtd_tx_validator_metrics,
             admission_queue,
             transaction_pool_context,
-            checkpoint_builder_startup_receiver,
-            checkpoint_service_failure_receiver,
         })
     }
 
@@ -1878,7 +1764,7 @@ impl RtdNode {
         prometheus_registry: &Registry,
         inflight_slot_freed_notify: Arc<tokio::sync::Notify>,
         transaction_pool_context: Option<Arc<TransactionPoolContext>>,
-    ) -> Result<(SpawnOnce, Option<AdmissionQueueContext>)> {
+    ) -> Result<(ValidatorGrpcServer, Option<AdmissionQueueContext>)> {
         let overload_config = &config.authority_overload_config;
         let admission_queue =
             if transaction_pool_context.is_none() && overload_config.admission_queue_enabled {
@@ -1926,22 +1812,15 @@ impl RtdNode {
 
         let network_address = config.network_address().clone();
 
-        let (ready_tx, ready_rx) = oneshot::channel();
-
-        let spawn_once = SpawnOnce::new(ready_rx, async move {
+        let server = ValidatorGrpcServer::new(async move {
             let server = server_builder
                 .bind(&network_address, Some(tls_config))
                 .await
                 .unwrap_or_else(|err| panic!("Failed to bind to {network_address}: {err}"));
-            let local_addr = server.local_addr();
-            info!("Listening to traffic on {local_addr}");
-            ready_tx.send(()).unwrap();
-            if let Err(err) = server.serve().await {
-                info!("Server stopped: {err}");
-            }
-            info!("Server stopped");
+            info!("Listening to traffic on {}", server.local_addr());
+            server.into_handle()
         });
-        Ok((spawn_once, admission_queue))
+        Ok((server, admission_queue))
     }
 
     pub fn state(&self) -> Arc<AuthorityState> {
@@ -2175,6 +2054,10 @@ impl RtdNode {
 
             let stop_condition = checkpoint_executor.run_epoch(run_with_range).await;
 
+            if stop_condition == StopReason::RuntimeShutdown {
+                return Ok(());
+            }
+
             if stop_condition == StopReason::RunWithRangeCondition {
                 RtdNode::shutdown(&self).await;
                 self.shutdown_channel_tx
@@ -2272,8 +2155,6 @@ impl RtdNode {
                 rtd_tx_validator_metrics,
                 admission_queue,
                 transaction_pool_context,
-                checkpoint_builder_startup_receiver: _,
-                checkpoint_service_failure_receiver: _,
             }) = validator_components_lock_guard.take()
             {
                 info!("Reconfiguring node (was running consensus).");
@@ -2281,6 +2162,18 @@ impl RtdNode {
                 fail_point_async!("consensus_transaction_pool_reconfig_before_shutdown");
                 consensus_manager.shutdown().await;
                 info!("Consensus has shut down.");
+
+                // A node that left the committee must stop serving validator RPCs. The server
+                // owns per-epoch state (e.g. the admission queue), so leaving it running would
+                // also keep the previous epoch's store alive for the rest of the process.
+                let validator_server_handle = match validator_server_handle {
+                    Some(server) if !new_role.is_validator() => {
+                        info!("Node is no longer a validator, shutting down validator gRPC server");
+                        server.shutdown().await;
+                        None
+                    }
+                    other => other,
+                };
 
                 if let Some(handle) = &self.address_prober {
                     handle.leave_committee();
@@ -2397,22 +2290,7 @@ impl RtdNode {
                     None
                 }
             };
-            let checkpoint_service_failure_monitor =
-                new_validator_components.as_ref().map(|components| {
-                    (
-                        new_epoch_store.epoch(),
-                        components.checkpoint_service_failure_receiver.clone(),
-                    )
-                });
             *validator_components_lock_guard = new_validator_components;
-            drop(validator_components_lock_guard);
-            if let Some((epoch, receiver)) = checkpoint_service_failure_monitor {
-                self.spawn_checkpoint_service_failure_monitor(epoch, receiver);
-            }
-
-            // Force releasing current epoch store DB handle, because the
-            // Arc<AuthorityPerEpochStore> may linger.
-            cur_epoch_store.release_db_handles();
 
             if cfg!(msim)
                 && !matches!(
@@ -2430,8 +2308,35 @@ impl RtdNode {
                     .await?;
             }
 
+            let prev_epoch = epoch_store.epoch();
+            let prev_epoch_store = Arc::downgrade(&epoch_store);
+            drop(cur_epoch_store);
             epoch_store = new_epoch_store;
+            spawn_monitored_task!(Self::check_epoch_store_released(
+                prev_epoch_store,
+                prev_epoch
+            ));
             info!("Reconfiguration finished");
+        }
+    }
+
+    /// Verifies that nothing holds on to the previous epoch's `AuthorityPerEpochStore` once
+    /// reconfiguration is complete. A lingering reference keeps that epoch's DB handles and
+    /// caches alive for the rest of the process lifetime.
+    async fn check_epoch_store_released(
+        prev_epoch_store: Weak<AuthorityPerEpochStore>,
+        prev_epoch: EpochId,
+    ) {
+        let grace_period = epoch_store_release_grace_period();
+        tokio::time::sleep(grace_period).await;
+        let strong_count = prev_epoch_store.strong_count();
+        if strong_count > 0 {
+            debug_fatal!(
+                "AuthorityPerEpochStore for epoch {prev_epoch} still has {strong_count} strong \
+                 references {grace_period:?} after reconfiguration"
+            );
+        } else {
+            info!(prev_epoch, "Previous epoch store released");
         }
     }
 
@@ -2920,30 +2825,44 @@ impl RtdNode {
     }
 }
 
-enum SpawnOnce {
-    // Mutex is only needed to make SpawnOnce Send
-    Unstarted(oneshot::Receiver<()>, Mutex<BoxFuture<'static, ()>>),
-    #[allow(unused)]
-    Started(JoinHandle<()>),
+/// The validator gRPC server. Binding is deferred until `start()` so that the rest of the node
+/// can finish initializing first; once started, the server runs until `shutdown()` is called.
+enum ValidatorGrpcServer {
+    // Mutex is only needed to make the future Send
+    Unstarted(Mutex<BoxFuture<'static, rtd_http::ServerHandle>>),
+    Started(rtd_http::ServerHandle),
 }
 
-impl SpawnOnce {
-    pub fn new(
-        ready_rx: oneshot::Receiver<()>,
-        future: impl Future<Output = ()> + Send + 'static,
-    ) -> Self {
-        Self::Unstarted(ready_rx, Mutex::new(Box::pin(future)))
+impl ValidatorGrpcServer {
+    pub fn new(bind: impl Future<Output = rtd_http::ServerHandle> + Send + 'static) -> Self {
+        Self::Unstarted(Mutex::new(Box::pin(bind)))
     }
 
     pub async fn start(self) -> Self {
         match self {
-            Self::Unstarted(ready_rx, future) => {
-                let future = future.into_inner();
-                let handle = tokio::spawn(future);
-                ready_rx.await.unwrap();
-                Self::Started(handle)
-            }
+            Self::Unstarted(bind) => Self::Started(bind.into_inner().await),
             Self::Started(_) => self,
+        }
+    }
+
+    /// Stops accepting requests and waits for in-flight ones to drain. The serving task is
+    /// owned by rtd_http, so merely dropping this value leaves the server running.
+    pub async fn shutdown(self) {
+        if let Self::Started(handle) = self {
+            handle.trigger_shutdown();
+            match tokio::time::timeout(
+                VALIDATOR_GRPC_SERVER_SHUTDOWN_TIMEOUT,
+                handle.wait_for_shutdown(),
+            )
+            .await
+            {
+                Ok(()) => info!("Validator gRPC server stopped"),
+                // Shutdown was triggered, so the server still winds down in the background.
+                Err(e) => warn!(
+                    error = ?e,
+                    "Validator gRPC server did not stop within {VALIDATOR_GRPC_SERVER_SHUTDOWN_TIMEOUT:?}"
+                ),
+            }
         }
     }
 }
@@ -2987,155 +2906,30 @@ fn update_peer_addresses(
     }
 }
 
-fn build_kv_store(
-    state: &Arc<AuthorityState>,
-    config: &NodeConfig,
-    registry: &Registry,
-) -> Result<Arc<TransactionKeyValueStore>> {
-    let metrics = KeyValueStoreMetrics::new(registry);
-    let db_store = TransactionKeyValueStore::new("rocksdb", metrics.clone(), state.clone());
+/// On-disk directories of index backends that no longer exist: `rpc-index`
+/// was the `RpcIndexStore` that the embedded `rtd-rpc-store` replaced, and
+/// `indexes` was the `IndexStore` behind the removed JSON-RPC service.
+const LEGACY_INDEX_STORE_DIRS: [&str; 2] = ["rpc-index", "indexes"];
 
-    let base_url = &config.transaction_kv_store_read_config.base_url;
-
-    if base_url.is_empty() {
-        info!("no http kv store url provided, using local db only");
-        return Ok(Arc::new(db_store));
-    }
-
-    let base_url: url::Url = base_url.parse().tap_err(|e| {
-        error!(
-            "failed to parse config.transaction_kv_store_config.base_url ({:?}) as url: {}",
-            base_url, e
-        )
-    })?;
-
-    let network_str = match state.get_chain_identifier().chain() {
-        Chain::Mainnet => "/mainnet",
-        _ => {
-            info!("using local db only for kv store");
-            return Ok(Arc::new(db_store));
-        }
-    };
-
-    let base_url = base_url.join(network_str)?.to_string();
-    let http_store = HttpKVStore::new_kv(
-        &base_url,
-        config.transaction_kv_store_read_config.cache_size,
-        metrics.clone(),
-    )?;
-    info!("using local key-value store with fallback to http key-value store");
-    Ok(Arc::new(FallbackTransactionKVStore::new_kv(
-        db_store,
-        http_store,
-        metrics,
-        "json_rpc_fallback",
-    )))
-}
-
-async fn build_json_rpc_router(
-    state: &Arc<AuthorityState>,
-    transaction_orchestrator: &Option<Arc<TransactionOrchestrator<NetworkAuthorityClient>>>,
-    config: &NodeConfig,
-    prometheus_registry: &Registry,
-    readiness: Arc<FullnodeReadiness>,
-) -> Result<axum::Router> {
-    let traffic_controller = state.traffic_controller.clone();
-    let mut server = JsonRpcServerBuilder::new(
-        env!("CARGO_PKG_VERSION"),
-        prometheus_registry,
-        traffic_controller,
-        config.policy_config.clone(),
-    );
-
-    let kv_store = build_kv_store(state, config, prometheus_registry)?;
-
-    let metrics = Arc::new(JsonRpcMetrics::new(prometheus_registry));
-    server.register_module(ReadApi::new(
-        state.clone(),
-        kv_store.clone(),
-        metrics.clone(),
-    ))?;
-    server.register_module(CoinReadApi::new_with_readiness(
-        state.clone(),
-        kv_store.clone(),
-        metrics.clone(),
-        readiness.clone(),
-    ))?;
-
-    // if run_with_range is enabled we want to prevent any transactions
-    // run_with_range = None is normal operating conditions
-    if config.run_with_range.is_none() {
-        server.register_module(TransactionBuilderApi::new_with_readiness(
-            state.clone(),
-            readiness,
-        ))?;
-    }
-    server.register_module(GovernanceReadApi::new(state.clone(), metrics.clone()))?;
-    server.register_module(BridgeReadApi::new(state.clone(), metrics.clone()))?;
-
-    if let Some(transaction_orchestrator) = transaction_orchestrator {
-        server.register_module(TransactionExecutionApi::new(
-            state.clone(),
-            transaction_orchestrator.clone(),
-            metrics.clone(),
-        ))?;
-    }
-
-    let name_service_config = if let (
-        Some(package_address),
-        Some(registry_id),
-        Some(reverse_registry_id),
-    ) = (
-        config.name_service_package_address,
-        config.name_service_registry_id,
-        config.name_service_reverse_registry_id,
-    ) {
-        rtd_name_service::NameServiceConfig::new(package_address, registry_id, reverse_registry_id)
-    } else {
-        match state.get_chain_identifier().chain() {
-            Chain::Mainnet => rtd_name_service::NameServiceConfig::mainnet(),
-            Chain::Testnet => rtd_name_service::NameServiceConfig::testnet(),
-            Chain::Unknown => rtd_name_service::NameServiceConfig::default(),
-        }
-    };
-
-    server.register_module(IndexerApi::new(
-        state.clone(),
-        ReadApi::new(state.clone(), kv_store.clone(), metrics.clone()),
-        kv_store,
-        name_service_config,
-        metrics,
-        config.indexer_max_subscriptions,
-    ))?;
-    server.register_module(MoveUtils::new(state.clone()))?;
-
-    let server_type = config.jsonrpc_server_type();
-
-    Ok(server.to_router(server_type).await?)
-}
-
-/// Remove the on-disk directory of the legacy `rpc-index` backend.
+/// Remove the on-disk directories of the legacy index backends.
 ///
-/// The embedded `rtd-rpc-store` replaced the `RpcIndexStore` backend, which
-/// wrote to `<db_path>/rpc-index`; that data is now dead. Remove it on startup
-/// so a node upgraded from an older version does not leave it lingering and
-/// wasting disk. Best-effort: a node that never ran the legacy backend has
-/// nothing to remove, and a failure to remove stale data must not block
-/// startup.
-fn remove_legacy_rpc_index_store(db_path: &Path) {
-    let legacy_dir = db_path.join("rpc-index");
-    match std::fs::remove_dir_all(&legacy_dir) {
-        Ok(()) => info!(
-            "removed legacy rpc-index directory {}",
-            legacy_dir.display()
-        ),
-        // The common case: the node never ran the legacy backend, or it was
-        // already cleaned up on a prior startup.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-        Err(e) => warn!(
-            "failed to remove legacy rpc-index directory {}: {e:?}",
-            legacy_dir.display()
-        ),
+/// Their data is dead, so remove it on startup so a node upgraded from an
+/// older version does not leave it lingering and wasting disk. Best-effort: a
+/// node that never ran a legacy backend has nothing to remove, and a failure
+/// to remove stale data must not block startup.
+fn remove_legacy_index_stores(db_path: &Path) {
+    for dir in LEGACY_INDEX_STORE_DIRS {
+        let legacy_dir = db_path.join(dir);
+        match std::fs::remove_dir_all(&legacy_dir) {
+            Ok(()) => info!("removed legacy {dir} directory {}", legacy_dir.display()),
+            // The common case: the node never ran the legacy backend, or it
+            // was already cleaned up on a prior startup.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => warn!(
+                "failed to remove legacy {dir} directory {}: {e:?}",
+                legacy_dir.display()
+            ),
+        }
     }
 }
 
@@ -3148,7 +2942,6 @@ async fn build_http_servers(
     server_version: ServerVersion,
     node_role: NodeRole,
     embedded_rpc_store: Option<&EmbeddedRpcStore>,
-    fullnode_readiness: Option<Arc<FullnodeReadiness>>,
 ) -> Result<(
     HttpServers,
     Option<tokio::sync::broadcast::Sender<Arc<Checkpoint>>>,
@@ -3159,29 +2952,6 @@ async fn build_http_servers(
     }
 
     info!("starting rpc service with config: {:?}", config.rpc);
-
-    let mut router = axum::Router::new();
-
-    // The JSON-RPC service can be disabled independently of the gRPC/REST
-    // service and of JSON-RPC indexing, so that a node can keep indexing
-    // without exposing the JSON-RPC endpoints.
-    if config.json_rpc_enabled() {
-        router = router.merge(
-            build_json_rpc_router(
-                &state,
-                transaction_orchestrator,
-                config,
-                prometheus_registry,
-                fullnode_readiness
-                    .as_ref()
-                    .expect("fullnode must have readiness state")
-                    .clone(),
-            )
-            .await?,
-        );
-    } else {
-        info!("json-rpc service is disabled");
-    }
 
     // When the embedded rpc-store is active, gate checkpoint delivery on the
     // index so a client that waits for a checkpoint can immediately read its
@@ -3226,10 +2996,6 @@ async fn build_http_servers(
 
         rpc_service.with_metrics(prometheus_registry);
         rpc_service.with_subscription_service(subscription_service_handle);
-        if let Some(readiness) = fullnode_readiness {
-            rpc_service
-                .with_readiness_check(move || readiness.ensure_ready().map_err(anyhow::Error::new));
-        }
 
         if let Some(transaction_orchestrator) = transaction_orchestrator {
             rpc_service.with_executor(transaction_orchestrator.clone());
@@ -3263,7 +3029,7 @@ async fn build_http_servers(
                 .expose_headers(tower_http::cors::Any),
         );
 
-    router = router.merge(rpc_router).layer(layers);
+    let router = rpc_router.layer(layers);
 
     // On top of rtd-http's hardened defaults (bounded concurrent streams;
     // transport keepalives stay disabled by default), bound connection
@@ -3400,10 +3166,10 @@ struct HttpServers {
 mod tests {
     use super::*;
     use prometheus::Registry;
+    use std::collections::BTreeMap;
     use rtd_config::node::{ForkCrashBehavior, ForkRecoveryConfig};
     use rtd_core::checkpoints::{CheckpointMetrics, CheckpointStore};
     use rtd_types::digests::{CheckpointDigest, TransactionDigest, TransactionEffectsDigest};
-    use std::collections::BTreeMap;
 
     #[test]
     fn deny_config_broadcast_payload_decisions() {
@@ -3457,29 +3223,33 @@ mod tests {
         );
     }
 
-    // A present legacy `rpc-index` directory is removed, while its siblings
-    // (notably the still-used jsonrpc `indexes` store) are left untouched, and a
+    // Present legacy `rpc-index` and `indexes` directories are removed, while
+    // their siblings (such as the perpetual `store`) are left untouched, and a
     // missing directory is a no-op.
     #[test]
-    fn removes_only_the_legacy_rpc_index_directory() {
+    fn removes_only_the_legacy_index_directories() {
         let db = tempfile::tempdir().unwrap();
-        let legacy = db.path().join("rpc-index");
-        let sibling = db.path().join("indexes");
-        std::fs::create_dir(&legacy).unwrap();
-        std::fs::create_dir(&sibling).unwrap();
-        std::fs::write(legacy.join("CURRENT"), b"stale").unwrap();
+        let rpc_index = db.path().join("rpc-index");
+        let indexes = db.path().join("indexes");
+        let sibling = db.path().join("store");
+        for dir in [&rpc_index, &indexes, &sibling] {
+            std::fs::create_dir(dir).unwrap();
+            std::fs::write(dir.join("CURRENT"), b"stale").unwrap();
+        }
 
-        remove_legacy_rpc_index_store(db.path());
+        remove_legacy_index_stores(db.path());
         assert!(
-            !legacy.exists(),
+            !rpc_index.exists(),
             "legacy rpc-index directory should be gone"
         );
+        assert!(!indexes.exists(), "legacy indexes directory should be gone");
         assert!(sibling.exists(), "sibling stores must be left untouched");
 
         // Idempotent: a second run (nothing to remove) does not error or touch
         // the siblings.
-        remove_legacy_rpc_index_store(db.path());
-        assert!(!legacy.exists());
+        remove_legacy_index_stores(db.path());
+        assert!(!rpc_index.exists());
+        assert!(!indexes.exists());
         assert!(sibling.exists());
     }
 

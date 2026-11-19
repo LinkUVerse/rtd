@@ -24,5 +24,4 @@ public fun receive(parent: &mut A, x: Receiving<Coin<RTD>>) {
     transfer::public_transfer(coin, @tto);
 }
 
-public fun dont_receive(parent: &mut A, _x: Receiving<Coin<RTD>>) {
-}
+public fun dont_receive(parent: &mut A, _x: Receiving<Coin<RTD>>) {}

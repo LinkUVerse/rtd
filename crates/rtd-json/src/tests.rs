@@ -16,8 +16,8 @@ use test_fuzz::runtime::num_traits::ToPrimitive;
 use rtd_framework::BuiltInFramework;
 use rtd_move_build::BuildConfig;
 use rtd_types::base_types::{
-    ObjectID, RtdAddress, STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME,
-    STD_OPTION_STRUCT_NAME, TransactionDigest,
+    ObjectID, STD_ASCII_MODULE_NAME, STD_ASCII_STRUCT_NAME, STD_OPTION_MODULE_NAME,
+    STD_OPTION_STRUCT_NAME, RtdAddress, TransactionDigest,
 };
 use rtd_types::dynamic_field::derive_dynamic_field_id;
 use rtd_types::gas_coin::GasCoin;
@@ -597,7 +597,7 @@ fn test_from_str() {
     assert_eq!(object_id, test.0.as_str().unwrap());
 
     // test id with quotes
-    let test = RtdJsonValue::from_str(&format!("\"{}\"", &object_id)).unwrap();
+    let test = RtdJsonValue::from_str(&format!("\"{}\"", object_id)).unwrap();
     assert!(test.0.is_string());
     assert_eq!(object_id, test.0.as_str().unwrap());
 

@@ -72,7 +72,6 @@ pub struct SequentialLayer {
     pub committer: Option<CommitterLayer>,
     pub ingestion: Option<PipelineIngestionLayer>,
     pub fanout: Option<ConcurrencyConfig>,
-    pub min_eager_rows: Option<usize>,
     pub max_pending_rows: Option<usize>,
     pub max_batch_checkpoints: Option<usize>,
     pub processor_channel_size: Option<usize>,
@@ -86,7 +85,6 @@ pub struct ConcurrentLayer {
     pub ingestion: Option<PipelineIngestionLayer>,
     pub pruner: Option<PrunerLayer>,
     pub fanout: Option<ConcurrencyConfig>,
-    pub min_eager_rows: Option<usize>,
     pub max_pending_rows: Option<usize>,
     pub max_watermark_updates: Option<usize>,
     pub processor_channel_size: Option<usize>,
@@ -242,7 +240,6 @@ impl SequentialLayer {
                 base.ingestion
             },
             fanout: self.fanout.or(base.fanout),
-            min_eager_rows: self.min_eager_rows.or(base.min_eager_rows),
             max_pending_rows: self.max_pending_rows.or(base.max_pending_rows),
             max_batch_checkpoints: self.max_batch_checkpoints.or(base.max_batch_checkpoints),
             processor_channel_size: self.processor_channel_size.or(base.processor_channel_size),
@@ -271,7 +268,6 @@ impl ConcurrentLayer {
                 (Some(pruner), Some(base)) => Some(pruner.finish(base)?),
             },
             fanout: self.fanout.or(base.fanout),
-            min_eager_rows: self.min_eager_rows.or(base.min_eager_rows),
             max_pending_rows: self.max_pending_rows.or(base.max_pending_rows),
             max_watermark_updates: self.max_watermark_updates.or(base.max_watermark_updates),
             processor_channel_size: self.processor_channel_size.or(base.processor_channel_size),
@@ -295,7 +291,10 @@ impl CommitterLayer {
     pub fn finish(self, base: CommitterConfig) -> anyhow::Result<CommitterConfig> {
         Ok(CommitterConfig {
             write_concurrency: self.write_concurrency.unwrap_or(base.write_concurrency),
-            collect_interval_ms: self.collect_interval_ms.unwrap_or(base.collect_interval_ms),
+            min_batch_rows: base.min_batch_rows,
+            max_batch_delay_ms: self
+                .collect_interval_ms
+                .unwrap_or(base.max_batch_delay_ms),
             watermark_interval_ms: self
                 .watermark_interval_ms
                 .unwrap_or(base.watermark_interval_ms),
@@ -388,7 +387,6 @@ impl Merge for SequentialLayer {
             committer: self.committer.merge(other.committer)?,
             ingestion: self.ingestion.merge(other.ingestion)?,
             fanout: other.fanout.or(self.fanout),
-            min_eager_rows: other.min_eager_rows.or(self.min_eager_rows),
             max_pending_rows: other.max_pending_rows.or(self.max_pending_rows),
             max_batch_checkpoints: other.max_batch_checkpoints.or(self.max_batch_checkpoints),
             processor_channel_size: other.processor_channel_size.or(self.processor_channel_size),
@@ -404,7 +402,6 @@ impl Merge for ConcurrentLayer {
             ingestion: self.ingestion.merge(other.ingestion)?,
             pruner: self.pruner.merge(other.pruner)?,
             fanout: other.fanout.or(self.fanout),
-            min_eager_rows: other.min_eager_rows.or(self.min_eager_rows),
             max_pending_rows: other.max_pending_rows.or(self.max_pending_rows),
             max_watermark_updates: other.max_watermark_updates.or(self.max_watermark_updates),
             processor_channel_size: other.processor_channel_size.or(self.processor_channel_size),
@@ -527,7 +524,6 @@ impl From<SequentialConfig> for SequentialLayer {
             committer: Some(config.committer.into()),
             ingestion: Some(config.ingestion.into()),
             fanout: config.fanout,
-            min_eager_rows: config.min_eager_rows,
             max_pending_rows: config.max_pending_rows,
             max_batch_checkpoints: config.max_batch_checkpoints,
             processor_channel_size: config.processor_channel_size,
@@ -543,7 +539,6 @@ impl From<ConcurrentConfig> for ConcurrentLayer {
             ingestion: Some(config.ingestion.into()),
             pruner: config.pruner.map(Into::into),
             fanout: config.fanout,
-            min_eager_rows: config.min_eager_rows,
             max_pending_rows: config.max_pending_rows,
             max_watermark_updates: config.max_watermark_updates,
             processor_channel_size: config.processor_channel_size,
@@ -565,7 +560,7 @@ impl From<CommitterConfig> for CommitterLayer {
     fn from(config: CommitterConfig) -> Self {
         Self {
             write_concurrency: Some(config.write_concurrency),
-            collect_interval_ms: Some(config.collect_interval_ms),
+            collect_interval_ms: Some(config.max_batch_delay_ms),
             watermark_interval_ms: Some(config.watermark_interval_ms),
         }
     }
@@ -607,7 +602,6 @@ mod tests {
                     collect_interval_ms: Some(1000),
                     watermark_interval_ms: None,
                 }),
-                min_eager_rows: Some(100),
                 ..Default::default()
             }),
             ev_emit_mod: Some(ConcurrentLayer {
@@ -628,7 +622,6 @@ mod tests {
                     collect_interval_ms: None,
                     watermark_interval_ms: Some(500),
                 }),
-                min_eager_rows: Some(200),
                 ..Default::default()
             }),
             ev_emit_mod: None,
@@ -648,7 +641,6 @@ mod tests {
                         watermark_interval_ms: Some(500),
                         ..
                     }),
-                    min_eager_rows: Some(200),
                     ..
                 }),
                 ev_emit_mod: Some(ConcurrentLayer {
@@ -675,7 +667,6 @@ mod tests {
                         watermark_interval_ms: Some(500),
                         ..
                     }),
-                    min_eager_rows: Some(100),
                     ..
                 }),
                 ev_emit_mod: Some(ConcurrentLayer {

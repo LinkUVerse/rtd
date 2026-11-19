@@ -10,6 +10,9 @@ use futures::StreamExt;
 use futures::future::AbortHandle;
 use indicatif::MultiProgress;
 use prometheus::Registry;
+use std::collections::HashSet;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
 use rtd_config::object_storage_config::{ObjectStoreConfig, ObjectStoreType};
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::checkpoints::CheckpointStore;
@@ -20,9 +23,6 @@ use rtd_types::base_types::ObjectID;
 use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::messages_checkpoint::ECMHLiveObjectSetDigest;
 use rtd_types::object::Object;
-use std::collections::HashSet;
-use std::num::NonZeroUsize;
-use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::sync::{mpsc, oneshot};
 
@@ -232,9 +232,7 @@ async fn test_archive_epoch_if_needed() -> Result<(), anyhow::Error> {
 
     let checkpoint_store = CheckpointStore::new_for_tests();
     let registry = Registry::new();
-    let chain_identifier = rtd_types::digests::ChainIdentifier::from(
-        rtd_types::digests::CheckpointDigest::new([0xA5; 32]),
-    );
+    let chain_identifier = rtd_types::digests::get_testnet_chain_identifier();
 
     let uploader = StateSnapshotUploader::new(
         &db_checkpoint_path,

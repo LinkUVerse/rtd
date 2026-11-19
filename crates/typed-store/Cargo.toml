@@ -2,9 +2,9 @@
 name = "typed-store"
 version = "0.4.0"
 license = "Apache-2.0"
-authors = ["Francois Garillot"]
+authors = ["Francois Garillot <francois@linkuverse.com>"]
 description = "a typed database interface"
-repository = "https://github.com/LinkUVerse/rtd"
+repository = "https://github.com/linkuverse/linku-infra"
 edition = "2024"
 publish = false
 
@@ -34,10 +34,13 @@ rtd-macros.workspace = true
 linku-common.workspace = true
 linku-metrics.workspace = true
 [target.'cfg(not(windows))'.dependencies]
-tidehunter = {git = "https://github.com/mystenlabs/tidehunter.git", rev = "f8bc93cf6a973d31fbbe6fa7c2b643ddd8e83ddf", version = "0.1.0", optional = true}
+tidehunter = {git = "https://github.com/MystenLabs/tidehunter.git", rev = "5ec9021fbe467062864d4000d7be79c455aaa715", version = "0.1.0", optional = true}
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-rocksdb = { version = "0.22.0", default-features = false, features = ["jemalloc"] }
+# rocksdb's `jemalloc` feature only enables this feature of tikv-jemalloc-sys; the C++ define it
+# adds is not read by rocksdb's sources. Enabling the feature here instead of through rocksdb lets
+# rocksdb's build script run without waiting for jemalloc's.
+tikv-jemalloc-sys = { workspace = true, features = ["unprefixed_malloc_on_supported_platforms"] }
 
 [dev-dependencies]
 tempfile.workspace = true

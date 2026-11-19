@@ -1,12 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use linku_common::debug_fatal;
 use move_core_types::identifier::Identifier;
 use move_core_types::language_storage::{StructTag, TypeTag};
+use linku_common::debug_fatal;
 use serde::{Deserialize, Serialize};
 
-use crate::base_types::{RtdAddress, SequenceNumber};
+use crate::base_types::{ObjectID, SequenceNumber, RtdAddress};
 use crate::collection_types::VecSet;
 use crate::error::{RtdErrorKind, RtdResult};
 use crate::object::Owner;
@@ -34,10 +34,8 @@ pub fn get_address_alias_state_obj_initial_shared_version(
         }))
 }
 
-pub fn get_address_aliases_from_store(
-    object_store: &dyn ObjectStore,
-    address: RtdAddress,
-) -> RtdResult<Option<(AddressAliases, SequenceNumber)>> {
+/// Derive the ObjectID at which to find the AddressAliases object for the given address.
+pub fn address_aliases_object_id(address: RtdAddress) -> Result<ObjectID, bcs::Error> {
     let alias_key_type = TypeTag::Struct(Box::new(StructTag {
         address: RTD_FRAMEWORK_ADDRESS,
         module: Identifier::new("address_alias").unwrap(),
@@ -46,11 +44,18 @@ pub fn get_address_aliases_from_store(
     }));
 
     let key_bytes = bcs::to_bytes(&address).unwrap();
-    let Ok(address_aliases_id) = derived_object::derive_object_id(
+    derived_object::derive_object_id(
         RtdAddress::from(RTD_ADDRESS_ALIAS_STATE_OBJECT_ID),
         &alias_key_type,
         &key_bytes,
-    ) else {
+    )
+}
+
+pub fn get_address_aliases_from_store(
+    object_store: &dyn ObjectStore,
+    address: RtdAddress,
+) -> RtdResult<Option<(AddressAliases, SequenceNumber)>> {
+    let Ok(address_aliases_id) = address_aliases_object_id(address) else {
         debug_fatal!("failed to compute derived object id for alias state");
         return Err(RtdErrorKind::Unknown(
             "failed to compute derived object id for alias state".to_string(),

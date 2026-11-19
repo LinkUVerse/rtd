@@ -2,7 +2,7 @@
 name = "rtd-framework-tests"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <eng@linkuverse.com>"]
 description = "Runs Move tests for rtd-framework"
 license = "Apache-2.0"
 publish = false
@@ -31,7 +31,7 @@ rtd-verifier = { path = "../../rtd-execution/latest/rtd-verifier", package = "rt
 
 move-bytecode-verifier-meter.workspace = true
 move-cli.workspace = true
-move-package-alt-compilation.workspace = true
+move-package-compilation.workspace = true
 move-unit-test.workspace = true
 rtd-config.workspace = true
 tokio.workspace = true

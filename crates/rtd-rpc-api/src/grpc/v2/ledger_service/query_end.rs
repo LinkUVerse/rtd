@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
 
 /// Effective terminal reason for a successful query stream.
 ///

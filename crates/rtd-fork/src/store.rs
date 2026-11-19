@@ -8,16 +8,16 @@ use std::sync::RwLockWriteGuard;
 
 use anyhow::Context as _;
 use anyhow::anyhow;
-use move_core_types::annotated_value::MoveTypeLayout;
 use move_core_types::language_storage::StructTag;
+use simulacrum::store::SimulatorStore;
 use rtd_protocol_config::Chain;
 use rtd_rpc_store::RpcStoreReader;
 use rtd_rpc_store::schema::objects::Status;
 use rtd_rpc_store::schema::objects::TombstoneKind;
 use rtd_types::base_types::ObjectID;
 use rtd_types::base_types::ObjectRef;
-use rtd_types::base_types::RtdAddress;
 use rtd_types::base_types::SequenceNumber;
+use rtd_types::base_types::RtdAddress;
 use rtd_types::clock::Clock;
 use rtd_types::committee::Committee;
 use rtd_types::committee::EpochId;
@@ -32,13 +32,11 @@ use rtd_types::effects::TransactionEffects;
 use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::effects::TransactionEvents;
 use rtd_types::error::RtdResult;
-use rtd_types::full_checkpoint_content::ObjectSet;
 use rtd_types::messages_checkpoint::CheckpointContents;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::messages_checkpoint::VerifiedCheckpoint;
 use rtd_types::messages_checkpoint::VersionedFullCheckpointContents;
 use rtd_types::object::Object;
-use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::storage::BackingPackageStore;
 use rtd_types::storage::BackingStore;
 use rtd_types::storage::ObjectKey;
@@ -54,8 +52,8 @@ use rtd_types::storage::error::Error as StorageError;
 use rtd_types::storage::error::Kind as StorageErrorKind;
 use rtd_types::storage::error::Result as StorageResult;
 use rtd_types::storage::load_package_object_from_object_store;
+use rtd_types::rtd_system_state::RtdSystemState;
 use rtd_types::transaction::VerifiedTransaction;
-use simulacrum::store::SimulatorStore;
 
 use crate::gql::GraphQLClient;
 use crate::gql::TransactionInfo;
@@ -529,6 +527,7 @@ impl ForkStore {
         let gql = GraphQLClient::new(
             crate::Node::Custom("http://localhost:1".to_string()),
             "test",
+            vec![],
         )
         .expect("graphql store with localhost url should construct");
         let metadata = MetadataStore::new_with_root(root);
@@ -544,7 +543,7 @@ impl ForkStore {
         forked_at_checkpoint: CheckpointSequenceNumber,
         local_store: LocalStore,
     ) -> Self {
-        let gql = GraphQLClient::new(crate::Node::Custom(gql_url), "test")
+        let gql = GraphQLClient::new(crate::Node::Custom(gql_url), "test", vec![])
             .expect("graphql store with custom url should construct");
         let metadata = MetadataStore::new_with_root(root);
         Self::from_parts(forked_at_checkpoint, gql, metadata, local_store)
@@ -628,12 +627,8 @@ impl ForkStore {
     /// identifiers, and custom networks derive one from the fork checkpoint digest.
     fn chain_identifier(&self) -> StorageResult<ChainIdentifier> {
         let id = match self.chain() {
-            Chain::Mainnet => get_mainnet_chain_identifier().ok_or_else(|| {
-                StorageError::custom("RTD mainnet genesis identifier is not configured")
-            })?,
-            Chain::Testnet => get_testnet_chain_identifier().ok_or_else(|| {
-                StorageError::custom("RTD testnet genesis identifier is not configured")
-            })?,
+            Chain::Mainnet => get_mainnet_chain_identifier(),
+            Chain::Testnet => get_testnet_chain_identifier(),
             Chain::Unknown => {
                 let checkpoint =
                     ForkStore::get_checkpoint_by_sequence_number(self, self.forked_at_checkpoint())
@@ -1063,6 +1058,22 @@ impl ReadStore for ForkStore {
 }
 
 impl RpcStateReader for ForkStore {
+
+    fn get_struct_layout_with_overlay(
+        &self,
+        struct_tag: &move_core_types::language_storage::StructTag,
+        overlay: &rtd_types::full_checkpoint_content::ObjectSet,
+    ) -> StorageResult<Option<move_core_types::annotated_value::MoveTypeLayout>> {
+        let store = rtd_types::storage::OverlayBackingPackageStore::new(overlay, self);
+        let resolver = rtd_package_resolver::SyncResolver::new(store);
+        match resolver.type_layout(
+            move_core_types::language_storage::TypeTag::Struct(Box::new(struct_tag.clone())),
+        ) {
+            Ok(layout) => Ok(Some(layout)),
+            Err(e) => Err(rtd_types::storage::error::Error::custom(e)),
+        }
+    }
+
     /// Return the fork's object-availability floor, which is the remote chain's lowest checkpoint
     /// with object data clamped at the fork checkpoint.
     fn get_lowest_available_checkpoint_objects(&self) -> StorageResult<CheckpointSequenceNumber> {
@@ -1083,14 +1094,9 @@ impl RpcStateReader for ForkStore {
         Some(self.stock_reader())
     }
 
-    /// Read a struct layout from `rtd-rpc-store`.
-    fn get_struct_layout_with_overlay(
-        &self,
-        struct_tag: &StructTag,
-        overlay: &ObjectSet,
-    ) -> StorageResult<Option<MoveTypeLayout>> {
-        self.stock_reader()
-            .get_struct_layout_with_overlay(struct_tag, overlay)
+    /// Resolve layouts using packages from committed `rtd-rpc-store` data.
+    fn layout_package_store(&self) -> Box<dyn BackingPackageStore + Send + Sync + '_> {
+        self.stock_reader().layout_package_store()
     }
 }
 

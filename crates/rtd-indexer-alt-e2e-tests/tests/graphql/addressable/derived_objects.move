@@ -4,34 +4,34 @@
 //# init --protocol-version 108 --accounts A --addresses test=0x0 --simulator
 
 //# publish --sender A
-module test::derived {
-  use rtd::derived_object;
+module test::derived;
 
-  public struct Parent has key, store {
+use rtd::derived_object;
+
+public struct Parent has key, store {
     id: UID,
-  }
+}
 
-  public struct Child has key, store {
+public struct Child has key, store {
     id: UID,
     key: u64,
     value: u64,
-  }
+}
 
-  public fun new(ctx: &mut TxContext): Parent {
+public fun new(ctx: &mut TxContext): Parent {
     Parent { id: object::new(ctx) }
-  }
+}
 
-  public fun claim(parent: &mut Parent, key: u64): Child {
+public fun claim(parent: &mut Parent, key: u64): Child {
     Child {
-      id: derived_object::claim(&mut parent.id, key),
-      key,
-      value: key,
+        id: derived_object::claim(&mut parent.id, key),
+        key,
+        value: key,
     }
-  }
+}
 
-  public fun set_value(child: &mut Child, value: u64) {
+public fun set_value(child: &mut Child, value: u64) {
     child.value = value;
-  }
 }
 
 //# programmable --sender A --inputs @A
@@ -54,6 +54,7 @@ module test::derived {
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   address(address: "@{obj_2_0}") {
     ...DerivedObjectLookups
@@ -83,8 +84,10 @@ fragment Child on MoveObject {
   address
   contents { json }
 }
+*/
 
 //# run-graphql
+/*
 {
   object(address: "@{obj_2_0}") {
     latest: derivedObject(name: { literal: "7u64" }) { ...Child }
@@ -104,8 +107,30 @@ fragment Child on MoveObject {
   address
   contents { json }
 }
+*/
+
+//# run-graphql
+/*
+{ # Invalid literals are isolated to their list entries, unlike missing objects which have no error.
+  root: multiGetDerivedObjects(keys: [
+    { parent: "@{obj_2_0}", name: { literal: "7u64" } },
+    { parent: "@{obj_2_0}", name: { literal: "{" } },
+    { parent: "@{obj_2_0}", name: { literal: "10u64" } },
+    { parent: "@{obj_2_0}", name: { literal: "8u64" } },
+  ]) { contents { json } }
+  address(address: "@{obj_2_0}") {
+    nested: multiGetDerivedObjects(keys: [
+      { name: { literal: "7u64" } },
+      { name: { literal: "{" } },
+      { name: { literal: "10u64" } },
+      { name: { literal: "8u64" } },
+    ]) { contents { json } }
+  }
+}
+*/
 
 //# run-graphql --cursors bcs(8u64)
+/*
 { # Fetch derived objects directly from their parent/name keys
   multiGetDerivedObjects(keys: [
     { parent: "@{obj_2_0}", name: { literal: "7u64" } },
@@ -124,3 +149,4 @@ fragment Child on MoveObject {
   address
   contents { json }
 }
+*/

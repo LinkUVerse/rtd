@@ -13,11 +13,19 @@ use crate::{
         dispatch_tables::{DefinitionMap, IntraPackageKey, PackageVirtualTable, VirtualTableKey},
         values::Value,
     },
-    jit::{execution::ast::*, optimization::ast as input},
+    jit::{
+        execution::{
+            ast::*,
+            key_interner::VirtualTableKeyInterner,
+            type_interner::{ArenaTypeInterner, InternedType, PrimitiveType},
+        },
+        optimization::ast as input,
+    },
     natives::functions::NativeFunctions,
     shared::{
-        TypeSize,
+        TypeLimits, TypeTraversalBudget,
         safe_ops::{SafeArithmetic as _, SafeIndex as _},
+        type_size_formulae::ArenaTypeSizeFormula,
         types::{DefiningTypeId, OriginalId, VersionId},
         unique_map,
         views::{SizeConfig, ValueView as _},
@@ -33,15 +41,14 @@ use move_binary_format::{
     },
     partial_vm_error,
 };
-use move_core_types::{
-    identifier::Identifier, language_storage::ModuleId, resolver::IntraPackageName,
-};
+use move_core_types::{language_storage::ModuleId, resolver::IntraPackageName};
 use move_vm_config::runtime::VMConfig;
 
 use indexmap::IndexMap;
 use tracing::instrument;
 
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet, HashMap},
     sync::Arc,
 };
@@ -53,7 +60,7 @@ use std::{
 struct PackageContext<'borrows> {
     pub natives: &'borrows NativeFunctions,
     pub interner: &'borrows IdentifierInterner,
-    pub vm_config: &'borrows VMConfig,
+    pub type_limits: &'borrows TypeLimits,
 
     pub type_origin_table: HashMap<IntraPackageKey, DefiningTypeId>,
 
@@ -63,8 +70,9 @@ struct PackageContext<'borrows> {
     // address in this table.
     pub loaded_modules: IndexMap<IdentifierKey, Module>,
 
-    // NB: All things except for types are allocated into this arena.
     pub package_arena: ArenaBuilder,
+    pub type_interner: ArenaTypeInterner,
+    pub key_interner: RefCell<VirtualTableKeyInterner>,
 
     pub vtable_funs: DefinitionMap<VMPointer<Function>>,
     pub vtable_types: DefinitionMap<VMPointer<DatatypeDescriptor>>,
@@ -94,7 +102,7 @@ struct Definitions {
     field_handles: Vec<VMPointer<FieldHandle>>,
     field_instantiations: Vec<VMPointer<FieldInstantiation>>,
     function_instantiations: Vec<VMPointer<FunctionInstantiation>>,
-    signatures: Vec<VMPointer<ArenaVec<ArenaType>>>,
+    signatures: Vec<VMPointer<ArenaVec<SizedArenaType>>>,
     constants: Vec<VMPointer<Constant>>,
 }
 
@@ -166,12 +174,18 @@ impl PackageContext<'_> {
                 FUNCTION_RESOLUTION_FAILURE,
                 "Could not find function with name: {}::{}",
                 self.version_id,
-                self.interner.resolve_ident(
+                self.interner.resolve_str(
                     &vtable_entry.intra_package_key().member_name,
                     "function name"
                 )
             )),
         }
+    }
+
+    fn intern_key(&self, key: VirtualTableKey) -> PartialVMResult<VMPointer<VirtualTableKey>> {
+        self.key_interner
+            .borrow_mut()
+            .intern(&self.package_arena, key)
     }
 
     fn arena_vec<T>(
@@ -190,7 +204,7 @@ impl FunctionContext<'_, '_> {
     fn get_vec_type(
         &self,
         signature_index: &SignatureIndex,
-    ) -> PartialVMResult<VMPointer<ArenaType>> {
+    ) -> PartialVMResult<VMPointer<SizedArenaType>> {
         let Some(tys) = self.definitions.signatures.get(signature_index.0 as usize) else {
             return Err(partial_vm_error!(
                 VERIFIER_INVARIANT_VIOLATION,
@@ -205,8 +219,7 @@ impl FunctionContext<'_, '_> {
                     expects one and only one signature token"
             ));
         };
-        let ty = VMPointer::from_ref(tys.to_ref().safe_get(0)?);
-        Ok(ty)
+        Ok(VMPointer::from_ref(tys.to_ref().safe_get(0)?))
     }
 }
 
@@ -217,6 +230,7 @@ impl FunctionContext<'_, '_> {
 #[instrument(level = "trace", skip_all)]
 pub fn package(
     vm_config: &VMConfig,
+    type_limits: &TypeLimits,
     interner: &IdentifierInterner,
     natives: &NativeFunctions,
     system_packages: &BTreeMap<OriginalId, Arc<CachedPackage>>,
@@ -264,11 +278,13 @@ pub fn package(
     let mut package_context = PackageContext {
         natives,
         interner,
-        vm_config,
+        type_limits,
         version_id,
         original_id,
         loaded_modules: IndexMap::new(),
         package_arena: ArenaBuilder::new_bounded(vm_config),
+        type_interner: ArenaTypeInterner::default(),
+        key_interner: RefCell::new(VirtualTableKeyInterner::default()),
         vtable_funs: DefinitionMap::empty(),
         vtable_types: DefinitionMap::empty(),
         type_origin_table,
@@ -281,10 +297,12 @@ pub fn package(
         version_id,
         natives: _,
         interner: _,
-        vm_config: _,
+        type_limits: _,
         original_id,
         loaded_modules,
         package_arena,
+        type_interner: _,
+        key_interner: _,
         vtable_funs,
         vtable_types,
         type_origin_table: _,
@@ -444,18 +462,35 @@ fn module(
     version_id: VersionId,
     module: &input::Module,
 ) -> PartialVMResult<Module> {
-    tracing::trace!(version_id = %version_id, module_name = %module.compiled_module.self_id(), "translating module");
-    let self_id = module.compiled_module.self_id();
-    dbg_println!("Loading module: {}", self_id);
-
-    let mkey = context.interner.intern_ident_str(self_id.name());
-
     let cmodule = &module.compiled_module;
+    let self_handle = cmodule.self_handle();
+    let module_address = cmodule.address_identifier_at(self_handle.address);
+    let module_name = cmodule.identifier_at(self_handle.name);
+    tracing::trace!(
+        version_id = %version_id,
+        module_name = %format_args!(
+            "{}::{}",
+            module_address.to_canonical_display(/* with_prefix */ false),
+            module_name,
+        ),
+        "translating module"
+    );
+    dbg_println!(
+        "Loading module: {}::{}",
+        module_address.to_canonical_display(/* with_prefix */ false),
+        module_name
+    );
+
+    let mkey = context.interner.intern_ident_str(module_name);
 
     // Initialize module data
     let type_refs = initialize_type_refs(context, cmodule)?;
 
     let (structs, enums, datatype_descriptors) = datatypes(context, &version_id, &mkey, cmodule)?;
+    // NB: signature terms (and their size formulae) reference datatypes symbolically, by vtable
+    // key, so nothing below needs the descriptors resolved; they go into the vtable here so the
+    // package vtable is complete for runtime resolution.
+    context.insert_vtable_datatypes(datatype_descriptors.to_ptrs())?;
     let (instantiation_signatures, _signature_map) = cache_signatures(context, cmodule)?;
     dbg_println!("Module types loaded");
 
@@ -463,8 +498,6 @@ fn module(
         .iter()
         .map(VMPointer::from_ref)
         .collect::<Vec<_>>();
-
-    context.insert_vtable_datatypes(datatype_descriptors.to_ptrs())?;
 
     let struct_instantiations = struct_instantiations(context, cmodule, &structs, &sig_pointers)?;
     let enum_instantiations = enum_instantiations(context, cmodule, &enums, &sig_pointers)?;
@@ -510,7 +543,6 @@ fn module(
 
     // Build and return the module
     Ok(Module {
-        id: self_id,
         datatype_descriptors,
         type_refs,
         structs,
@@ -543,8 +575,9 @@ fn initialize_type_refs(
                 .interner
                 .intern_ident_str(module.identifier_at(datatype_handle.name));
             let module_handle = module.module_handle_at(datatype_handle.module);
-            let original_id = module.module_id_for_handle(module_handle);
-            let module_name = context.interner.intern_ident_str(original_id.name());
+            let module_name = context
+                .interner
+                .intern_ident_str(module.identifier_at(module_handle.name));
             Ok(IntraPackageKey {
                 module_name,
                 member_name: struct_name,
@@ -569,12 +602,6 @@ fn datatypes(
     ArenaVec<EnumDef>,
     ArenaVec<DatatypeDescriptor>,
 )> {
-    fn resolve_member_name(context: &PackageContext, name: &VirtualTableKey) -> Identifier {
-        context
-            .interner
-            .resolve_ident(&name.intra_package_key().member_name, "datatype name")
-    }
-
     // NB: It is the responsibility of the adapter to determine the correct type origin table,
     // and pass a full and complete representation of it in with the package.
     fn defining_id(
@@ -598,24 +625,40 @@ fn datatypes(
         Ok(ModuleIdKey::from_parts(*defining_address, module_id))
     }
 
-    let original_id = module.self_id();
-    let original_address = *original_id.address();
+    let self_handle = module.self_handle();
+    let original_address = *module.address_identifier_at(self_handle.address);
 
     let structs: ArenaVec<StructDef> = structs(context, &original_address, module_name, module)?;
     let enums: ArenaVec<EnumDef> = enums(context, &original_address, module_name, module)?;
 
     let module_original_id = ModuleIdKey::from_parts(original_address, *module_name);
 
+    // Build every datatype's arena-form size formula from its fields. Purely local field
+    // structure (primitives, parameters, vectors) is folded into constants; each datatype
+    // application (same-package or cross-package) is left symbolic, resolved under a
+    // transaction's linkage at runtime. An enum's value depth is the maximum over all its
+    // variants (so every variant's fields are folded in), and its layout counts one node per
+    // variant on top of the fields, mirroring the layout traversal.
     let struct_descriptors = structs
         .iter()
         .map(|struct_| {
-            let name = resolve_member_name(context, &struct_.def_vtable_key);
+            let name = struct_.def_vtable_key.intra_package_key().member_name;
             let defining_id = defining_id(context, version_id, &struct_.def_vtable_key)?;
             let original_id = module_original_id;
             let datatype_info =
                 context.arena_box(Datatype::Struct(VMPointer::from_ref(struct_)))?;
-            let name = context.interner.intern_identifier(&name);
-            let descriptor = DatatypeDescriptor::new(name, defining_id, original_id, datatype_info);
+            let size_formula = ArenaTypeSizeFormula::from_datatype(
+                &datatype_info,
+                &context.package_arena,
+                context.type_limits,
+            )?;
+            let descriptor = DatatypeDescriptor::new(
+                name,
+                defining_id,
+                original_id,
+                datatype_info,
+                size_formula,
+            );
             Ok(descriptor)
         })
         .collect::<PartialVMResult<Vec<_>>>()?;
@@ -623,12 +666,22 @@ fn datatypes(
     let enum_descriptors = enums
         .iter()
         .map(|enum_| {
-            let name = resolve_member_name(context, &enum_.def_vtable_key);
+            let name = enum_.def_vtable_key.intra_package_key().member_name;
             let defining_id = defining_id(context, version_id, &enum_.def_vtable_key)?;
             let original_id = module_original_id;
             let datatype_info = context.arena_box(Datatype::Enum(VMPointer::from_ref(enum_)))?;
-            let name = context.interner.intern_identifier(&name);
-            let descriptor = DatatypeDescriptor::new(name, defining_id, original_id, datatype_info);
+            let size_formula = ArenaTypeSizeFormula::from_datatype(
+                &datatype_info,
+                &context.package_arena,
+                context.type_limits,
+            )?;
+            let descriptor = DatatypeDescriptor::new(
+                name,
+                defining_id,
+                original_id,
+                datatype_info,
+                size_formula,
+            );
             Ok(descriptor)
         })
         .collect::<PartialVMResult<Vec<_>>>()?;
@@ -659,6 +712,7 @@ fn structs(
             let def_vtable_key =
                 VirtualTableKey::from_parts(*original_id, *module_name, member_name);
 
+            let def_vtable_key = context.intern_key(def_vtable_key)?;
             let abilities = struct_handle.abilities;
 
             dbg_println!(
@@ -676,21 +730,21 @@ fn structs(
 
             let fields = fields
                 .iter()
-                .map(|f| make_arena_type(context, module, &f.signature.0))
-                .collect::<PartialVMResult<Vec<ArenaType>>>()?;
+                .map(|field| make_sized_type(context, module, &field.signature.0))
+                .collect::<PartialVMResult<Vec<_>>>()?;
             let fields = context.arena_vec(fields.into_iter())?;
 
-            let field_names = match &struct_def.field_information {
+            let field_names: Vec<IdentifierKey> = match &struct_def.field_information {
                 StructFieldInformation::Native => vec![],
                 StructFieldInformation::Declared(field_info) => field_info
                     .iter()
-                    .map(|f| module.identifier_at(f.name).to_owned())
+                    .map(|f| {
+                        context
+                            .interner
+                            .intern_ident_str(module.identifier_at(f.name))
+                    })
                     .collect(),
             };
-            let field_names: Vec<IdentifierKey> = field_names
-                .iter()
-                .map(|name| context.interner.intern_identifier(name))
-                .collect::<Vec<_>>();
             let field_names = context.arena_vec(field_names.into_iter())?;
 
             let type_parameters =
@@ -736,6 +790,7 @@ fn enums(
                 module.module_handle_at(enum_handle.module)
             );
 
+            let def_vtable_key = context.intern_key(def_vtable_key)?;
             let abilities = enum_handle.abilities;
 
             let type_parameters = context.arena_vec(enum_handle.type_parameters.iter().cloned())?;
@@ -772,7 +827,7 @@ fn enums(
                 let fields = variant_def
                     .fields
                     .iter()
-                    .map(|f| make_arena_type(context, module, &f.signature.0))
+                    .map(|field| make_sized_type(context, module, &field.signature.0))
                     .collect::<PartialVMResult<Vec<_>>>()?;
                 let fields = context.arena_vec(fields.into_iter())?;
 
@@ -809,8 +864,8 @@ fn cache_signatures(
     context: &mut PackageContext<'_>,
     module: &CompiledModule,
 ) -> PartialVMResult<(
-    ArenaVec<ArenaVec<ArenaType>>,
-    BTreeMap<SignatureIndex, VMPointer<ArenaVec<ArenaType>>>,
+    ArenaVec<ArenaVec<SizedArenaType>>,
+    BTreeMap<SignatureIndex, VMPointer<ArenaVec<SizedArenaType>>>,
 )> {
     let signatures = module
         .signatures()
@@ -819,7 +874,7 @@ fn cache_signatures(
             let tys = sig
                 .0
                 .iter()
-                .map(|ty| make_arena_type(context, module, ty))
+                .map(|ty| make_sized_type(context, module, ty))
                 .collect::<PartialVMResult<Vec<_>>>()?;
             context.arena_vec(tys.into_iter())
         })
@@ -852,7 +907,10 @@ fn field_handles(
         .iter()
         .map(|f_handle| {
             let def_idx = f_handle.owner;
-            let owner = structs.safe_get(def_idx.0 as usize)?.def_vtable_key.clone();
+            let owner = structs
+                .safe_get(def_idx.0 as usize)?
+                .def_vtable_key
+                .ptr_clone();
             let offset = f_handle.field as usize;
             Ok(FieldHandle { offset, owner })
         })
@@ -887,7 +945,7 @@ fn struct_instantiations(
     context: &mut PackageContext<'_>,
     module: &CompiledModule,
     structs: &[StructDef],
-    signatures: &[VMPointer<ArenaVec<ArenaType>>],
+    signatures: &[VMPointer<ArenaVec<SizedArenaType>>],
 ) -> PartialVMResult<ArenaVec<StructInstantiation>> {
     let struct_insts = module
         .struct_instantiations()
@@ -903,7 +961,7 @@ fn struct_instantiations(
 
             Ok(StructInstantiation {
                 field_count,
-                def_vtable_key: struct_def.def_vtable_key.clone(),
+                def_vtable_key: struct_def.def_vtable_key.ptr_clone(),
                 type_params,
             })
         })
@@ -915,7 +973,7 @@ fn enum_instantiations(
     context: &mut PackageContext<'_>,
     module: &CompiledModule,
     enums: &[EnumDef],
-    signatures: &[VMPointer<ArenaVec<ArenaType>>],
+    signatures: &[VMPointer<ArenaVec<SizedArenaType>>],
 ) -> PartialVMResult<ArenaVec<EnumInstantiation>> {
     let enum_insts = module
         .enum_instantiations()
@@ -936,7 +994,7 @@ fn enum_instantiations(
                 .safe_get(instantiation_idx.0 as usize)?
                 .ptr_clone();
 
-            let def_vtable_key = enum_def.def_vtable_key.clone();
+            let def_vtable_key = enum_def.def_vtable_key.ptr_clone();
             let enum_def = VMPointer::from_ref(enum_def);
 
             Ok(EnumInstantiation {
@@ -953,7 +1011,7 @@ fn enum_instantiations(
 fn function_instantiations(
     package_context: &mut PackageContext,
     module: &CompiledModule,
-    signatures: &[VMPointer<ArenaVec<ArenaType>>],
+    signatures: &[VMPointer<ArenaVec<SizedArenaType>>],
 ) -> PartialVMResult<ArenaVec<FunctionInstantiation>> {
     dbg_println!(flag: function_list_sizes, "handle size: {}", module.function_handles().len());
 
@@ -985,7 +1043,7 @@ fn field_instantiations(
         .iter()
         .map(|f_inst| {
             let fh_idx = f_inst.handle;
-            let owner = field_handles.safe_get(fh_idx.0 as usize)?.owner.clone();
+            let owner = field_handles.safe_get(fh_idx.0 as usize)?.owner.ptr_clone();
             let offset = field_handles.safe_get(fh_idx.0 as usize)?.offset;
 
             Ok(FieldInstantiation { offset, owner })
@@ -1032,22 +1090,12 @@ fn constants(
                     "Verifier failed to verify the deserialization of constants"
                 )
             })?;
-            let size = if context.vm_config.charge_ld_const_abstract_size {
-                // Charge for the abstract value size of the constant -- the cost of materializing
-                // it on the operand stack -- rather than its serialized byte length. Serialized
-                // length undercharges values that are cheap to encode but expensive to
-                // materialize, e.g. nested vectors, where an empty inner vector is a single
-                // serialized byte but materializes as a heap-allocated container.
-                //
-                // Constants cannot contain references, so `traverse_references` is irrelevant;
-                // `include_vector_size` matches the non-legacy size config in the Rtd gas meter.
-                u64::from(deserialized_value.abstract_memory_size(&SizeConfig {
-                    traverse_references: false,
-                    include_vector_size: true,
-                })?)
-            } else {
-                constant.data.len() as u64
-            };
+            // Constants cannot contain references, so `traverse_references` is irrelevant;
+            // `include_vector_size` matches the non-legacy size config in the Rtd gas meter.
+            let size = deserialized_value.abstract_memory_size(&SizeConfig {
+                traverse_references: false,
+                include_vector_size: true,
+            })?;
             let value = deserialized_value.into_constant_value(&context.package_arena)?;
             let type_ = make_arena_type(context, module, &constant.type_)?;
             let const_ = Constant { value, type_, size };
@@ -1094,7 +1142,7 @@ fn preallocate_functions(
             UNKNOWN_INVARIANT_VIOLATION_ERROR,
             "Duplicate function key {}::{}",
             package_context.version_id,
-            key.member_name(package_context.interner)
+            key.member_name_str(package_context.interner)
         )
     })?;
     Ok((loaded_functions, fun_map))
@@ -1150,7 +1198,7 @@ fn function_bodies(
 }
 
 fn alloc_function(
-    context: &PackageContext,
+    context: &mut PackageContext,
     module_name: &IdentifierKey,
     module: &CompiledModule,
     index: FunctionDefinitionIndex,
@@ -1158,13 +1206,15 @@ fn alloc_function(
 ) -> PartialVMResult<Function> {
     let handle = module.function_handle_at(def.function);
     let name_ident_str = module.identifier_at(handle.name);
-    let module_id = module.self_id();
+    let module_handle = module.self_handle();
+    let module_address = module.address_identifier_at(module_handle.address);
+    let module_name_str = module.identifier_at(module_handle.name);
     let is_entry = def.is_entry;
     let (native, def_is_native) = if def.is_native() {
         (
             context.natives.resolve(
-                module_id.address(),
-                module_id.name().as_str(),
+                module_address,
+                module_name_str.as_str(),
                 name_ident_str.as_str(),
             ),
             true,
@@ -1176,13 +1226,17 @@ fn alloc_function(
         let package_key = context.original_id;
         let module_name = *module_name;
         let member_name = context.interner.intern_ident_str(name_ident_str);
-        VirtualTableKey::from_parts(package_key, module_name, member_name)
+        context.intern_key(VirtualTableKey::from_parts(
+            package_key,
+            module_name,
+            member_name,
+        ))?
     };
     let parameters = module
         .signature_at(handle.parameters)
         .0
         .iter()
-        .map(|tok| make_arena_type(context, module, tok))
+        .map(|tok| make_sized_type(context, module, tok))
         .collect::<PartialVMResult<Vec<_>>>()?;
     let parameters = context.arena_vec(parameters.into_iter())?;
     // Native functions do not have a code unit
@@ -1191,15 +1245,13 @@ fn alloc_function(
             let locals_len = parameters
                 .len()
                 .safe_add(module.signature_at(code.locals).0.len())?;
-            let locals = context.arena_vec(
-                module
-                    .signature_at(code.locals)
-                    .0
-                    .iter()
-                    .map(|tok| make_arena_type(context, module, tok))
-                    .collect::<PartialVMResult<Vec<_>>>()?
-                    .into_iter(),
-            )?;
+            let locals = module
+                .signature_at(code.locals)
+                .0
+                .iter()
+                .map(|tok| make_unsized_type(context, module, tok))
+                .collect::<PartialVMResult<Vec<_>>>()?;
+            let locals = context.arena_vec(locals.into_iter())?;
             (locals_len, locals)
         }
         None => (0, ArenaVec::empty()),
@@ -1208,7 +1260,7 @@ fn alloc_function(
         .signature_at(handle.return_)
         .0
         .iter()
-        .map(|tok| make_arena_type(context, module, tok))
+        .map(|tok| make_sized_type(context, module, tok))
         .collect::<PartialVMResult<Vec<_>>>()?;
     let return_ = context.arena_vec(return_.into_iter())?;
     let type_parameters = context.arena_vec(handle.type_parameters.clone().into_iter())?;
@@ -1684,15 +1736,17 @@ fn call(
         .interner
         .intern_ident_str(module.identifier_at(func_handle.name));
     let module_handle = module.module_handle_at(func_handle.module);
-    let original_id = module.module_id_for_handle(module_handle);
-    let module_name = context.interner.intern_ident_str(original_id.name());
-    let vtable_key = VirtualTableKey::from_parts(*original_id.address(), module_name, member_name);
+    let original_id = *module.address_identifier_at(module_handle.address);
+    let module_name = context
+        .interner
+        .intern_ident_str(module.identifier_at(module_handle.name));
+    let vtable_key = VirtualTableKey::from_parts(original_id, module_name, member_name);
 
     dbg_println!(flag: function_resolution, "Resolving function: {:?}", vtable_key);
     Ok(
         match context.try_resolve_direct_function_call(&vtable_key)? {
             Some(func) => CallType::Direct(func),
-            None => CallType::Virtual(vtable_key),
+            None => CallType::Virtual(context.intern_key(vtable_key)?),
         },
     )
 }
@@ -1701,79 +1755,138 @@ fn call(
 // Type Translation
 // -------------------------------------------------------------------------------------------------
 
-/// Convert a signature token type into its execution counterpart, including converting datatypes
-/// into their VTable entry keys.
-// [ALLOC] Resultant type is allocated in the arena
-fn make_arena_type(
-    context: &PackageContext,
+/// Convert a signature token into an execution type paired with its JIT-compiled size formula
+/// ([`ArenaTypeSizeFormula::from_term`]) -- the form every runtime-sized type travels in, so
+/// sizing never re-derives anything from the type's structure.
+fn make_sized_type(
+    context: &mut PackageContext,
     module: &CompiledModule,
     tok: &SignatureToken,
-) -> PartialVMResult<ArenaType> {
-    make_arena_type_impl(context, module, tok, &mut TypeSize::for_type_traversal())
+) -> PartialVMResult<SizedArenaType> {
+    let ty = make_arena_type(context, module, tok)?;
+    let size_formula =
+        ArenaTypeSizeFormula::from_term(&ty, &context.package_arena, context.type_limits)?;
+    Ok(SizedArenaType {
+        ty,
+        size_formula: Some(size_formula),
+    })
+}
+
+fn make_unsized_type(
+    context: &mut PackageContext,
+    module: &CompiledModule,
+    tok: &SignatureToken,
+) -> PartialVMResult<SizedArenaType> {
+    Ok(SizedArenaType {
+        ty: make_arena_type(context, module, tok)?,
+        size_formula: None,
+    })
+}
+
+/// Intern a signature token after converting datatype handles into VTable entry keys.
+fn make_arena_type(
+    context: &mut PackageContext,
+    module: &CompiledModule,
+    tok: &SignatureToken,
+) -> PartialVMResult<VMPointer<ArenaType>> {
+    let mut traversal = context.type_limits.traversal();
+    Ok(make_arena_type_impl(context, module, tok, &mut traversal)?.ptr())
 }
 
 fn make_arena_type_impl(
-    context: &PackageContext,
+    context: &mut PackageContext,
     module: &CompiledModule,
     tok: &SignatureToken,
-    type_size: &mut TypeSize,
-) -> PartialVMResult<ArenaType> {
-    type_size.enter_type(|type_size| {
-        let res = match tok {
-            SignatureToken::Bool => ArenaType::Bool,
-            SignatureToken::U8 => ArenaType::U8,
-            SignatureToken::U16 => ArenaType::U16,
-            SignatureToken::U32 => ArenaType::U32,
-            SignatureToken::U64 => ArenaType::U64,
-            SignatureToken::U128 => ArenaType::U128,
-            SignatureToken::U256 => ArenaType::U256,
-            SignatureToken::Address => ArenaType::Address,
-            SignatureToken::Signer => ArenaType::Signer,
-            SignatureToken::TypeParameter(idx) => ArenaType::TyParam(*idx),
-            SignatureToken::Vector(inner_tok) => ArenaType::Vector(
-                context.arena_box(make_arena_type_impl(context, module, inner_tok, type_size)?)?,
-            ),
-            SignatureToken::Reference(inner_tok) => ArenaType::Reference(
-                context.arena_box(make_arena_type_impl(context, module, inner_tok, type_size)?)?,
-            ),
-            SignatureToken::MutableReference(inner_tok) => ArenaType::MutableReference(
-                context.arena_box(make_arena_type_impl(context, module, inner_tok, type_size)?)?,
-            ),
-            SignatureToken::Datatype(sh_idx) => {
-                let datatype_handle = module.datatype_handle_at(*sh_idx);
-                let datatype_name = context
-                    .interner
-                    .intern_ident_str(module.identifier_at(datatype_handle.name));
-                let module_handle = module.module_handle_at(datatype_handle.module);
-                let original_address = module.address_identifier_at(module_handle.address);
-                let module_name = context
-                    .interner
-                    .intern_ident_str(module.identifier_at(module_handle.name));
-                let cache_idx =
-                    VirtualTableKey::from_parts(*original_address, module_name, datatype_name);
-                ArenaType::Datatype(cache_idx)
-            }
-            SignatureToken::DatatypeInstantiation(inst) => {
-                let (sh_idx, tys) = &**inst;
-                let type_parameters: Vec<_> = tys
-                    .iter()
-                    .map(|tok| make_arena_type_impl(context, module, tok, type_size))
-                    .collect::<PartialVMResult<_>>()?;
-                let type_parameters = context.arena_vec(type_parameters.into_iter())?;
-                let datatype_handle = module.datatype_handle_at(*sh_idx);
-                let datatype_name = context
-                    .interner
-                    .intern_ident_str(module.identifier_at(datatype_handle.name));
-                let module_handle = module.module_handle_at(datatype_handle.module);
-                let original_address = module.address_identifier_at(module_handle.address);
-                let module_name = context
-                    .interner
-                    .intern_ident_str(module.identifier_at(module_handle.name));
-                let cache_idx =
-                    VirtualTableKey::from_parts(*original_address, module_name, datatype_name);
-                ArenaType::DatatypeInstantiation(context.arena_box((cache_idx, type_parameters))?)
-            }
-        };
-        Ok(res)
+    type_size: &mut TypeTraversalBudget,
+) -> PartialVMResult<InternedType> {
+    type_size.enter_type(|type_size| match tok {
+        SignatureToken::Bool => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::Bool),
+        SignatureToken::U8 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U8),
+        SignatureToken::U16 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U16),
+        SignatureToken::U32 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U32),
+        SignatureToken::U64 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U64),
+        SignatureToken::U128 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U128),
+        SignatureToken::U256 => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::U256),
+        SignatureToken::Address => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::Address),
+        SignatureToken::Signer => context
+            .type_interner
+            .intern_primitive(&context.package_arena, PrimitiveType::Signer),
+        SignatureToken::TypeParameter(index) => context
+            .type_interner
+            .intern_type_parameter(&context.package_arena, *index),
+        SignatureToken::Vector(inner) => {
+            let inner = make_arena_type_impl(context, module, inner, type_size)?;
+            context
+                .type_interner
+                .intern_vector(&context.package_arena, inner)
+        }
+        SignatureToken::Reference(inner) => {
+            let inner = make_arena_type_impl(context, module, inner, type_size)?;
+            context
+                .type_interner
+                .intern_reference(&context.package_arena, inner)
+        }
+        SignatureToken::MutableReference(inner) => {
+            let inner = make_arena_type_impl(context, module, inner, type_size)?;
+            context
+                .type_interner
+                .intern_mutable_reference(&context.package_arena, inner)
+        }
+        SignatureToken::Datatype(handle) => {
+            let datatype = datatype_key(context, module, *handle)?;
+            context
+                .type_interner
+                .intern_datatype(&context.package_arena, datatype)
+        }
+        SignatureToken::DatatypeInstantiation(instantiation) => {
+            let (handle, arguments) = &**instantiation;
+            let arguments = arguments
+                .iter()
+                .map(|argument| make_arena_type_impl(context, module, argument, type_size))
+                .collect::<PartialVMResult<Vec<_>>>()?;
+            let datatype = datatype_key(context, module, *handle)?;
+            context.type_interner.intern_datatype_instantiation(
+                &context.package_arena,
+                datatype,
+                arguments,
+            )
+        }
     })
+}
+
+fn datatype_key(
+    context: &PackageContext,
+    module: &CompiledModule,
+    handle: FF::DatatypeHandleIndex,
+) -> PartialVMResult<VMPointer<VirtualTableKey>> {
+    let datatype_handle = module.datatype_handle_at(handle);
+    let datatype_name = context
+        .interner
+        .intern_ident_str(module.identifier_at(datatype_handle.name));
+    let module_handle = module.module_handle_at(datatype_handle.module);
+    let original_address = module.address_identifier_at(module_handle.address);
+    let module_name = context
+        .interner
+        .intern_ident_str(module.identifier_at(module_handle.name));
+    context.intern_key(VirtualTableKey::from_parts(
+        *original_address,
+        module_name,
+        datatype_name,
+    ))
 }

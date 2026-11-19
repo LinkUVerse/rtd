@@ -12,8 +12,8 @@ use futures::Stream;
 use futures::StreamExt;
 use prometheus::Registry;
 use rtd_rpc::Client;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
 use tonic::transport::Uri;
 use tracing::warn;
 

@@ -9,7 +9,6 @@ mod checked {
     use std::{collections::BTreeMap, sync::Arc};
 
     use anyhow::Result;
-    use linku_common::debug_fatal;
     use move_binary_format::file_format::CompiledModule;
     use move_bytecode_verifier::verify_module_with_config_metered;
     use move_bytecode_verifier_meter::{Meter, Scope};
@@ -22,6 +21,7 @@ mod checked {
         move_vm::MoveVM, native_extensions::NativeContextExtensions,
         native_functions::NativeFunctionTable,
     };
+    use linku_common::debug_fatal;
     use rtd_move_natives::{object_runtime, transaction_context::TransactionContext};
     use rtd_types::error::RtdErrorKind;
     use rtd_types::metrics::BytecodeVerifierMetrics;
@@ -67,6 +67,8 @@ mod checked {
             rethrow_serialization_type_layout_errors: protocol_config
                 .rethrow_serialization_type_layout_errors(),
             max_type_to_layout_nodes: protocol_config.max_type_to_layout_nodes_as_option(),
+            layout_node_cost: None,
+            layout_node_cost_large_layout_threshold: None,
             variant_nodes: protocol_config.variant_nodes(),
             deprecate_global_storage_ops_during_deserialization: protocol_config
                 .deprecate_global_storage_ops_during_deserialization(),

@@ -1,9 +1,5 @@
 # DeepBook Margin examples
 
-These third-party examples require a DeepBook Margin deployment and an SDK
-release configured for the same RTD chain. Set `RTD_DEEPBOOK_GRPC_URL` to its
-RTD Testnet gRPC endpoint. No public fullnode or margin package IDs are assumed.
-
 Runnable TypeScript sources for the DeepBook Margin docs (the leveraged position
 workflow). The docs pull each chunk in with
 `<ImportContent mode="code" tag="..." />`, so published samples stay tied to code
@@ -24,7 +20,7 @@ markers: `client`, `find-manager`, `create-manager`, `risk-params`,
 
 Margin trading borrows funds and can be liquidated. These samples target Rtd
 Testnet with the SDK's Testnet constants; do not point them at Mainnet without
-understanding the margin risks (see the checked-in `docs/content` tree).
+understanding the [margin risks](https://docs.rtd.io/onchain-finance/deepbook/deepbook-margin/margin-risks).
 
 `run-margin.mts` (not committed) is a local execution harness, not a doc sample.
 It reads a Testnet key from `DEEPBOOK_DOCS_TESTNET_KEY` (env only, never logged),

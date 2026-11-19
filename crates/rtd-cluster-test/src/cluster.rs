@@ -3,6 +3,8 @@
 
 use super::config::{ClusterTestOpt, Env};
 use async_trait::async_trait;
+use fastcrypto::traits::ToFromBytes;
+use std::path::Path;
 use rtd_config::Config;
 use rtd_config::{PersistedConfig, RTD_KEYSTORE_FILENAME, RTD_NETWORK_CONFIG};
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, Keystore};
@@ -15,10 +17,31 @@ use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::KeypairTraits;
 use rtd_types::crypto::RtdKeyPair;
 use rtd_types::crypto::{AccountKeyPair, get_key_pair};
-use std::path::Path;
 use tempfile::tempdir;
 use test_cluster::{TestCluster, TestClusterBuilder};
 use tracing::info;
+
+const DEVNET_FAUCET_ADDR: &str = "https://faucet.devnet.rtd.io:443";
+const STAGING_FAUCET_ADDR: &str = "https://faucet.staging.rtd.io:443";
+const CONTINUOUS_FAUCET_ADDR: &str = "https://faucet.ci.rtd.io:443";
+const CONTINUOUS_NOMAD_FAUCET_ADDR: &str = "https://faucet.nomad.ci.rtd.io:443";
+const TESTNET_FAUCET_ADDR: &str = "https://faucet.testnet.rtd.io:443";
+const DEVNET_FULLNODE_ADDR: &str = "https://rpc.devnet.rtd.io:443";
+const STAGING_FULLNODE_ADDR: &str = "https://fullnode.staging.rtd.io:443";
+const CONTINUOUS_FULLNODE_ADDR: &str = "https://fullnode.ci.rtd.io:443";
+const CONTINUOUS_NOMAD_FULLNODE_ADDR: &str = "https://fullnode.nomad.ci.rtd.io:443";
+const TESTNET_FULLNODE_ADDR: &str = "https://fullnode.testnet.rtd.io:443";
+
+pub const CLUSTER_TEST_ACCOUNT_ADDRESS: &str =
+    "0x7bd7e177baf86fb745b5270cf6c391cbd1998a759904d5f27cdd2b6e1b32f99e";
+const CLUSTER_TEST_ACCOUNT_KEY_BYTES: [u8; 32] = [0x42; 32];
+
+fn cluster_test_account_key() -> AccountKeyPair {
+    // This deliberately public key is only for ephemeral test networks whose
+    // genesis config explicitly funds the matching account.
+    AccountKeyPair::from_bytes(&CLUSTER_TEST_ACCOUNT_KEY_BYTES)
+        .expect("the fixed cluster-test account key must be valid")
+}
 
 pub struct ClusterFactory;
 
@@ -42,6 +65,7 @@ pub trait Cluster {
 
     fn fullnode_url(&self) -> &str;
     fn user_key(&self) -> AccountKeyPair;
+    fn uses_prefunded_account(&self) -> bool;
 
     /// Returns faucet url in a remote cluster.
     fn remote_faucet_url(&self) -> Option<&str>;
@@ -57,53 +81,62 @@ pub trait Cluster {
 pub struct RemoteRunningCluster {
     fullnode_url: String,
     faucet_url: String,
+    user_key: AccountKeyPair,
+    uses_prefunded_account: bool,
     config_directory: tempfile::TempDir,
 }
 
 #[async_trait]
 impl Cluster for RemoteRunningCluster {
     async fn start(options: &ClusterTestOpt) -> Result<Self, anyhow::Error> {
-        match options.env {
-            Env::Devnet
-            | Env::Staging
-            | Env::Ci
-            | Env::CiNomad
-            | Env::Testnet
-            | Env::CustomRemote => {}
+        let (fullnode_url, faucet_url) = match options.env {
+            Env::Devnet => (
+                String::from(DEVNET_FULLNODE_ADDR),
+                String::from(DEVNET_FAUCET_ADDR),
+            ),
+            Env::Staging => (
+                String::from(STAGING_FULLNODE_ADDR),
+                String::from(STAGING_FAUCET_ADDR),
+            ),
+            Env::Ci => (
+                String::from(CONTINUOUS_FULLNODE_ADDR),
+                String::from(CONTINUOUS_FAUCET_ADDR),
+            ),
+            Env::CiNomad => (
+                String::from(CONTINUOUS_NOMAD_FULLNODE_ADDR),
+                String::from(CONTINUOUS_NOMAD_FAUCET_ADDR),
+            ),
+            Env::Testnet => (
+                String::from(TESTNET_FULLNODE_ADDR),
+                String::from(TESTNET_FAUCET_ADDR),
+            ),
+            Env::CustomRemote => (
+                options
+                    .fullnode_address
+                    .clone()
+                    .expect("Expect 'fullnode_address' for Env::Custom"),
+                options
+                    .faucet_address
+                    .clone()
+                    .expect("Expect 'faucet_address' for Env::Custom"),
+            ),
             Env::NewLocal => unreachable!("NewLocal shouldn't use RemoteRunningCluster"),
-        }
-
-        let fullnode_url = options
-            .fullnode_address
-            .as_deref()
-            .filter(|url| !url.trim().is_empty())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No public RTD {:?} fullnode is configured; pass --fullnode-address",
-                    options.env
-                )
-            })?
-            .to_owned();
-        let faucet_url = options
-            .faucet_address
-            .as_deref()
-            .filter(|url| !url.trim().is_empty())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No public RTD {:?} faucet is configured; pass --faucet-address",
-                    options.env
-                )
-            })?
-            .to_owned();
-
-        reqwest::Url::parse(&fullnode_url)?;
-        reqwest::Url::parse(&faucet_url)?;
+        };
 
         // TODO: test connectivity before proceeding?
+
+        let uses_prefunded_account = options.use_prefunded_account();
+        let user_key = if uses_prefunded_account {
+            cluster_test_account_key()
+        } else {
+            get_key_pair().1
+        };
 
         Ok(Self {
             fullnode_url,
             faucet_url,
+            user_key,
+            uses_prefunded_account,
             config_directory: tempfile::tempdir()?,
         })
     }
@@ -113,7 +146,11 @@ impl Cluster for RemoteRunningCluster {
     }
 
     fn user_key(&self) -> AccountKeyPair {
-        get_key_pair().1
+        self.user_key.copy()
+    }
+
+    fn uses_prefunded_account(&self) -> bool {
+        self.uses_prefunded_account
     }
 
     fn remote_faucet_url(&self) -> Option<&str> {
@@ -152,6 +189,7 @@ impl Cluster for LocalNewCluster {
         let data_ingestion_path = tempdir()?;
 
         let mut cluster_builder = TestClusterBuilder::new()
+            .with_num_validators(4)
             .enable_fullnode_events()
             .with_data_ingestion_dir(data_ingestion_path.path().to_path_buf());
 
@@ -211,6 +249,10 @@ impl Cluster for LocalNewCluster {
         get_key_pair().1
     }
 
+    fn uses_prefunded_account(&self) -> bool {
+        false
+    }
+
     fn remote_faucet_url(&self) -> Option<&str> {
         None
     }
@@ -240,6 +282,10 @@ impl Cluster for Box<dyn Cluster + Send + Sync> {
         (**self).user_key()
     }
 
+    fn uses_prefunded_account(&self) -> bool {
+        (**self).uses_prefunded_account()
+    }
+
     fn remote_faucet_url(&self) -> Option<&str> {
         (**self).remote_faucet_url()
     }
@@ -250,28 +296,6 @@ impl Cluster for Box<dyn Cluster + Send + Sync> {
 
     fn config_directory(&self) -> &Path {
         (**self).config_directory()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn remote_cluster_requires_explicit_endpoints() {
-        let mut options = ClusterTestOpt::new_local();
-        options.env = Env::Testnet;
-        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
-        assert!(err.to_string().contains("--fullnode-address"));
-
-        options.fullnode_address = Some("http://127.0.0.1:9000".into());
-        let err = RemoteRunningCluster::start(&options).await.err().unwrap();
-        assert!(err.to_string().contains("--faucet-address"));
-
-        options.faucet_address = Some("http://127.0.0.1:9123".into());
-        let cluster = RemoteRunningCluster::start(&options).await.unwrap();
-        assert_eq!(cluster.fullnode_url(), "http://127.0.0.1:9000");
-        assert_eq!(cluster.remote_faucet_url(), Some("http://127.0.0.1:9123"));
     }
 }
 
@@ -318,4 +342,15 @@ pub async fn new_wallet_context_from_cluster(
             wallet_config_path
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_cluster_test_key_matches_funded_address() {
+        let address = RtdAddress::from(cluster_test_account_key().public());
+        assert_eq!(address.to_string(), CLUSTER_TEST_ACCOUNT_ADDRESS);
+    }
 }

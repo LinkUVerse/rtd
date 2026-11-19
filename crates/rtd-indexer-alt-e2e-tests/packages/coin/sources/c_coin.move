@@ -3,9 +3,8 @@
 
 module coin::c_coin;
 
-use rtd::coin::{Self, TreasuryCap};
 use rtd::balance;
-
+use rtd::coin::{Self, TreasuryCap};
 
 public struct C_COIN has drop {}
 

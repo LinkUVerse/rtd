@@ -1,7 +1,7 @@
 [package]
 name = "rtd-bridge"
 version.workspace = true
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -49,7 +49,6 @@ shared-crypto.workspace = true
 backoff.workspace = true
 linku-common.workspace = true
 enum_dispatch.workspace = true
-rtd-json-rpc-api.workspace = true
 rtd-test-transaction-builder.workspace = true
 rtd-metrics-push-client.workspace = true
 hex-literal = { version = "0.3.4", optional = true }

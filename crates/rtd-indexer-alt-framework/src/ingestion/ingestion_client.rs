@@ -262,14 +262,10 @@ impl IngestionClient {
     fn with_store_watermark_guard(
         store: Arc<dyn ObjectStore>,
         metrics: Arc<IngestionMetrics>,
-        require_published_watermark: bool,
+        _require_published_watermark: bool,
     ) -> IngestionResult<Self> {
         let bytes = Some(metrics.total_ingested_bytes.clone());
-        let client = Arc::new(if require_published_watermark {
-            StoreIngestionClient::new_guarded(store, bytes)
-        } else {
-            StoreIngestionClient::new(store, bytes)
-        });
+        let client = Arc::new(StoreIngestionClient::new(store, bytes));
         Ok(Self::from_trait(client, metrics))
     }
 

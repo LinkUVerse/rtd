@@ -7,6 +7,7 @@ use crate::keytool::CommandOutput;
 use crate::keytool::read_authority_keypair_from_file;
 use crate::keytool::read_keypair_from_file;
 
+use super::Key;
 use super::KeyToolCommand;
 use super::write_keypair_to_file;
 use anyhow::Ok;
@@ -17,30 +18,37 @@ use fastcrypto::encoding::Hex;
 use fastcrypto::traits::ToFromBytes;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentScope;
 use rtd_keys::key_identity::KeyIdentity;
 use rtd_keys::keystore::{AccountKeystore, FileBasedKeystore, InMemKeystore, Keystore};
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::base_types::ObjectDigest;
 use rtd_types::base_types::ObjectID;
-use rtd_types::base_types::RtdAddress;
 use rtd_types::base_types::SequenceNumber;
+use rtd_types::base_types::RtdAddress;
 use rtd_types::crypto::AuthorityKeyPair;
 use rtd_types::crypto::Ed25519RtdSignature;
 use rtd_types::crypto::EncodeDecodeBase64;
-use rtd_types::crypto::RtdKeyPair;
-use rtd_types::crypto::RtdSignatureInner;
+use rtd_types::crypto::MLDSA65RtdSignature;
 use rtd_types::crypto::Secp256k1RtdSignature;
 use rtd_types::crypto::Secp256r1RtdSignature;
 use rtd_types::crypto::Signature;
 use rtd_types::crypto::SignatureScheme;
+use rtd_types::crypto::RtdKeyPair;
+use rtd_types::crypto::RtdSignatureInner;
 use rtd_types::crypto::get_key_pair;
 use rtd_types::crypto::get_key_pair_from_rng;
 use rtd_types::transaction::TEST_ONLY_GAS_UNIT_FOR_TRANSFER;
 use rtd_types::transaction::TransactionData;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentScope;
 use tempfile::TempDir;
 use tokio::test;
+
+// A valid ML-DSA-65 keystore blob (flag 0x07 || seed 0x02 * 32) in bech32;
+// crate `rtd` has no fastcrypto-pq dependency, so tests decode this instead
+// of generating a keypair.
+const MLDSA65_TEST_SUIPRIVKEY: &str =
+    "rtdprivkey1qupqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqywvyjyv";
 
 const TEST_MNEMONIC: &str = "result crisp session latin must fruit genuine question prevent start coconut brave speak student dismiss";
 
@@ -78,6 +86,9 @@ async fn test_flag_in_signature_and_keypair() -> Result<(), anyhow::Error> {
     keystore
         .import(None, RtdKeyPair::Ed25519(get_key_pair().1))
         .await?;
+    keystore
+        .import(None, RtdKeyPair::decode(MLDSA65_TEST_SUIPRIVKEY).unwrap())
+        .await?;
 
     for pk in keystore.entries() {
         let pk1 = pk.clone();
@@ -107,6 +118,13 @@ async fn test_flag_in_signature_and_keypair() -> Result<(), anyhow::Error> {
                     Secp256r1RtdSignature::SCHEME.flag()
                 );
                 assert!(pk1.flag() == Secp256r1RtdSignature::SCHEME.flag())
+            }
+            Signature::MLDSA65RtdSignature(_) => {
+                assert_eq!(
+                    *sig.as_ref().first().unwrap(),
+                    MLDSA65RtdSignature::SCHEME.flag()
+                );
+                assert!(pk1.flag() == MLDSA65RtdSignature::SCHEME.flag())
             }
         }
     }
@@ -164,14 +182,39 @@ async fn test_read_write_keystore_with_flag() {
     // read from file as AuthorityKeyPair success
     let kp_ed_read = read_authority_keypair_from_file(fp_ed_2);
     assert!(kp_ed_read.is_err());
+
+    // create ML-DSA-65 keypair
+    let kp_mldsa = RtdKeyPair::decode(MLDSA65_TEST_SUIPRIVKEY).unwrap();
+    let addr_mldsa: RtdAddress = (&kp_mldsa.public()).into();
+    let fp_mldsa = dir.path().join(format!("{}.key", addr_mldsa));
+    let fp_mldsa_2 = fp_mldsa.clone();
+
+    // write ML-DSA-65 keypair to file
+    let res = write_keypair_to_file(&kp_mldsa, &fp_mldsa);
+    assert!(res.is_ok());
+
+    // read from file as enum KeyPair success
+    let kp_mldsa_read = read_keypair_from_file(fp_mldsa);
+    assert!(kp_mldsa_read.is_ok());
+
+    // KeyPair wrote into file is the same as read
+    assert_eq!(
+        kp_mldsa_read.unwrap().public().as_ref(),
+        kp_mldsa.public().as_ref()
+    );
+
+    // read as AuthorityKeyPair fails
+    let kp_mldsa_read = read_authority_keypair_from_file(fp_mldsa_2);
+    assert!(kp_mldsa_read.is_err());
 }
 
 #[test]
-async fn test_legacy_operations_key_fixtures() {
+async fn test_rtd_operations_config() {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path().join("rtd.keystore");
     let path1 = path.clone();
-    // Pinned legacy operations keystore fixture; this checks address derivation only.
+    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd.keystore
+    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
     let kp = RtdKeyPair::decode_base64("ANRj4Rx5FZRehqwrctiLgZDPrY/3tI5+uJLCdaXPCj6C").unwrap();
     let contents = vec![kp.encode_base64()];
     let res = std::fs::write(path, serde_json::to_string_pretty(&contents).unwrap());
@@ -184,7 +227,8 @@ async fn test_legacy_operations_key_fixtures() {
         read.unwrap().addresses()[0]
     );
 
-    // Second pinned legacy operations keystore fixture.
+    // This is the hardcoded keystore in rtd-operation: https://github.com/LinkUVerse/rtd-operations/blob/af04c9d3b61610dbb36401aff6bef29d06ef89f8/docker/config/generate/static/rtd-benchmark.keystore
+    // If this test fails, address hardcoded in rtd-operations is likely needed be updated.
     let path2 = temp_dir.path().join("rtd-benchmark.keystore");
     let path3 = path2.clone();
     let kp = RtdKeyPair::decode_base64("APCWxPNCbgGxOYKeMfPqPmXmwdNVyau9y4IsyBcmC14A").unwrap();
@@ -429,6 +473,48 @@ async fn test_mnemonics_secp256r1() -> Result<(), anyhow::Error> {
 }
 
 #[test]
+async fn test_mnemonics_mldsa65() -> Result<(), anyhow::Error> {
+    // Test case matches with ts-sdks packages/rtd/test/unit/cryptography/mldsa65-keypair.test.ts
+    const TEST_CASES: [[&str; 3]; 3] = [
+        [
+            "act wing dilemma glory episode region allow mad tourist humble muffin oblige",
+            "rtdprivkey1qamkapjn935cx32r206gvzh9u0cscydaf09we9z4uxc9crs5j3c82x0jp8y",
+            "0xd0f33625a23608ac4f3fd938a461ab15ed688af783eb4c54c19ab68e37a420dd",
+        ],
+        [
+            "flag rebel cabbage captain minimum purpose long already valley horn enrich salt",
+            "rtdprivkey1ql7gkea080ddh5f3gae0lnfw6t7vhcylupgucp7rcpwnnyhdegax63avkzu",
+            "0xd6de2b6e6d68114bbb6c4bbe3af4f174dcf51b27e5393b7606203cda8c933a93",
+        ],
+        [
+            "area renew bar language pudding trial small host remind supreme cabbage era",
+            "rtdprivkey1q7xkhwyu7a60pjrevj9gatlk3ju3x8svkx5gcgy6zdznafwvxp54sg4du88",
+            "0x48e9fcc44df5766d6be8e824c2781c40dd196f6a6b2e7244b78b02ab05249d66",
+        ],
+    ];
+
+    for [mnemonics, sk, address] in TEST_CASES {
+        let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+        let mut context = WalletContext::new_for_tests(keystore, None, None);
+        KeyToolCommand::Import {
+            alias: None,
+            input_string: mnemonics.to_string(),
+            key_scheme: SignatureScheme::MLDSA65,
+            derivation_path: None,
+        }
+        .execute(&mut context)
+        .await?;
+
+        let kp = RtdKeyPair::decode(sk).unwrap();
+        let addr = RtdAddress::from_str(address).unwrap();
+        assert_eq!(RtdAddress::from(&kp.public()), addr);
+        assert!(context.config.keystore.addresses().contains(&addr));
+    }
+
+    Ok(())
+}
+
+#[test]
 async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
     let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
     let mut context = WalletContext::new_for_tests(keystore, None, None);
@@ -491,6 +577,21 @@ async fn test_invalid_derivation_path() -> Result<(), anyhow::Error> {
         .await
         .is_err()
     );
+
+    // ML-DSA-65 takes purpose 94 and is hardened at every level.
+    for path in ["m/44'/784'/0'/0'/0'", "m/94'/784'/0'/0/0"] {
+        assert!(
+            KeyToolCommand::Import {
+                alias: None,
+                input_string: TEST_MNEMONIC.to_string(),
+                key_scheme: SignatureScheme::MLDSA65,
+                derivation_path: Some(path.parse().unwrap()),
+            }
+            .execute(&mut context)
+            .await
+            .is_err()
+        );
+    }
 
     Ok(())
 }
@@ -563,6 +664,22 @@ async fn test_valid_derivation_path() -> Result<(), anyhow::Error> {
 }
 
 #[test]
+async fn test_keytool_generate_mldsa65() -> Result<(), anyhow::Error> {
+    let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
+    let mut context = WalletContext::new_for_tests(keystore, None, None);
+    for derivation_path in [None, Some("m/94'/784'/1'/0'/0'".parse().unwrap())] {
+        KeyToolCommand::Generate {
+            key_scheme: SignatureScheme::MLDSA65,
+            derivation_path,
+            word_length: None,
+        }
+        .execute(&mut context)
+        .await?;
+    }
+    Ok(())
+}
+
+#[test]
 async fn test_keytool_bls12381() -> Result<(), anyhow::Error> {
     let keystore = Keystore::from(InMemKeystore::new_insecure_for_tests(0));
     let mut context = WalletContext::new_for_tests(keystore, None, None);
@@ -631,4 +748,25 @@ async fn test_sign_command() -> Result<(), anyhow::Error> {
     .execute(&mut context)
     .await?;
     Ok(())
+}
+
+#[tokio::test]
+async fn keytool_list_abbreviates_mldsa65_keys_only() {
+    let mldsa = Key::from(&RtdKeyPair::decode(MLDSA65_TEST_SUIPRIVKEY).unwrap());
+    let ed25519_kp = RtdKeyPair::Ed25519(get_key_pair().1);
+    let full_mldsa = mldsa.public_base64_key.clone();
+    let full_ed25519 = Key::from(&ed25519_kp).public_base64_key.clone();
+
+    let shown = format!(
+        "{}",
+        CommandOutput::List(vec![mldsa, Key::from(&ed25519_kp)])
+    );
+    assert!(!shown.contains(&full_mldsa));
+    assert!(shown.contains("add --json for the full key"));
+    assert!(shown.contains(&full_ed25519));
+
+    // Without an ML-DSA-65 key the table is untouched.
+    let shown = format!("{}", CommandOutput::List(vec![Key::from(&ed25519_kp)]));
+    assert!(shown.contains(&full_ed25519));
+    assert!(!shown.contains("add --json for the full key"));
 }

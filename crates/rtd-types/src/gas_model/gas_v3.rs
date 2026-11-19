@@ -8,33 +8,30 @@
 #![deny(clippy::cast_possible_wrap)]
 #![deny(clippy::cast_sign_loss)]
 
-use crate::error::UserInputResult;
 use crate::gas::{GasCostSummary, GasUsageReport, RtdGasStatusAPI};
 use crate::gas_model::gas_common::{
-    StorageGas, check_gas_data, check_gas_objects, half_digits_rounding, sender_rebate,
+    StorageGas, half_digits_rounding, package_read_internal_gas, sender_rebate,
 };
 use crate::gas_model::gas_predicates::cost_table_for_version;
 use crate::gas_model::units_types::CostTable;
-use crate::transaction::ObjectReadResult;
 use crate::{
     ObjectID,
     error::ExecutionError,
     execution_status::ExecutionErrorKind,
     gas_model::tables::{GasStatus, ZERO_COST_SCHEDULE},
 };
+use move_core_types::gas_algebra::InternalGas;
 use move_core_types::vm_status::StatusCode;
 use rtd_protocol_config::*;
 
 /// A list of constant costs of various operations in Rtd.
 pub struct RtdCostTable {
-    /// A flat fee charged for every transaction.
-    pub(crate) min_transaction_cost: u64,
-    /// Maximum allowable budget for a transaction.
-    pub(crate) max_gas_budget: u64,
     /// Computation cost per byte charged for package publish.
     package_publish_per_byte_cost: u64,
     /// Per byte cost to read objects from the store.
     object_read_per_byte_cost: u64,
+    /// Cost per KiB to read package inputs, or `None` to charge them the object rate.
+    package_read_per_kb_cost: Option<u64>,
     /// Unit cost of a byte in the storage.
     storage_per_byte_cost: u64,
     /// Execution cost table to be used.
@@ -51,18 +48,11 @@ impl std::fmt::Debug for RtdCostTable {
 }
 
 impl RtdCostTable {
-    pub(crate) fn new(c: &ProtocolConfig, gas_price: u64) -> Self {
-        // gas_price here is the Reference Gas Price, however we may decide
-        // to change it to be the price passed in the transaction
-        let min_transaction_cost = c
-            .base_tx_cost_fixed()
-            .checked_mul(gas_price)
-            .expect("base tx cost cannot overflow: gas_price is bounded by max_gas_price");
+    pub(crate) fn new(c: &ProtocolConfig) -> Self {
         Self {
-            min_transaction_cost,
-            max_gas_budget: c.max_tx_gas(),
             package_publish_per_byte_cost: c.package_publish_cost_per_byte(),
             object_read_per_byte_cost: c.obj_access_cost_read_per_byte(),
+            package_read_per_kb_cost: c.obj_access_cost_read_per_package_kb_as_option(),
             storage_per_byte_cost: c.obj_data_cost_refundable(),
             execution_cost_table: cost_table_for_version(c.gas_model_version()),
             max_gas_price_rgp_factor_for_aborted_transactions: c
@@ -72,10 +62,9 @@ impl RtdCostTable {
 
     pub(crate) fn unmetered() -> Self {
         Self {
-            min_transaction_cost: 0,
-            max_gas_budget: u64::MAX,
             package_publish_per_byte_cost: 0,
             object_read_per_byte_cost: 0,
+            package_read_per_kb_cost: None,
             storage_per_byte_cost: 0,
             execution_cost_table: ZERO_COST_SCHEDULE.clone(),
             max_gas_price_rgp_factor_for_aborted_transactions: None,
@@ -112,6 +101,23 @@ pub struct RtdGasStatus {
 }
 
 impl RtdGasStatus {
+    pub(crate) fn charge_package_object_read(&mut self, size: usize) -> Result<(), ExecutionError> {
+        if let Some(cost_per_kb) = self.cost_table.package_read_per_kb_cost {
+            self.gas_status
+                .deduct_gas(InternalGas::new(package_read_internal_gas(
+                    size,
+                    cost_per_kb,
+                )))
+                .map_err(|e| {
+                    debug_assert_eq!(e.major_status(), StatusCode::OUT_OF_GAS);
+                    ExecutionErrorKind::InsufficientGas.into()
+                })
+        } else {
+            // Without a package rate, packages are charged exactly as other input objects.
+            self.charge_storage_read(size)
+        }
+    }
+
     fn new(
         move_gas_status: GasStatus,
         gas_budget: u64,
@@ -152,7 +158,7 @@ impl RtdGasStatus {
         } else {
             gas_budget
         };
-        let rtd_cost_table = RtdCostTable::new(config, gas_price);
+        let rtd_cost_table = RtdCostTable::new(config);
         Self::new(
             GasStatus::new(
                 rtd_cost_table.execution_cost_table.clone(),
@@ -359,30 +365,6 @@ impl RtdGasStatusAPI for RtdGasStatus {
             storage_gas_price: self.storage.storage_gas_price,
             rebate_rate: self.rebate_rate,
         }
-    }
-
-    // Check whether gas arguments are legit:
-    // 1. Gas object has an address owner.
-    // 2. Gas budget is between min and max budget allowed
-    // 3. Gas balance (all gas coins together) is bigger or equal to budget
-    fn check_gas_balance(
-        &self,
-        gas_objs: &[&ObjectReadResult],
-        gas_budget: u64,
-        available_address_balance_gas: u64,
-    ) -> UserInputResult {
-        self.check_gas_objects(gas_objs)?;
-        check_gas_data(
-            gas_objs,
-            gas_budget,
-            available_address_balance_gas,
-            self.cost_table.min_transaction_cost,
-            self.cost_table.max_gas_budget,
-        )
-    }
-
-    fn check_gas_objects(&self, gas_objs: &[&ObjectReadResult]) -> UserInputResult {
-        check_gas_objects(gas_objs)
     }
 
     fn per_object_storage(&self) -> &Vec<(ObjectID, PerObjectStorage)> {

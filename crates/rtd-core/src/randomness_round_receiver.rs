@@ -8,10 +8,11 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 use fastcrypto::groups::bls12381;
-use fastcrypto_tbls::{tbls::ThresholdBls, types::ThresholdBls12381MinSig};
+use fastcrypto_threshold::{tbls::ThresholdBls, types::ThresholdBls12381MinSig};
 use linku_common::debug_fatal_no_invariant;
 use linku_common::fatal;
 use linku_metrics::spawn_monitored_task;
+use serde::{Deserialize, Serialize};
 use rtd_macros::fail_point_async;
 use rtd_types::committee::EpochId;
 use rtd_types::crypto::RandomnessRound;
@@ -20,7 +21,6 @@ use rtd_types::effects::TransactionEffectsAPI;
 use rtd_types::executable_transaction::VerifiedExecutableTransaction;
 use rtd_types::execution_status::ExecutionStatus;
 use rtd_types::transaction::{TransactionKey, VerifiedTransaction};
-use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, instrument, warn};
@@ -165,7 +165,12 @@ impl RandomnessRoundReceiver {
 
         loop {
             let vss_pk = *self.vss_pk_rx.borrow_and_update();
+            // A key change takes priority over queued signatures. `vss_pk` was read before this
+            // select, so a signature that is already queued when the key is cleared must wait for
+            // the next iteration instead of being verified against the stale key.
             tokio::select! {
+                biased;
+                Ok(()) = self.vss_pk_rx.changed() => {},
                 maybe_recv = self.randomness_rx.recv() => {
                     if let Some((epoch, round, bytes)) = maybe_recv {
                         self.handle_new_randomness(epoch, round, bytes).await;
@@ -176,8 +181,6 @@ impl RandomnessRoundReceiver {
                 Some(data) = self.consensus_signatures_rx.recv(), if vss_pk.is_some() => {
                     self.handle_consensus_randomness_signature(vss_pk.unwrap(), &data).await;
                 },
-                // Wake up when the key changes so we re-evaluate the select guard.
-                _ = self.vss_pk_rx.changed() => {},
             }
         }
 
@@ -297,9 +300,7 @@ impl RandomnessRoundReceiver {
             .persist_transaction(&transaction);
 
         // Notify the scheduler that the transaction key now has a known digest
-        if epoch_store.insert_tx_key(key, digest).is_err() {
-            warn!("epoch ended while handling new randomness");
-        }
+        epoch_store.insert_tx_key(key, digest);
 
         let authority_state = self.authority_state.clone();
         let executed_consensus_rounds = self.executed_consensus_rounds.clone();
@@ -364,6 +365,7 @@ mod tests {
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
     use consensus_core::RandomnessSignatureHandler;
     use fastcrypto::groups::{GroupElement, HashToGroupElement, bls12381};
+    use rtd_macros::sim_test;
 
     fn generate_keypair() -> (bls12381::Scalar, bls12381::G2Element) {
         let sk = bls12381::Scalar::generator();
@@ -388,7 +390,7 @@ mod tests {
         bytes::Bytes::from(bcs::to_bytes(&msg).unwrap())
     }
 
-    #[tokio::test]
+    #[sim_test]
     async fn test_invalid_signature_not_broadcast() {
         let (_sk, pk) = generate_keypair();
         let state = TestAuthorityBuilder::new().build().await;
@@ -411,7 +413,7 @@ mod tests {
         assert!(result.is_err(), "should have timed out (no broadcast)");
     }
 
-    #[tokio::test]
+    #[sim_test]
     async fn test_malformed_data_not_broadcast() {
         let (_sk, pk) = generate_keypair();
         let state = TestAuthorityBuilder::new().build().await;
@@ -430,7 +432,7 @@ mod tests {
         assert!(result.is_err(), "should have timed out (no broadcast)");
     }
 
-    #[tokio::test]
+    #[sim_test]
     async fn test_signatures_buffer_until_dkg_completes() {
         let (sk, pk) = generate_keypair();
         let state = TestAuthorityBuilder::new().build().await;
@@ -462,7 +464,7 @@ mod tests {
         assert_eq!(decoded.round, round);
     }
 
-    #[tokio::test]
+    #[sim_test]
     async fn test_executed_consensus_signature_not_rebroadcast() {
         let (sk, pk) = generate_keypair();
         let state = TestAuthorityBuilder::new().build().await;
@@ -492,7 +494,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[sim_test]
     async fn test_clear_public_key_pauses_processing() {
         let (sk, pk) = generate_keypair();
         let state = TestAuthorityBuilder::new().build().await;

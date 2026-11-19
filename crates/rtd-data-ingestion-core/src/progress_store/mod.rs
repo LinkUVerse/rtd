@@ -3,8 +3,8 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use std::collections::HashMap;
+use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 mod file;
 pub use file::FileProgressStore;
 

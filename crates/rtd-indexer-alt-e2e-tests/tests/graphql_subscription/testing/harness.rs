@@ -14,6 +14,8 @@ use bytes::BytesMut;
 use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
 use prometheus::Registry;
+use serde_json::Value;
+use serde_json::json;
 use rtd_config::RpcConfig;
 use rtd_config::rpc_config::LedgerHistoryConfig;
 use rtd_futures::service::Service;
@@ -29,8 +31,6 @@ use rtd_pg_db::DbArgs;
 use rtd_pg_db::temp::TempDb;
 use rtd_pg_db::temp::get_available_port;
 use rtd_test_transaction_builder::TestTransactionBuilder;
-use serde_json::Value;
-use serde_json::json;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
 use tokio_stream::StreamExt;
@@ -58,8 +58,8 @@ pub struct SubscriptionTestCluster {
 
 impl SubscriptionTestCluster {
     /// Set up a full streaming subscription test environment:
-    /// validator + postgres DB + kv_packages indexer + GraphQL service.
-    /// Waits for kv_packages to index the genesis checkpoint so subscriptions are ready.
+    /// validator + postgres DB + indexer + GraphQL service.
+    /// Waits for the indexer to process the genesis checkpoint before starting GraphQL.
     pub async fn new() -> Self {
         let (cluster, _controller) = Self::new_inner(false, false, GraphQlConfig::default()).await;
         cluster
@@ -102,6 +102,16 @@ impl SubscriptionTestCluster {
     ) -> Self {
         let mut config = GraphQlConfig::default();
         config.subscription.max_concurrent_resolutions = max_concurrent_resolutions;
+        let (cluster, _controller) = Self::new_inner(false, true, config).await;
+        cluster
+    }
+
+    /// Same as `new_with_ledger_history()`, but lowers the server's live-progress threshold to
+    /// `unmatched` checkpoints, so a subscription that opts in with `progress: true` observes live
+    /// progress without waiting out the default run.
+    pub async fn new_with_ledger_history_and_progress_threshold(unmatched: u64) -> Self {
+        let mut config = GraphQlConfig::default();
+        config.subscription.unmatched_checkpoints_before_progress = unmatched;
         let (cluster, _controller) = Self::new_inner(false, true, config).await;
         cluster
     }
@@ -192,11 +202,6 @@ impl SubscriptionTestCluster {
         // directly so `disconnect_all()` cannot interfere with gap-recovery reads.
         let kv_args = KvArgs {
             ledger_grpc_url: Some(rpc_url.parse().unwrap()),
-            // The alpha ledger reader (v2alpha `list_transactions` / `list_events`) is a hard
-            // dependency of the streaming feature, so it is always configured. Whether a backfill
-            // scan returns data is a separate concern, gated by ledger-history indexing on the
-            // validator (`ledger_history`).
-            enable_list_apis: Some(true),
             ..Default::default()
         };
 
@@ -214,7 +219,6 @@ impl SubscriptionTestCluster {
             SystemPackageTaskArgs::default(),
             SubscriptionArgs {
                 checkpoint_stream_url: Some(stream_url.parse().unwrap()),
-                ..Default::default()
             },
             "0.0.0",
             graphql_config,
@@ -280,7 +284,7 @@ impl SubscriptionTestCluster {
         &self,
         query: &str,
     ) -> std::pin::Pin<Box<dyn tokio_stream::Stream<Item = Value> + Send>> {
-        self.post_subscription(query, None).await
+        self.subscribe_with_variables(query, None).await
     }
 
     /// Like `subscribe`, but binds GraphQL variables (e.g. `json!({"sender": "0x..."})`).

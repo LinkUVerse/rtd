@@ -8,12 +8,12 @@ use rtd_move_build::BuildConfig;
 use rtd_rpc::Client;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::changed_object::IdOperation;
-use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
+use rtd_rpc::proto::sui::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest;
+use rtd_rpc::proto::sui::rpc::v2::changed_object::IdOperation;
+use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
 use rtd_types::Identifier;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::CallArg;
@@ -75,7 +75,7 @@ async fn test_unchanged_loaded_runtime_objects() {
     let objects = client
         .state_client()
         .list_owned_objects(
-            rtd_rpc::proto::rtd::rpc::v2::ListOwnedObjectsRequest::default()
+            rtd_rpc::proto::sui::rpc::v2::ListOwnedObjectsRequest::default()
                 .with_owner(address.to_string())
                 .with_read_mask(FieldMask::from_str("object_id,version,digest,object_type")),
         )
@@ -198,7 +198,7 @@ async fn test_tto_receive_twice() {
         )],
         owner: address,
         price: 1000,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);
@@ -398,7 +398,7 @@ async fn test_tto_receive_twice() {
     let t = client
         .ledger_client()
         .get_transaction(
-            rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
+            rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
                 .with_read_mask(FieldMask::from_paths(["*"])),
         )
         .await
@@ -476,7 +476,7 @@ async fn test_tto_success() {
         )],
         owner: address,
         price: 1000,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);
@@ -656,7 +656,7 @@ async fn test_tto_success() {
     let t = client
         .ledger_client()
         .get_transaction(
-            rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
+            rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
                 .with_read_mask(FieldMask::from_paths(["*"])),
         )
         .await
@@ -776,7 +776,7 @@ async fn test_tto_success() {
     let t = client
         .ledger_client()
         .get_transaction(
-            rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
+            rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
                 .with_read_mask(FieldMask::from_paths(["*"])),
         )
         .await
@@ -840,7 +840,7 @@ async fn test_receive_input() {
         )],
         owner: address,
         price: 1000,
-        budget: 100_000_000,
+        budget: 2_000_000_000,
     };
 
     let kind = TransactionKind::ProgrammableTransaction(ptb);
@@ -1020,7 +1020,7 @@ async fn test_receive_input() {
     let t = client
         .ledger_client()
         .get_transaction(
-            rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
+            rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest::new(&(*txn.digest()).into())
                 .with_read_mask(FieldMask::from_paths(["*"])),
         )
         .await

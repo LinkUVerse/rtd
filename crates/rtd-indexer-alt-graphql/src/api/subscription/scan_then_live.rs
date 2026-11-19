@@ -639,7 +639,7 @@ mod tests {
 
     fn checkpoint(height: u64) -> Arc<ProcessedCheckpoint> {
         let source = TestCheckpointBuilder::new(height).build_checkpoint();
-        let proto = rtd_rpc::proto::rtd::rpc::v2::Checkpoint::merge_from(
+        let proto = rtd_rpc::proto::sui::rpc::v2::Checkpoint::merge_from(
             &source,
             &FieldMaskTree::from(FieldMask::from_paths(["*"])),
         );

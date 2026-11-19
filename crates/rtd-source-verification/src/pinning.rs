@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use move_package_alt::SourcePackageLayout;
+use move_package::SourcePackageLayout;
 
 /// A dependency pinned to a revision that can move, such as a branch or a tag.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -121,7 +121,7 @@ mod tests {
     fn pinned_lock_reports_nothing() {
         let lock = r#"
             [pinned.mainnet.token]
-            source = { git = "https://example.com/pinned-package.git", rev = "5e82e2dd1ea7d47957855ddc66f835585d6fe091" }
+            source = { git = "https://github.com/LinkUVerse/deepbookv3.git", rev = "5e82e2dd1ea7d47957855ddc66f835585d6fe091" }
         "#;
 
         assert!(moving_revisions_in(lock).is_empty());

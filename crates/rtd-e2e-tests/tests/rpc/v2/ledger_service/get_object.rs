@@ -4,11 +4,11 @@
 use rtd_macros::sim_test;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
-use rtd_rpc::proto::rtd::rpc::v2::Object;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsRequest;
+use rtd_rpc::proto::sui::rpc::v2::BatchGetObjectsResponse;
+use rtd_rpc::proto::sui::rpc::v2::GetObjectRequest;
+use rtd_rpc::proto::sui::rpc::v2::Object;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
 use rtd_sdk_types::Address;
 use test_cluster::TestClusterBuilder;
 

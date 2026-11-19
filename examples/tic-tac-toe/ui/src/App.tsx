@@ -18,7 +18,7 @@ function App() {
     const ctx = useRtdClientContext();
 
     const chain = account?.chains?.find((c) => c.startsWith("rtd:"))?.replace(/^rtd:/, "");
-    if (chain && chain in networkConfig) {
+    if (chain) {
         console.debug("Configuring app for", chain);
         ctx.selectNetwork(chain);
     }
@@ -59,7 +59,8 @@ function Content() {
 
         return (
             <Error title="App not available">
-                Deploy the Move package on RTD first. Available networks: {availableNetworks.join(", ") || "none"}.
+                This app is only available on {availableNetworks.join(", ")}. Please switch your
+                wallet to a supported network.
             </Error>
         );
     } else if (path === "") {

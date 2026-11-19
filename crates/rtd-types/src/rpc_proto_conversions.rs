@@ -6,33 +6,30 @@
 use crate::crypto::RtdSignature;
 use nonempty::NonEmpty;
 
-fn ms_to_timestamp(ms: u64) -> prost_types::Timestamp {
+fn seconds_to_timestamp(seconds: u64) -> prost_types::Timestamp {
     prost_types::Timestamp {
-        seconds: (ms / 1000) as _,
-        nanos: ((ms % 1000) * 1_000_000) as _,
+        seconds: i64::try_from(seconds).unwrap_or(i64::MAX),
+        nanos: 0,
     }
 }
 
-fn timestamp_to_ms(timestamp: &prost_types::Timestamp) -> Result<u64, &'static str> {
-    let seconds: u64 = timestamp
+/// Transaction expiration timestamps are whole Unix seconds, so a fractional second is rejected.
+fn timestamp_to_seconds(timestamp: &prost_types::Timestamp) -> Result<u64, &'static str> {
+    if timestamp.nanos != 0 {
+        return Err("invalid timestamp: expiration timestamps must be whole seconds");
+    }
+    timestamp
         .seconds
         .try_into()
-        .map_err(|_| "invalid timestamp: negative seconds")?;
-    let nanos: u64 = timestamp
-        .nanos
-        .try_into()
-        .map_err(|_| "invalid timestamp: negative nanos")?;
-    seconds
-        .checked_mul(1000)
-        .and_then(|ms| ms.checked_add(nanos / 1_000_000))
-        .ok_or("invalid timestamp: out of range")
+        .map_err(|_| "invalid timestamp: negative seconds")
 }
+
 use crate::message_envelope::Message as _;
 use fastcrypto::traits::ToFromBytes;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::merge::Merge;
 use rtd_rpc::proto::TryFromProtoError;
-use rtd_rpc::proto::rtd::rpc::v2::*;
+use rtd_rpc::proto::sui::rpc::v2::*;
 
 //
 // CheckpointSummary
@@ -60,7 +57,7 @@ impl Merge<&crate::full_checkpoint_content::Checkpoint> for Checkpoint {
             let set = source
                 .object_set
                 .iter()
-                .map(|o| rtd_rpc::proto::rtd::rpc::v2::Object::merge_from(o, &submask))
+                .map(|o| rtd_rpc::proto::sui::rpc::v2::Object::merge_from(o, &submask))
                 .collect();
             self.objects = Some(ObjectSet::default().with_objects(set));
         }
@@ -923,12 +920,12 @@ impl From<crate::rtd_system_state::rtd_system_state_inner_v1::StakingPoolV1> for
         message.id = Some(id.to_canonical_string(true));
         message.activation_epoch = activation_epoch;
         message.deactivation_epoch = deactivation_epoch;
-        message.rtd_balance = Some(rtd_balance);
+        message.sui_balance = Some(rtd_balance);
         message.rewards_pool = Some(rewards_pool.value());
         message.pool_token_balance = Some(pool_token_balance);
         message.exchange_rates = Some(exchange_rates.into());
         message.pending_stake = Some(pending_stake);
-        message.pending_total_rtd_withdraw = Some(pending_total_rtd_withdraw);
+        message.pending_total_sui_withdraw = Some(pending_total_rtd_withdraw);
         message.pending_pool_token_withdraw = Some(pending_pool_token_withdraw);
         message.extra_fields = Some(extra_fields.into());
         message
@@ -1163,11 +1160,11 @@ impl TryFrom<&Validator>
                 .map_err(|e| TryFromProtoError::invalid("staking_pool_id", e))?,
             staking_pool_activation_epoch: v.staking_pool().activation_epoch_opt(),
             staking_pool_deactivation_epoch: v.staking_pool().deactivation_epoch_opt(),
-            staking_pool_rtd_balance: v.staking_pool().rtd_balance(),
+            staking_pool_rtd_balance: v.staking_pool().sui_balance(),
             rewards_pool: v.staking_pool().rewards_pool(),
             pool_token_balance: v.staking_pool().pool_token_balance(),
             pending_stake: v.staking_pool().pending_stake(),
-            pending_total_rtd_withdraw: v.staking_pool().pending_total_rtd_withdraw(),
+            pending_total_rtd_withdraw: v.staking_pool().pending_total_sui_withdraw(),
             pending_pool_token_withdraw: v.staking_pool().pending_pool_token_withdraw(),
             exchange_rates_id: v
                 .staking_pool()
@@ -1271,7 +1268,7 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
             E::InsufficientCoinBalance => ExecutionErrorKind::InsufficientCoinBalance,
             E::CoinBalanceOverflow => ExecutionErrorKind::CoinBalanceOverflow,
             E::PublishErrorNonZeroAddress => ExecutionErrorKind::PublishErrorNonZeroAddress,
-            E::RtdMoveVerificationError => ExecutionErrorKind::RtdMoveVerificationError,
+            E::RtdMoveVerificationError => ExecutionErrorKind::SuiMoveVerificationError,
             E::MovePrimitiveRuntimeError(location) => {
                 message.error_details = location.0.map(|l| {
                     let mut abort = MoveAbort::default();
@@ -1355,7 +1352,7 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
                 ExecutionErrorKind::WrittenObjectsTooLarge
             }
             E::CertificateDenied => ExecutionErrorKind::CertificateDenied,
-            E::RtdMoveVerificationTimedout => ExecutionErrorKind::RtdMoveVerificationTimedout,
+            E::RtdMoveVerificationTimedout => ExecutionErrorKind::SuiMoveVerificationTimedout,
             E::SharedObjectOperationNotAllowed => {
                 ExecutionErrorKind::ConsensusObjectOperationNotAllowed
             }
@@ -1420,6 +1417,9 @@ impl From<crate::execution_status::ExecutionErrorKind> for ExecutionError {
                 message.set_object_id(id.to_canonical_string(true));
                 ExecutionErrorKind::NonExclusiveWriteInputObjectModified
             }
+            // TODO: map to a dedicated kind once the rtd-rpc proto has one. The description
+            // still carries the error text.
+            E::TransactionExpired => ExecutionErrorKind::Unknown,
         };
 
         message.set_kind(kind);
@@ -1692,6 +1692,7 @@ impl From<crate::crypto::SignatureScheme> for SignatureScheme {
             S::MultiSig => Self::Multisig,
             S::ZkLoginAuthenticator => Self::Zklogin,
             S::PasskeyAuthenticator => Self::Passkey,
+            S::MLDSA65 => Self::Mldsa65,
         }
     }
 }
@@ -1708,12 +1709,11 @@ impl From<crate::crypto::Signature> for SimpleSignature {
 
 impl From<&crate::crypto::Signature> for SimpleSignature {
     fn from(value: &crate::crypto::Signature) -> Self {
-        let scheme: SignatureScheme = value.scheme().into();
         let signature = value.signature_bytes();
         let public_key = value.public_key_bytes();
 
         let mut message = Self::default();
-        message.scheme = Some(scheme.into());
+        message.set_scheme(value.scheme().into());
         message.signature = Some(signature.to_vec().into());
         message.public_key = Some(public_key.to_vec().into());
         message
@@ -1746,7 +1746,8 @@ impl From<&crate::crypto::PublicKey> for MultisigMemberPublicKey {
             crate::crypto::PublicKey::Ed25519(_)
             | crate::crypto::PublicKey::Secp256k1(_)
             | crate::crypto::PublicKey::Secp256r1(_)
-            | crate::crypto::PublicKey::Passkey(_) => {
+            | crate::crypto::PublicKey::Passkey(_)
+            | crate::crypto::PublicKey::MLDSA65(_) => {
                 message.public_key = Some(value.as_ref().to_vec().into());
             }
             crate::crypto::PublicKey::ZkLogin(z) => {
@@ -1810,27 +1811,33 @@ impl From<&crate::crypto::CompressedSignature> for MultisigMemberSignature {
         let scheme = match value {
             crate::crypto::CompressedSignature::Ed25519(b) => {
                 message.signature = Some(b.0.to_vec().into());
-                SignatureScheme::Ed25519
+                Some(SignatureScheme::Ed25519)
             }
             crate::crypto::CompressedSignature::Secp256k1(b) => {
                 message.signature = Some(b.0.to_vec().into());
-                SignatureScheme::Secp256k1
+                Some(SignatureScheme::Secp256k1)
             }
             crate::crypto::CompressedSignature::Secp256r1(b) => {
                 message.signature = Some(b.0.to_vec().into());
-                SignatureScheme::Secp256r1
+                Some(SignatureScheme::Secp256r1)
             }
             crate::crypto::CompressedSignature::ZkLogin(_z) => {
                 //TODO
-                SignatureScheme::Zklogin
+                Some(SignatureScheme::Zklogin)
             }
             crate::crypto::CompressedSignature::Passkey(_p) => {
                 //TODO
-                SignatureScheme::Passkey
+                Some(SignatureScheme::Passkey)
+            }
+            crate::crypto::CompressedSignature::MLDSA65(b) => {
+                message.signature = Some(b.0.to_vec().into());
+                Some(SignatureScheme::Mldsa65)
             }
         };
 
-        message.set_scheme(scheme);
+        if let Some(scheme) = scheme {
+            message.set_scheme(scheme);
+        }
         message
     }
 }
@@ -1889,16 +1896,16 @@ impl Merge<&crate::signature::GenericSignature> for UserSignature {
                 if mask.contains(Self::MULTISIG_FIELD) {
                     self.signature = Some(Signature::Multisig(multi_sig.into()));
                 }
-                SignatureScheme::Multisig
+                Some(SignatureScheme::Multisig)
             }
             crate::signature::GenericSignature::MultiSigLegacy(multi_sig_legacy) => {
                 if mask.contains(Self::MULTISIG_FIELD) {
                     self.signature = Some(Signature::Multisig(multi_sig_legacy.into()));
                 }
-                SignatureScheme::Multisig
+                Some(SignatureScheme::Multisig)
             }
             crate::signature::GenericSignature::Signature(signature) => {
-                let scheme = signature.scheme().into();
+                let scheme = Some(SignatureScheme::from(signature.scheme()));
                 if mask.contains(Self::SIMPLE_FIELD) {
                     self.signature = Some(Signature::Simple(signature.into()));
                 }
@@ -1908,17 +1915,19 @@ impl Merge<&crate::signature::GenericSignature> for UserSignature {
                 if mask.contains(Self::ZKLOGIN_FIELD) {
                     self.signature = Some(Signature::Zklogin(z.into()));
                 }
-                SignatureScheme::Zklogin
+                Some(SignatureScheme::Zklogin)
             }
             crate::signature::GenericSignature::PasskeyAuthenticator(p) => {
                 if mask.contains(Self::PASSKEY_FIELD) {
                     self.signature = Some(Signature::Passkey(p.into()));
                 }
-                SignatureScheme::Passkey
+                Some(SignatureScheme::Passkey)
             }
         };
 
-        if mask.contains(Self::SCHEME_FIELD) {
+        if mask.contains(Self::SCHEME_FIELD)
+            && let Some(scheme) = scheme
+        {
             self.set_scheme(scheme);
         }
     }
@@ -2326,8 +2335,8 @@ impl From<crate::transaction::TransactionExpiration> for TransactionExpiration {
             } => {
                 message.epoch = max_epoch;
                 message.min_epoch = min_epoch;
-                message.min_timestamp = min_timestamp.map(ms_to_timestamp);
-                message.max_timestamp = max_timestamp.map(ms_to_timestamp);
+                message.min_timestamp = min_timestamp.map(seconds_to_timestamp);
+                message.max_timestamp = max_timestamp.map(seconds_to_timestamp);
                 message.set_chain(rtd_sdk_types::Digest::new(*chain.as_bytes()));
                 message.set_nonce(nonce);
 
@@ -2344,8 +2353,8 @@ impl From<crate::transaction::TransactionExpiration> for TransactionExpiration {
             } => {
                 message.epoch = max_epoch;
                 message.min_epoch = min_epoch;
-                message.min_timestamp = min_timestamp.map(ms_to_timestamp);
-                message.max_timestamp = max_timestamp.map(ms_to_timestamp);
+                message.min_timestamp = min_timestamp.map(seconds_to_timestamp);
+                message.max_timestamp = max_timestamp.map(seconds_to_timestamp);
                 message.set_chain(rtd_sdk_types::Digest::new(*chain.as_bytes()));
                 message.set_nonce(nonce);
                 if let Some(allowed) = allowed_proposers {
@@ -2391,12 +2400,12 @@ impl TryFrom<&TransactionExpiration> for crate::transaction::TransactionExpirati
                 let min_timestamp = value
                     .min_timestamp
                     .as_ref()
-                    .map(timestamp_to_ms)
+                    .map(timestamp_to_seconds)
                     .transpose()?;
                 let max_timestamp = value
                     .max_timestamp
                     .as_ref()
-                    .map(timestamp_to_ms)
+                    .map(timestamp_to_seconds)
                     .transpose()?;
                 let min_epoch = value.min_epoch;
                 let max_epoch = value.epoch;
@@ -3680,13 +3689,47 @@ impl TryFrom<&ObjectSet> for crate::full_checkpoint_content::ObjectSet {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn test_expiration_timestamp_conversions() {
+        assert_eq!(
+            seconds_to_timestamp(1_700_000_000),
+            prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }
+        );
+        assert_eq!(seconds_to_timestamp(u64::MAX).seconds, i64::MAX);
+        assert_eq!(
+            timestamp_to_seconds(&prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 0,
+            }),
+            Ok(1_700_000_000)
+        );
+        assert!(
+            timestamp_to_seconds(&prost_types::Timestamp {
+                seconds: 1_700_000_000,
+                nanos: 500_000_000,
+            })
+            .is_err()
+        );
+        assert!(
+            timestamp_to_seconds(&prost_types::Timestamp {
+                seconds: -1,
+                nanos: 0,
+            })
+            .is_err()
+        );
+    }
+    use super::{seconds_to_timestamp, timestamp_to_seconds};
     use crate::effects::TransactionEffectsAPI;
 
     #[test]
     fn transaction_effects_v1_proto_includes_lamport_version() {
         let effects = crate::effects::TransactionEffectsV1::default();
         let lamport_version = effects.lamport_version().value();
-        let proto: rtd_rpc::proto::rtd::rpc::v2::TransactionEffects =
+        let proto: rtd_rpc::proto::sui::rpc::v2::TransactionEffects =
             crate::effects::TransactionEffects::V1(effects).into();
 
         assert_eq!(proto.lamport_version, Some(lamport_version));

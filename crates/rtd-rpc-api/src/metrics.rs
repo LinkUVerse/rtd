@@ -551,7 +551,7 @@ impl ListRequestMetrics {
 
     pub(crate) fn finish_success(
         &mut self,
-        reason: rtd_rpc::proto::rtd::rpc::v2::QueryEndReason,
+        reason: rtd_rpc::proto::sui::rpc::v2::QueryEndReason,
         bitmap_buckets_evaluated: Option<usize>,
     ) {
         let Some(inner) = &mut self.inner else {
@@ -562,13 +562,13 @@ impl ListRequestMetrics {
         }
         inner.success_finished = true;
         let reason = match reason {
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::ItemLimit => "item_limit",
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::ScanLimit => "scan_limit",
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::LedgerTip => "ledger_tip",
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::CheckpointBound => "checkpoint_bound",
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::CursorBound => "cursor_bound",
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::ItemLimit => "item_limit",
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::ScanLimit => "scan_limit",
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::LedgerTip => "ledger_tip",
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::CheckpointBound => "checkpoint_bound",
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::CursorBound => "cursor_bound",
             // Validation guarantees successful List streams always have a concrete end reason.
-            rtd_rpc::proto::rtd::rpc::v2::QueryEndReason::Unknown => {
+            rtd_rpc::proto::sui::rpc::v2::QueryEndReason::Unknown => {
                 unreachable!("validated successful List stream has an unspecified end reason")
             }
             _ => unreachable!("validated successful List stream has an unsupported end reason"),
@@ -726,7 +726,7 @@ mod tests {
     use prost_types::{
         FileDescriptorProto, FileDescriptorSet, MethodDescriptorProto, ServiceDescriptorProto,
     };
-    use rtd_rpc::proto::rtd::rpc::v2::{
+    use rtd_rpc::proto::sui::rpc::v2::{
         ListTransactionsResponse, QueryEnd, SubscribeCheckpointsResponse, SubscribeEventsResponse,
         SubscribeTransactionsResponse, Watermark,
     };

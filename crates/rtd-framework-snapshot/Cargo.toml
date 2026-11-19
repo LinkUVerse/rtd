@@ -2,7 +2,7 @@
 name = "rtd-framework-snapshot"
 version.workspace = true
 edition = "2024"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <eng@linkuverse.com>"]
 description = "Tool to create a bytecode snapshot of the current rtd-framework"
 license = "Apache-2.0"
 publish = false
@@ -24,4 +24,4 @@ rtd-types.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 rtd-package-alt.workspace = true
-move-package-alt.workspace = true
+move-package.workspace = true

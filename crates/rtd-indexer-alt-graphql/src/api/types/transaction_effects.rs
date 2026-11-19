@@ -12,7 +12,7 @@ use fastcrypto::encoding::Base58;
 use fastcrypto::encoding::Encoding;
 use rtd_indexer_alt_reader::kv_loader::KvLoader;
 use rtd_indexer_alt_reader::kv_loader::TransactionContents as NativeTransactionContents;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::effects::TransactionEffects as NativeTransactionEffects;
 use rtd_types::effects::TransactionEffectsAPI;

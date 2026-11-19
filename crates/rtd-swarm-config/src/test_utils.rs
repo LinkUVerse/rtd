@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::network_config::NetworkConfig;
+use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
+use std::collections::HashMap;
 use rtd_types::{
     base_types::AuthorityName,
     committee::{Committee, EpochId, StakeUnit},
@@ -15,8 +17,6 @@ use rtd_types::{
         VerifiedCheckpointContents, VersionedFullCheckpointContents,
     },
 };
-use shared_crypto::intent::{Intent, IntentMessage, IntentScope};
-use std::collections::HashMap;
 
 pub struct CommitteeFixture {
     epoch: EpochId,
@@ -142,6 +142,21 @@ impl CommitteeFixture {
         previous_checkpoint: Option<VerifiedCheckpoint>,
     ) -> MakeCheckpointResults {
         self.make_checkpoints(number_of_checkpoints, previous_checkpoint, random_contents)
+    }
+
+    pub fn make_random_checkpoints_with_transactions(
+        &self,
+        number_of_checkpoints: usize,
+        previous_checkpoint: Option<VerifiedCheckpoint>,
+        transactions_per_checkpoint: usize,
+    ) -> MakeCheckpointResults {
+        self.make_checkpoints(number_of_checkpoints, previous_checkpoint, || {
+            VerifiedCheckpointContents::new_unchecked(VersionedFullCheckpointContents::V1(
+                FullCheckpointContents::random_with_transactions_for_testing(
+                    transactions_per_checkpoint,
+                ),
+            ))
+        })
     }
 
     pub fn make_empty_checkpoints(

@@ -4,7 +4,7 @@
 // Conflicting user arguments around an injected `&mut TxContext` are still rejected, and
 // reported argument indices count the injected TxContext.
 
-//# init --addresses test=0x0 --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0
 
 //# publish
 module test::m;
@@ -22,8 +22,7 @@ public fun new(ctx: &mut TxContext): X {
     X { id: object::new(ctx), y: Y { f: 0 } }
 }
 
-public fun mut_ctx_imm(_a: &mut X, _ctx: &mut TxContext, _b: &X) {
-}
+public fun mut_ctx_imm(_a: &mut X, _ctx: &mut TxContext, _b: &X) {}
 
 public fun delete(x: X) {
     let X { id, y: Y { f: _ } } = x;

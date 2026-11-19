@@ -6,10 +6,11 @@ use std::str::FromStr;
 
 use anyhow::{Result, anyhow};
 
+use shared_crypto::intent::Intent;
 use rtd_keys::keystore::{AccountKeystore, Keystore};
 use rtd_move_build::BuildConfig;
 use rtd_rpc::client::Client as GrpcClient;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
 use rtd_types::base_types::{ObjectID, ObjectRef, RtdAddress};
 use rtd_types::coin::COIN_MODULE_NAME;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
@@ -17,9 +18,10 @@ use rtd_types::transaction::{
     Command, ObjectArg, Transaction, TransactionData, TransactionDataAPI,
 };
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID, TypeTag};
-use shared_crypto::intent::Intent;
 
 const DEFAULT_GAS_BUDGET: u64 = 900_000_000;
+// Covers the publish charge of 1 RTD plus 0.01 RTD per module and per dependency.
+const PUBLISH_GAS_BUDGET: u64 = 2_000_000_000;
 pub const TEST_COIN_DECIMALS: u64 = 6;
 
 #[derive(Debug, Clone)]
@@ -57,7 +59,7 @@ pub async fn init_package(
     };
 
     let price = client.get_reference_gas_price().await?;
-    let budget = DEFAULT_GAS_BUDGET;
+    let budget = PUBLISH_GAS_BUDGET;
     let (_, gas_object_data) = test_cluster
         .wallet
         .gas_for_owner_budget(sender, budget, Default::default())

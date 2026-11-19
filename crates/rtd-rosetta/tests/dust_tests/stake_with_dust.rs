@@ -5,19 +5,19 @@ use std::num::NonZeroUsize;
 
 use anyhow::{Result, anyhow};
 use prost_types::FieldMask;
+use serde_json::json;
+use shared_crypto::intent::Intent;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_rosetta::{CoinMetadataCache, operations::Operations};
 use rtd_rpc::client::Client as GrpcClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     BatchGetObjectsRequest, GetEpochRequest, GetObjectRequest, GetTransactionRequest,
 };
 use rtd_types::{
     programmable_transaction_builder::ProgrammableTransactionBuilder,
     transaction::{Transaction, TransactionData},
 };
-use serde_json::json;
-use shared_crypto::intent::Intent;
 use test_cluster::TestClusterBuilder;
 
 use crate::test_utils::{execute_transaction, get_all_coins, get_object_ref, wait_for_transaction};

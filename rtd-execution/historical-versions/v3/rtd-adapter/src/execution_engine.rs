@@ -11,6 +11,8 @@ mod checked {
     use move_binary_format::CompiledModule;
     use move_trace_format::format::MoveTraceBuilder;
     use move_vm_runtime::move_vm::MoveVM;
+    use std::collections::BTreeMap;
+    use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
     use rtd_types::accumulator_root::{ACCUMULATOR_ROOT_CREATE_FUNC, ACCUMULATOR_ROOT_MODULE};
     use rtd_types::balance::{
         BALANCE_CREATE_REWARDS_FUNCTION_NAME, BALANCE_DESTROY_REBATES_FUNCTION_NAME,
@@ -27,8 +29,6 @@ mod checked {
         RANDOMNESS_STATE_UPDATE_FUNCTION_NAME,
     };
     use rtd_types::{BRIDGE_ADDRESS, RTD_BRIDGE_OBJECT_ID, RTD_RANDOMNESS_STATE_OBJECT_ID};
-    use std::collections::BTreeMap;
-    use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::Arc};
     use tracing::{info, instrument, trace, warn};
 
     use crate::adapter::new_move_vm;
@@ -65,10 +65,10 @@ mod checked {
     use rtd_types::gas::RtdGasStatus;
     use rtd_types::id::UID;
     use rtd_types::inner_temporary_store::InnerTemporaryStore;
+    use rtd_types::storage::BackingStore;
     #[cfg(msim)]
     use rtd_types::rtd_system_state::advance_epoch_result_injection::maybe_modify_result;
     use rtd_types::rtd_system_state::{ADVANCE_EPOCH_SAFE_MODE_FUNCTION_NAME, AdvanceEpochParams};
-    use rtd_types::storage::BackingStore;
     use rtd_types::transaction::{
         Argument, AuthenticatorStateExpire, AuthenticatorStateUpdate, CallArg, ChangeEpoch,
         Command, EndOfEpochTransactionKind, GasData, GenesisTransaction, ObjectArg,
@@ -1217,9 +1217,9 @@ mod checked {
             .input(CallArg::Pure(UID::new(RTD_BRIDGE_OBJECT_ID).to_bcs_bytes()))
             .expect("Unable to create Bridge object UID!");
 
-        let bridge_chain_id = if Some(chain_id) == get_mainnet_chain_identifier() {
+        let bridge_chain_id = if chain_id == get_mainnet_chain_identifier() {
             BridgeChainId::RtdMainnet as u8
-        } else if Some(chain_id) == get_testnet_chain_identifier() {
+        } else if chain_id == get_testnet_chain_identifier() {
             BridgeChainId::RtdTestnet as u8
         } else {
             // How do we distinguish devnet from other test envs?

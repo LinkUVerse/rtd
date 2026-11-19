@@ -1,7 +1,7 @@
 [package]
 name = "rtd-protocol-config"
 version = "0.1.0"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -30,4 +30,6 @@ rand.workspace = true
 insta.workspace = true
 prost-types.workspace = true
 tempfile.workspace = true
-tokio.workspace = true
+
+[features]
+testing = []

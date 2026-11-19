@@ -50,7 +50,7 @@ UPDATE=1 cargo nextest run -p rtd-framework --test build-system-packages
 "${INSTA[@]}" \
     -p rtd-protocol-config \
     -p rtd-swarm-config \
-    -p rtd-open-rpc \
+    \
     -p rtd-types
 "${INSTA[@]}" -p rtd-core -- snapshot_tests
 "${INSTA[@]}" -p rtd-indexer-alt-graphql -- test_schema_sdl_export

@@ -22,7 +22,7 @@ use crate::{
         attributes::expand_attributes,
         byte_string, hex_string,
         name_validation::{
-            IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES, IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES,
+            IMPLICIT_STD_MEMBERS, IMPLICIT_STD_MODULES, IMPLICIT_RTD_MEMBERS, IMPLICIT_RTD_MODULES,
             ModuleMemberKind, NameCase, check_restricted_name_all_cases, check_valid_address_name,
             check_valid_function_parameter_name, check_valid_local_name,
             check_valid_module_member_alias, check_valid_module_member_name,
@@ -1228,7 +1228,7 @@ fn module_(
         )));
     }
     let attributes = expand_attributes(context, AttributePosition::Module, attributes);
-    let warning_filter = module_warning_filter(context, package_name, &attributes);
+    let warning_filter = module_warning_filter(context, &attributes);
     context.push_warning_filter_scope(warning_filter.clone());
     assert!(context.address.is_none());
     assert!(address.is_none());
@@ -1597,11 +1597,7 @@ fn stdlib_definitions(context: &mut Context, mloc: Loc) -> StdlibDefinitions {
 
 /// Like warning_filter, but it will filter _all_ warnings for non-source definitions (or for any
 /// dependency packages)
-fn module_warning_filter(
-    context: &mut Context,
-    package: Option<Symbol>,
-    attributes: &E::Attributes,
-) -> FilterScope {
+fn module_warning_filter(context: &mut Context, attributes: &E::Attributes) -> FilterScope {
     let is_dep = !matches!(
         context.defn_context.target_kind,
         P::TargetKind::Source { .. }
@@ -1614,12 +1610,7 @@ fn module_warning_filter(
         let _ = warning_filter_(context, attributes);
         dependency_drop_filter_scope()
     } else {
-        let mut overrides = warning_filter_(context, attributes);
-        let config = context.env().package_config(package);
-        for (id, o) in config.warning_filter.filter_entries() {
-            overrides.entry(id).or_insert(o);
-        }
-        FilterScope::new(overrides)
+        warning_filter(context, attributes)
     }
 }
 

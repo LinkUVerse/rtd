@@ -13,9 +13,13 @@ use move_vm_types::{
     loaded_data::runtime_types::Type,
     values::{GlobalValue, Value},
 };
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use rtd_protocol_config::{check_limit_by_meter, LimitThresholdCrossed, ProtocolConfig};
 use rtd_types::{
-    base_types::{MoveObjectType, ObjectID, RtdAddress, SequenceNumber},
+    base_types::{MoveObjectType, ObjectID, SequenceNumber, RtdAddress},
     error::{ExecutionError, VMMemoryLimitExceededSubStatusCode},
     execution::DynamicallyLoadedObjectMetadata,
     execution_status::ExecutionErrorKind,
@@ -24,10 +28,6 @@ use rtd_types::{
     object::{MoveObject, Owner},
     storage::{DeleteKind, RuntimeObjectResolver, WriteKind},
     RTD_CLOCK_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
-};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
 };
 
 pub(crate) mod object_store;

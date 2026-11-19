@@ -5,9 +5,9 @@ use std::ops::{Bound, Range};
 
 use bytes::Bytes;
 use rtd_inverted_index::ScanDirection;
-use rtd_rpc::proto::rtd::rpc::v2::Ordering as ProtoOrdering;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::QueryOptions as ProtoQueryOptions;
+use rtd_rpc::proto::sui::rpc::v2::Ordering as ProtoOrdering;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::QueryOptions as ProtoQueryOptions;
 use rtd_rpc_cursor::CursorToken;
 use rtd_rpc_cursor::Position;
 

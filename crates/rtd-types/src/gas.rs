@@ -11,26 +11,29 @@ use crate::{base_types::ObjectID, gas_model::gas_v2::PerObjectStorage};
 pub mod checked {
 
     use crate::gas::GasUsageReport;
-    use crate::gas_model::gas_predicates::check_for_gas_price_too_high;
+    use crate::gas_model::gas_common::{check_gas_data, check_gas_objects};
+    use crate::gas_model::gas_predicates::{
+        check_for_gas_price_too_high, txn_base_cost_as_multiplier,
+    };
     use crate::gas_model::gas_v2::PerObjectStorage;
     use crate::{
         ObjectID,
         effects::{TransactionEffects, TransactionEffectsAPI},
-        error::{ExecutionError, RtdResult, UserInputError, UserInputResult},
+        error::{ExecutionError, UserInputError, UserInputResult},
         gas_model::{
             gas_v2::RtdGasStatus as RtdGasStatusV2, gas_v3::RtdGasStatus as RtdGasStatusV3,
             tables::GasStatus,
         },
         object::Object,
         rtd_serde::{BigInt, Readable},
-        transaction::ObjectReadResult,
+        transaction::{GasData, ObjectReadResult, TransactionKind, is_gasless_transaction},
     };
     use enum_dispatch::enum_dispatch;
     use itertools::MultiUnzip;
-    use rtd_protocol_config::ProtocolConfig;
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
     use serde_with::serde_as;
+    use rtd_protocol_config::ProtocolConfig;
 
     #[enum_dispatch]
     pub trait RtdGasStatusAPI {
@@ -58,13 +61,6 @@ pub mod checked {
         fn charge_storage_and_rebate(&mut self) -> Result<(), ExecutionError>;
         fn adjust_computation_on_out_of_gas(&mut self);
         fn gas_usage_report(&self) -> GasUsageReport;
-        fn check_gas_balance(
-            &self,
-            gas_objs: &[&ObjectReadResult],
-            gas_budget: u64,
-            available_address_balance_gas: u64,
-        ) -> UserInputResult;
-        fn check_gas_objects(&self, gas_objs: &[&ObjectReadResult]) -> UserInputResult;
         fn per_object_storage(&self) -> &Vec<(ObjectID, PerObjectStorage)>;
     }
 
@@ -80,48 +76,51 @@ pub mod checked {
     }
 
     impl RtdGasStatus {
-        pub fn new(
+        /// Charge reading a package input. Earlier gas models charge packages as other inputs.
+        pub fn charge_package_object_read(&mut self, size: usize) -> Result<(), ExecutionError> {
+            match self {
+                Self::V2(status) => status.charge_storage_read(size),
+                Self::V3(status) => status.charge_package_object_read(size),
+            }
+        }
+
+        /// Build the status for execution. Validation lives in `check_gas_price` and
+        /// `check_gas_budget_and_balance`.
+        fn new(
             gas_budget: u64,
             gas_price: u64,
             reference_gas_price: u64,
             config: &ProtocolConfig,
-        ) -> RtdResult<Self> {
-            // Common checks. We may pull them into version specific status as needed, but they
-            // are unlikely to change.
-
-            // gas price must be bigger or equal to reference gas price
-            if gas_price < reference_gas_price {
-                return Err(UserInputError::GasPriceUnderRGP {
-                    gas_price,
-                    reference_gas_price,
-                }
-                .into());
-            }
-            if check_for_gas_price_too_high(config.gas_model_version())
-                && gas_price >= config.max_gas_price()
-            {
-                return Err(UserInputError::GasPriceTooHigh {
-                    max_gas_price: config.max_gas_price(),
-                }
-                .into());
-            }
-
+        ) -> Self {
             // Dispatch by gas model version: v15+ uses the clean gas_v3 pipeline;
             // everything older keeps the legacy gas_v2 path so replay determinism holds.
             if config.gas_model_version() >= 15 {
-                Ok(Self::V3(RtdGasStatusV3::new_with_budget(
+                Self::V3(RtdGasStatusV3::new_with_budget(
                     gas_budget,
                     gas_price,
                     reference_gas_price,
                     config,
-                )))
+                ))
             } else {
-                Ok(Self::V2(RtdGasStatusV2::new_with_budget(
+                Self::V2(RtdGasStatusV2::new_with_budget(
                     gas_budget,
                     gas_price,
                     reference_gas_price,
                     config,
-                )))
+                ))
+            }
+        }
+
+        /// The status a transaction is executed with, derived from what signing validated.
+        pub fn for_execution(
+            gas_data: &GasData,
+            kind: &TransactionKind,
+            reference_gas_price: u64,
+            config: &ProtocolConfig,
+        ) -> Self {
+            match execution_gas_params(gas_data, kind, reference_gas_price, config) {
+                None => Self::new_unmetered(config),
+                Some((budget, price)) => Self::new(budget, price, reference_gas_price, config),
             }
         }
 
@@ -134,6 +133,79 @@ pub mod checked {
                 Self::V2(RtdGasStatusV2::new_unmetered())
             }
         }
+    }
+
+    /// Budget and price a transaction is metered with, or `None` when it runs unmetered. Gasless
+    /// transactions are metered at the reference price up to the computation cap.
+    pub fn execution_gas_params(
+        gas_data: &GasData,
+        kind: &TransactionKind,
+        reference_gas_price: u64,
+        config: &ProtocolConfig,
+    ) -> Option<(u64, u64)> {
+        if gas_data.is_unmetered() || kind.is_system_tx() {
+            return None;
+        }
+        if config.enable_gasless() && is_gasless_transaction(gas_data, kind) {
+            let price = reference_gas_price.max(1);
+            let budget = config.gasless_max_computation_units().saturating_mul(price);
+            return Some((budget, price));
+        }
+        Some((gas_data.budget, gas_data.price))
+    }
+
+    /// Signing-time check of the gas price against the reference price and the maximum.
+    pub fn check_gas_price(
+        gas_price: u64,
+        reference_gas_price: u64,
+        config: &ProtocolConfig,
+    ) -> UserInputResult {
+        if gas_price < reference_gas_price {
+            return Err(UserInputError::GasPriceUnderRGP {
+                gas_price,
+                reference_gas_price,
+            });
+        }
+        if check_for_gas_price_too_high(config.gas_model_version())
+            && gas_price >= config.max_gas_price()
+        {
+            return Err(UserInputError::GasPriceTooHigh {
+                max_gas_price: config.max_gas_price(),
+            });
+        }
+        Ok(())
+    }
+
+    /// The smallest budget a transaction may sign for: the base transaction cost at the signed
+    /// price, or the flat base cost when `txn_base_cost_as_multiplier` is off.
+    pub fn minimum_gas_budget(config: &ProtocolConfig, gas_price: u64) -> u64 {
+        let base_tx_cost = config.base_tx_cost_fixed();
+        if txn_base_cost_as_multiplier(config) {
+            base_tx_cost
+                .checked_mul(gas_price)
+                .expect("base tx cost cannot overflow: gas_price is bounded by max_gas_price")
+        } else {
+            base_tx_cost
+        }
+    }
+
+    /// Signing-time check that the gas objects are address owned and that the budget is within
+    /// bounds and covered by them plus the address balance.
+    pub fn check_gas_budget_and_balance(
+        gas_objs: &[&ObjectReadResult],
+        gas_budget: u64,
+        gas_price: u64,
+        available_address_balance_gas: u64,
+        config: &ProtocolConfig,
+    ) -> UserInputResult {
+        check_gas_objects(gas_objs)?;
+        check_gas_data(
+            gas_objs,
+            gas_budget,
+            available_address_balance_gas,
+            minimum_gas_budget(config, gas_price),
+            config.max_tx_gas(),
+        )
     }
 
     /// Summary of the charges in a transaction.

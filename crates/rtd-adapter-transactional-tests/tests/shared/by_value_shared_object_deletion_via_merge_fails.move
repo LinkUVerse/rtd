@@ -12,51 +12,51 @@
 
 //# publish
 
-module t2::o2 {
-    use rtd::dynamic_field as df;
-    use rtd::dynamic_object_field as dof;
-    use rtd::rtd::RTD;
-    use rtd::coin::{Self, Coin};
+module t2::o2;
 
-    public struct Obj2 has key, store {
-        id: UID,
-    }
+use rtd::coin::{Self, Coin};
+use rtd::dynamic_field as df;
+use rtd::dynamic_object_field as dof;
+use rtd::rtd::RTD;
 
-    public fun mint_shared_coin(ctx: &mut TxContext) {
-        transfer::public_share_object(coin::zero<RTD>(ctx))
-    }
+public struct Obj2 has key, store {
+    id: UID,
+}
 
-    public fun mint_shared_obj(ctx: &mut TxContext) {
-        transfer::public_share_object(Obj2 { id: object::new(ctx) });
-    }
+public fun mint_shared_coin(ctx: &mut TxContext) {
+    transfer::public_share_object(coin::zero<RTD>(ctx))
+}
 
-    public fun mint_owned_coin(ctx: &mut TxContext) {
-        transfer::public_transfer(coin::zero<RTD>(ctx), @A)
-    }
+public fun mint_shared_obj(ctx: &mut TxContext) {
+    transfer::public_share_object(Obj2 { id: object::new(ctx) });
+}
 
-    public fun deleter(o2: Coin<RTD>) {
-        coin::destroy_zero(o2);
-    }
+public fun mint_owned_coin(ctx: &mut TxContext) {
+    transfer::public_transfer(coin::zero<RTD>(ctx), @A)
+}
 
-    public fun freezer(o2: Coin<RTD>) {
-        transfer::public_freeze_object(o2);
-    }
+public fun deleter(o2: Coin<RTD>) {
+    coin::destroy_zero(o2);
+}
 
-    public fun dofer(parent: &mut Obj2, o2: Coin<RTD>) {
-        dof::add(&mut parent.id, 0u64, o2);
-    }
+public fun freezer(o2: Coin<RTD>) {
+    transfer::public_freeze_object(o2);
+}
 
-    public fun dfer(parent: &mut Obj2, o2: Coin<RTD>) {
-        df::add(&mut parent.id, 0u64, o2);
-    }
+public fun dofer(parent: &mut Obj2, o2: Coin<RTD>) {
+    dof::add(&mut parent.id, 0u64, o2);
+}
 
-    public fun transferer(o2: Coin<RTD>) {
-        transfer::public_transfer(o2, @0x0);
-    }
+public fun dfer(parent: &mut Obj2, o2: Coin<RTD>) {
+    df::add(&mut parent.id, 0u64, o2);
+}
 
-    public fun sharer(o2: Coin<RTD>) {
-        transfer::public_share_object(o2);
-    }
+public fun transferer(o2: Coin<RTD>) {
+    transfer::public_transfer(o2, @0x0);
+}
+
+public fun sharer(o2: Coin<RTD>) {
+    transfer::public_share_object(o2);
 }
 
 // **Merge owned into shared**

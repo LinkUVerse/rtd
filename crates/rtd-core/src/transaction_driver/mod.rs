@@ -31,7 +31,7 @@ use rtd_config::NodeConfig;
 use rtd_types::{
     base_types::AuthorityName,
     committee::EpochId,
-    error::{ErrorCategory, UserInputError},
+    error::{ErrorCategory, RtdErrorKind, UserInputError},
     messages_grpc::{SubmitTxRequest, SubmitTxResult, TxType},
     transaction::{AllowedProposers, TransactionDataAPI as _},
     transaction_executor::ProposerSelector,
@@ -44,10 +44,12 @@ use tracing::instrument;
 use transaction_submitter::*;
 
 use crate::{
+    authority::{AuthorityState, authority_per_epoch_store::check_timestamp_window},
     authority_aggregator::AuthorityAggregator,
     authority_client::AuthorityAPI,
     validator_client_monitor::{
-        OperationFeedback, OperationType, ValidatorClientMetrics, ValidatorClientMonitor,
+        OperationFeedback, OperationType, TransactionClass, ValidatorClientMetrics,
+        ValidatorClientMonitor,
     },
 };
 
@@ -149,10 +151,17 @@ where
         &self.authority_aggregator
     }
 
-    pub fn select_preferred_validators(&self, delta: f64) -> Vec<AuthorityName> {
+    pub fn select_preferred_validators(
+        &self,
+        delta: f64,
+        tx_class: TransactionClass,
+    ) -> Vec<AuthorityName> {
         let authority_aggregator = self.authority_aggregator.load();
-        self.client_monitor
-            .select_shuffled_preferred_validators(&authority_aggregator.committee, delta)
+        self.client_monitor.select_shuffled_preferred_validators(
+            &authority_aggregator.committee,
+            delta,
+            tx_class,
+        )
     }
 
     /// The validators this node would prefer to submit to, as committee indices.
@@ -168,9 +177,15 @@ where
 
         let authority_aggregator = self.authority_aggregator.load();
         let committee = &authority_aggregator.committee;
+        // The set restricts the transaction, so it is chosen from restricted-class
+        // stats — the view staggering holds cannot pollute.
         let mut proposers: Vec<u32> = self
             .client_monitor
-            .select_shuffled_preferred_validators(committee, SELECT_LATENCY_DELTA)
+            .select_shuffled_preferred_validators(
+                committee,
+                SELECT_LATENCY_DELTA,
+                TransactionClass::Restricted,
+            )
             .into_iter()
             .filter_map(|name| committee.authority_index(&name))
             .take(max)
@@ -222,19 +237,51 @@ where
                 amplification_factor
             };
 
+        // Half of transactions skip this check so that validators see transactions outside
+        // their windows.
+        let skip_timestamp_check = linku_common::in_test_configuration()
+            && linku_common::random::get_rng().gen_bool(0.5);
+        let mut not_yet_valid_wait = None;
+        if let Some(tx_data) = tx_data
+            && !skip_timestamp_check
+        {
+            let expiration = tx_data.expiration();
+            let now_ms = AuthorityState::unixtime_now_ms();
+            match check_timestamp_window(expiration, now_ms) {
+                Ok(()) => {}
+                // Validators would reject the transaction until `min_timestamp`, so the driver
+                // waits until then. The wait counts against the finality timeout. A wait that
+                // would outlast it fails at once with a non-retriable error, so that no
+                // background retry submits the transaction after the client sees the failure.
+                Err(error)
+                    if matches!(
+                        error.as_inner(),
+                        RtdErrorKind::TransactionNotYetValid { .. }
+                    ) =>
+                {
+                    let valid_from_ms = expiration.first_valid_timestamp_ms().unwrap_or(now_ms);
+                    let wait = Duration::from_millis(valid_from_ms.saturating_sub(now_ms));
+                    if timeout_duration.is_some_and(|timeout| wait >= timeout) {
+                        return Err(TransactionDriverError::ValidationFailed {
+                            error: error.to_string(),
+                        });
+                    }
+                    not_yet_valid_wait = Some(wait);
+                }
+                Err(error) => {
+                    return Err(TransactionDriverError::ValidationFailed {
+                        error: error.to_string(),
+                    });
+                }
+            }
+        }
+
         let tx_type = request.tx_type();
         let ping_label = if request.ping_type.is_some() {
             "true"
         } else {
             "false"
         };
-        let timer = Instant::now();
-
-        self.metrics
-            .total_transactions_submitted
-            .with_label_values(&[tx_type.as_str(), ping_label])
-            .inc();
-
         let mut backoff = ExponentialBackoff::new(
             Duration::from_millis(100),
             MAX_DRIVE_TRANSACTION_RETRY_DELAY,
@@ -243,6 +290,16 @@ where
         let mut latest_retriable_error = None;
 
         let retry_loop = async {
+            if let Some(wait) = not_yet_valid_wait {
+                sleep(wait).await;
+            }
+            // Started after the wait, so that finality latency excludes the delay the client
+            // chose with `min_timestamp`.
+            let timer = Instant::now();
+            self.metrics
+                .total_transactions_submitted
+                .with_label_values(&[tx_type.as_str(), ping_label])
+                .inc();
             loop {
                 // TODO(fastpath): Check local state before submitting transaction
                 match self
@@ -365,6 +422,18 @@ where
         let tx_type = request.tx_type();
         let tx_digest = request.tx_digest();
         let ping_type = request.ping_type;
+        // Pings carry no transaction, so they are neither restricted nor unrestricted.
+        let tx_class = request.transaction.as_ref().map(|tx| {
+            if tx
+                .transaction_data()
+                .expiration()
+                .restricts_proposers(auth_agg.committee.epoch())
+            {
+                TransactionClass::Restricted
+            } else {
+                TransactionClass::Unrestricted
+            }
+        });
 
         let (name, submit_txn_result) = self
             .submitter
@@ -410,6 +479,7 @@ where
                     } else {
                         OperationType::SharedObjectFinality
                     },
+                    tx_class,
                     ping_type,
                     result: Ok(start_time.elapsed()),
                 });

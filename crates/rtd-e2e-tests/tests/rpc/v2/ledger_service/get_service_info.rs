@@ -3,10 +3,10 @@
 
 use rtd_macros::sim_test;
 use rtd_rpc::client::ResponseExt;
-use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoRequest;
-use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetServiceInfoRequest;
+use rtd_rpc::proto::sui::rpc::v2::GetServiceInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
 use rtd_sdk_types::Digest;
 use test_cluster::TestClusterBuilder;
 

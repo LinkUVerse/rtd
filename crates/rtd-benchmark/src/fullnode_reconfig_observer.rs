@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_trait::async_trait;
+use std::sync::Arc;
 use rtd_core::{
     authority_aggregator::AuthorityAggregator,
     authority_client::NetworkAuthorityClient,
@@ -10,7 +11,6 @@ use rtd_core::{
     transaction_driver::{AuthorityAggregatorUpdatable, ReconfigObserver},
 };
 use rtd_rpc_api::Client;
-use std::sync::Arc;
 use tracing::{debug, error, trace};
 
 /// A ReconfigObserver that polls FullNode periodically

@@ -3,11 +3,9 @@
 
 module bridged_usdt::usdt {
     use std::option;
-
     use rtd::coin;
     use rtd::transfer;
-    use rtd::tx_context;
-    use rtd::tx_context::TxContext;
+    use rtd::tx_context::{Self, TxContext};
 
     struct USDT has drop {}
 
@@ -21,7 +19,7 @@ module bridged_usdt::usdt {
             b"Tether",
             b"Bridged Tether token",
             option::none(),
-            ctx
+            ctx,
         );
         transfer::public_freeze_object(metadata);
         transfer::public_transfer(treasury_cap, tx_context::sender(ctx));

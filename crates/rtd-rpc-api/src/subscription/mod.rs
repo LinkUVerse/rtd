@@ -900,7 +900,7 @@ mod tests {
     use move_core_types::account_address::AccountAddress;
     use move_core_types::identifier::Identifier;
     use move_core_types::language_storage::StructTag;
-    use rtd_rpc::proto::rtd::rpc::v2 as proto;
+    use rtd_rpc::proto::sui::rpc::v2 as proto;
     use rtd_types::base_types::ObjectID;
     use rtd_types::base_types::RtdAddress;
     use rtd_types::event::Event;

@@ -5,7 +5,7 @@ use self::{auth::AllowedPeersUpdatable, metrics::Metrics};
 use anemo::PeerId;
 use anyhow::Result;
 use fastcrypto::groups::bls12381;
-use fastcrypto_tbls::{
+use fastcrypto_threshold::{
     dkg_v1,
     nodes::PartyId,
     tbls::ThresholdBls,
@@ -14,19 +14,19 @@ use fastcrypto_tbls::{
 use linku_common::ZipDebugEqIteratorExt;
 use linku_metrics::spawn_monitored_task;
 use linku_network::anemo_ext::NetworkExt;
-use rtd_config::p2p::RandomnessConfig;
-use rtd_macros::fail_point_if;
-use rtd_types::{
-    base_types::AuthorityName,
-    committee::EpochId,
-    crypto::{RandomnessPartialSignature, RandomnessRound, RandomnessSignature},
-};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, btree_map::BTreeMap},
     ops::Bound,
     sync::Arc,
     time::{self, Duration},
+};
+use rtd_config::p2p::RandomnessConfig;
+use rtd_macros::fail_point_if;
+use rtd_types::{
+    base_types::AuthorityName,
+    committee::EpochId,
+    crypto::{RandomnessPartialSignature, RandomnessRound, RandomnessSignature},
 };
 use tokio::sync::{
     OnceCell, {mpsc, oneshot},
@@ -35,6 +35,7 @@ use tracing::{debug, error, info, instrument, warn};
 
 mod auth;
 mod builder;
+#[allow(clippy::result_large_err)]
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/rtd.Randomness.rs"));
 }

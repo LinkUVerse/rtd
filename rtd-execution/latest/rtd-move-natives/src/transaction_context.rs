@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use better_any::{Tid, TidAble};
-use move_binary_format::errors::{PartialVMError, PartialVMResult};
-use move_core_types::{account_address::AccountAddress, vm_status::StatusCode};
+use move_binary_format::errors::PartialVMResult;
+use move_binary_format::partial_vm_error;
+use move_core_types::account_address::AccountAddress;
 use move_vm_runtime::natives::extensions::NativeExtensionMarker;
+use std::{cell::RefCell, rc::Rc};
 use rtd_types::{
     base_types::{ObjectID, RtdAddress, TxContext},
     committee::EpochId,
     digests::TransactionDigest,
 };
-use std::{cell::RefCell, rc::Rc};
 
 // TransactionContext is a wrapper around TxContext that is exposed to NativeContextExtensions
 // in order to provide transaction context information to Move native functions.
@@ -94,10 +95,10 @@ impl TransactionContext {
         sponsor: Option<AccountAddress>,
     ) -> PartialVMResult<()> {
         if !self.test_only {
-            return Err(
-                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
-                    .with_message("`replace` called on a non testing scenario".to_string()),
-            );
+            return Err(partial_vm_error!(
+                UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                "`replace` called on a non testing scenario"
+            ));
         }
         self.tx_context.borrow_mut().replace(
             sender,

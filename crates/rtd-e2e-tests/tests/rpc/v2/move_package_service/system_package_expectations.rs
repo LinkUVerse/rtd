@@ -1,7 +1,7 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::{
     Ability, DatatypeDescriptor, FunctionDescriptor, Module, Package,
     datatype_descriptor::DatatypeKind, function_descriptor::Visibility, open_signature,
     open_signature_body,

@@ -17,13 +17,15 @@ use clap::*;
 use colored::Colorize;
 use fastcrypto::traits::KeyPair;
 use futures::future;
-use linku_common::{ZipDebugEqIteratorExt, tempdir};
 use move_analyzer::analyzer;
 use move_command_line_common::files::MOVE_COMPILED_EXTENSION;
 use move_compiler::editions::Flavor;
-use move_package_alt_compilation::build_config::BuildConfig;
+use move_package_compilation::build_config::BuildConfig;
+use linku_common::{ZipDebugEqIteratorExt, tempdir};
 use prometheus::Registry;
 use rand::rngs::OsRng;
+use serde_json::json;
+use std::collections::BTreeMap;
 use rtd_bridge::config::BridgeCommitteeConfig;
 use rtd_bridge::metrics::BridgeMetrics;
 use rtd_bridge::rtd_client::RtdBridgeClient;
@@ -79,13 +81,10 @@ use rtd_swarm_config::network_config::NetworkConfig;
 use rtd_swarm_config::network_config_builder::ConfigBuilder;
 use rtd_swarm_config::node_config_builder::FullnodeConfigBuilder;
 use rtd_types::base_types::{ObjectID, RtdAddress};
-use rtd_types::crypto::{RtdKeyPair, SignatureScheme, ToFromBytes};
-use rtd_types::digests::ChainIdentifier;
+use rtd_types::crypto::{SignatureScheme, RtdKeyPair, ToFromBytes};
 use rtd_types::move_package::MovePackage;
-use serde_json::json;
-use std::collections::BTreeMap;
 use tokio::time::interval;
-use tracing::{info, warn};
+use tracing::info;
 use url::Url;
 
 use crate::client_commands::{
@@ -148,6 +147,11 @@ pub struct RpcArgs {
     ///
     /// Note that GraphQL requires a running indexer and consistent store, which will be enabled
     /// by default even if those flags are not set.
+    ///
+    /// GraphQL subscriptions are served at `/graphql/subscriptions`, streaming checkpoints from
+    /// the local fullnode. Paginated `transactions` and `events` queries are also served by the
+    /// fullnode instead of the indexer's Postgres tables, matching how public GraphQL services
+    /// run. GraphQL starts once the indexer has caught up with the fullnode.
     #[clap(
         long,
         default_missing_value = "0.0.0.0:9125",
@@ -1041,6 +1045,10 @@ async fn start(
         swarm_builder = swarm_builder.with_data_ingestion_dir(dir.clone());
     }
 
+    // GraphQL pages through and subscribes to transactions and events from the fullnode, so it
+    // needs the fullnode to keep its full history.
+    let disable_fullnode_pruning = with_graphql.is_some();
+
     let fullnode_rpc_address = if no_full_node {
         swarm_builder = swarm_builder.with_fullnode_count(0);
         let mut fullnode_rpc_address = rtd_config::node::default_json_rpc_address();
@@ -1061,47 +1069,13 @@ async fn start(
                         fullnode_config_path
                     ))
                 })?;
-            let resolved_db_path =
-                if rtd_core::checkpoints::READONLY_FULLNODE_DB_INSPECTION_SUPPORTED {
-                    let expected_chain_identifier =
-                        ChainIdentifier::from(*fullnode_config.genesis()?.checkpoint().digest());
-                    select_persisted_fullnode_db_path(
-                        &config_dir,
-                        &fullnode_config.db_path,
-                        expected_chain_identifier,
-                        |candidate_path| {
-                            let inspection = rtd_core::checkpoints::inspect_readonly_fullnode_db(
-                                candidate_path,
-                            )?;
-                            info!(
-                                candidate = ?candidate_path,
-                                chain_identifier = %inspection.chain_identifier,
-                                highest_executed_checkpoint = inspection.highest_executed_checkpoint,
-                                "Inspected legacy fullnode database candidate"
-                            );
-                            Ok((
-                                inspection.chain_identifier,
-                                inspection.highest_executed_checkpoint,
-                            ))
-                        },
-                    )?
-                } else {
-                    info!(
-                        "Tidehunter storage does not support read-only legacy fullnode database inspection; preserving the configured database selection"
-                    );
-                    resolve_persisted_fullnode_db_path(&config_dir, &fullnode_config.db_path)
-                };
-            if resolved_db_path != fullnode_config.db_path {
-                info!(
-                    old_db_path = ?fullnode_config.db_path,
-                    new_db_path = ?resolved_db_path,
-                    "Migrating persisted fullnode database path"
-                );
-                fullnode_config.db_path = resolved_db_path;
-                fullnode_config.save(&fullnode_config_path)?;
-            }
             fullnode_config.json_rpc_address.set_port(fullnode_rpc_port);
             fullnode_config.rpc = Some(rpc_config);
+            if disable_fullnode_pruning {
+                let pruning = &mut fullnode_config.authority_store_pruning_config;
+                pruning.set_num_epochs_to_retain(u64::MAX);
+                pruning.set_num_epochs_to_retain_for_checkpoints(None);
+            }
             let localhost = rtd_config::local_ip_utils::localhost_for_testing();
             fullnode_config.metrics_address =
                 rtd_config::local_ip_utils::new_local_tcp_socket_for_testing();
@@ -1130,6 +1104,9 @@ async fn start(
                 .with_fullnode_count(1)
                 .with_fullnode_rpc_addr(fullnode_rpc_address)
                 .with_fullnode_rpc_config(rpc_config);
+            if disable_fullnode_pruning {
+                swarm_builder = swarm_builder.with_disable_fullnode_pruning();
+            }
             fullnode_rpc_address
         }
     };
@@ -1268,7 +1245,9 @@ async fn start(
         graphql_config.zklogin.env = rtd_indexer_alt_graphql::config::ZkLoginEnv::Test;
 
         // The local fullnode already serves the `LedgerService` gRPC API that
-        // `--ledger-grpc-url` points at, so KV point-lookups can be served from it directly.
+        // `--ledger-grpc-url` points at, so KV point-lookups can be served from it directly. It
+        // also serves the List APIs (used for pagination, and by subscriptions for backfill and
+        // gap recovery) and the checkpoint stream that subscriptions follow.
         let kv_args = KvArgs {
             ledger_grpc_url: Some(
                 fullnode_grpc_url
@@ -1277,6 +1256,18 @@ async fn start(
                     .context("Failed to parse fullnode gRPC URL into a ledger gRPC URI")?,
             ),
             ..Default::default()
+        };
+
+        let subscription_args = SubscriptionArgs {
+            checkpoint_stream_url: Some(
+                fullnode_grpc_url
+                    .as_str()
+                    .parse()
+                    .context("Failed to parse fullnode gRPC URL into a checkpoint stream URI")?,
+            ),
+            publication_guard_ca: None,
+            publication_guard_identity: None,
+            publication_guard_url: None,
         };
 
         rpc_services = rpc_services.merge(
@@ -1288,7 +1279,7 @@ async fn start(
                 consistent_reader_args,
                 graphql_args,
                 SystemPackageTaskArgs::default(),
-                SubscriptionArgs::default(),
+                subscription_args,
                 "0.0.0",
                 graphql_config,
                 pipelines,
@@ -1958,125 +1949,6 @@ fn normalize_bind_addr(addr: SocketAddr) -> IpAddr {
     }
 }
 
-fn resolve_persisted_fullnode_db_path(config_dir: &Path, persisted_db_path: &Path) -> PathBuf {
-    let doubled_prefix = Path::new(FULL_NODE_DB_PATH).join(FULL_NODE_DB_PATH);
-    if persisted_db_path.is_absolute() {
-        persisted_db_path.to_path_buf()
-    } else if let Ok(suffix) = persisted_db_path.strip_prefix(doubled_prefix) {
-        config_dir.join(FULL_NODE_DB_PATH).join(suffix)
-    } else {
-        config_dir.join(persisted_db_path)
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct FullnodeDbCandidate {
-    path: PathBuf,
-    chain_identifier: ChainIdentifier,
-    highest_executed_checkpoint: u64,
-}
-
-fn select_legacy_fullnode_db_candidate(
-    expected_chain_identifier: ChainIdentifier,
-    candidates: impl IntoIterator<Item = FullnodeDbCandidate>,
-) -> Option<FullnodeDbCandidate> {
-    candidates
-        .into_iter()
-        .filter(|candidate| candidate.chain_identifier == expected_chain_identifier)
-        .max_by(|left, right| {
-            left.highest_executed_checkpoint
-                .cmp(&right.highest_executed_checkpoint)
-                .then_with(|| left.path.cmp(&right.path))
-        })
-}
-
-fn discover_legacy_fullnode_db_candidates(
-    fullnode_db_root: &Path,
-    mut inspect: impl FnMut(&Path) -> anyhow::Result<(ChainIdentifier, u64)>,
-) -> anyhow::Result<(usize, Vec<FullnodeDbCandidate>)> {
-    if !fullnode_db_root.exists() {
-        return Ok((0, Vec::new()));
-    }
-
-    let mut entry_count = 0;
-    let mut candidates = Vec::new();
-    for entry in fs::read_dir(fullnode_db_root).with_context(|| {
-        format!(
-            "Cannot list legacy fullnode databases in {}",
-            fullnode_db_root.display()
-        )
-    })? {
-        let entry = entry?;
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        entry_count += 1;
-
-        match inspect(&path) {
-            Ok((chain_identifier, highest_executed_checkpoint)) => {
-                candidates.push(FullnodeDbCandidate {
-                    path,
-                    chain_identifier,
-                    highest_executed_checkpoint,
-                });
-            }
-            Err(error) => {
-                warn!(candidate = ?path, "Skipping unusable legacy fullnode database: {error}");
-            }
-        }
-    }
-
-    Ok((entry_count, candidates))
-}
-
-fn select_persisted_fullnode_db_path(
-    config_dir: &Path,
-    persisted_db_path: &Path,
-    expected_chain_identifier: ChainIdentifier,
-    inspect: impl FnMut(&Path) -> anyhow::Result<(ChainIdentifier, u64)>,
-) -> anyhow::Result<PathBuf> {
-    let resolved_db_path = resolve_persisted_fullnode_db_path(config_dir, persisted_db_path);
-    // Only generated relative paths participate in legacy candidate discovery. An explicit,
-    // existing absolute path is the operator's chosen database and remains authoritative.
-    if persisted_db_path.is_absolute() && resolved_db_path.exists() {
-        return Ok(resolved_db_path);
-    }
-
-    let fullnode_db_root = config_dir.join(FULL_NODE_DB_PATH);
-    let (entry_count, candidates) =
-        discover_legacy_fullnode_db_candidates(&fullnode_db_root, inspect)?;
-    if let Some(selected) =
-        select_legacy_fullnode_db_candidate(expected_chain_identifier, candidates)
-    {
-        let stable_db_path = fullnode_db_root.join("localnet-fullnode");
-        let selected_path = if stable_db_path.exists()
-            && stable_db_path.canonicalize().ok() == selected.path.canonicalize().ok()
-        {
-            stable_db_path
-        } else {
-            selected.path
-        };
-        info!(
-            selected_db_path = ?selected_path,
-            highest_executed_checkpoint = selected.highest_executed_checkpoint,
-            chain_identifier = %selected.chain_identifier,
-            "Selected legacy fullnode database"
-        );
-        return Ok(selected_path);
-    }
-
-    if entry_count == 0 {
-        return Ok(resolved_db_path);
-    }
-
-    bail!(
-        "No openable legacy fullnode database from the same chain ({expected_chain_identifier}) \
-         was found in {}",
-        fullnode_db_root.display()
-    )
-}
-
 fn update_wallet_config_rpc(
     config_dir: PathBuf,
     fullnode_rpc_url: String,
@@ -2096,155 +1968,4 @@ fn update_wallet_config_rpc(
     wallet_context.config.save()?;
 
     Ok(wallet_context)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        FullnodeDbCandidate, discover_legacy_fullnode_db_candidates,
-        resolve_persisted_fullnode_db_path, select_legacy_fullnode_db_candidate,
-        select_persisted_fullnode_db_path,
-    };
-    use rtd_types::digests::ChainIdentifier;
-    use std::cell::Cell;
-    use std::path::{Path, PathBuf};
-
-    #[test]
-    fn selects_highest_executed_fullnode_db_from_the_expected_chain() {
-        let expected_chain = ChainIdentifier::random();
-        let other_chain = ChainIdentifier::random();
-        let candidates = vec![
-            FullnodeDbCandidate {
-                path: PathBuf::from("same-chain-behind"),
-                chain_identifier: expected_chain,
-                highest_executed_checkpoint: 12,
-            },
-            FullnodeDbCandidate {
-                path: PathBuf::from("different-chain-ahead"),
-                chain_identifier: other_chain,
-                highest_executed_checkpoint: 99,
-            },
-            FullnodeDbCandidate {
-                path: PathBuf::from("same-chain-ahead"),
-                chain_identifier: expected_chain,
-                highest_executed_checkpoint: 42,
-            },
-        ];
-
-        let selected = select_legacy_fullnode_db_candidate(expected_chain, candidates).unwrap();
-
-        assert_eq!(selected.path, PathBuf::from("same-chain-ahead"));
-        assert_eq!(selected.highest_executed_checkpoint, 42);
-    }
-
-    #[test]
-    fn candidate_discovery_skips_unopenable_databases_without_removing_them() {
-        let directory = linku_common::tempdir().unwrap();
-        let fullnode_db_root = directory.path().join("full_node_db");
-        for name in ["valid-behind", "valid-ahead", "corrupt"] {
-            std::fs::create_dir_all(fullnode_db_root.join(name)).unwrap();
-        }
-        let expected_chain = ChainIdentifier::random();
-
-        let (entry_count, candidates) =
-            discover_legacy_fullnode_db_candidates(&fullnode_db_root, |candidate_path| {
-                match candidate_path.file_name().unwrap().to_str().unwrap() {
-                    "valid-behind" => Ok((expected_chain, 12)),
-                    "valid-ahead" => Ok((expected_chain, 42)),
-                    _ => Err(anyhow::anyhow!("cannot open candidate")),
-                }
-            })
-            .unwrap();
-
-        assert_eq!(entry_count, 3);
-        assert_eq!(candidates.len(), 2);
-        assert!(fullnode_db_root.join("valid-behind").exists());
-        assert!(fullnode_db_root.join("valid-ahead").exists());
-        assert!(fullnode_db_root.join("corrupt").exists());
-    }
-
-    #[test]
-    fn normalizes_legacy_doubled_fullnode_db_path() {
-        let config_dir = linku_common::tempdir().unwrap();
-
-        let resolved = resolve_persisted_fullnode_db_path(
-            config_dir.path(),
-            Path::new("full_node_db/full_node_db/node-identity"),
-        );
-
-        assert_eq!(
-            resolved,
-            config_dir.path().join("full_node_db").join("node-identity")
-        );
-    }
-
-    #[test]
-    fn legacy_config_selects_the_valid_same_chain_candidate_with_highest_checkpoint() {
-        let config_dir = linku_common::tempdir().unwrap();
-        let stable_db = config_dir
-            .path()
-            .join("full_node_db")
-            .join("localnet-fullnode");
-        std::fs::create_dir_all(&stable_db).unwrap();
-        let behind_db = config_dir.path().join("full_node_db").join("behind");
-        std::fs::create_dir_all(&behind_db).unwrap();
-        let other_chain_db = config_dir.path().join("full_node_db").join("other-chain");
-        std::fs::create_dir_all(&other_chain_db).unwrap();
-        let expected_chain = ChainIdentifier::random();
-        let other_chain = ChainIdentifier::random();
-
-        let resolved = select_persisted_fullnode_db_path(
-            config_dir.path(),
-            Path::new("full_node_db/full_node_db/missing-node"),
-            expected_chain,
-            |candidate_path| match candidate_path.file_name().unwrap().to_str().unwrap() {
-                "localnet-fullnode" => Ok((expected_chain, 42)),
-                "behind" => Ok((expected_chain, 12)),
-                "other-chain" => Ok((other_chain, 99)),
-                _ => unreachable!(),
-            },
-        )
-        .unwrap();
-
-        assert_eq!(resolved, stable_db);
-    }
-
-    #[test]
-    fn existing_absolute_persisted_db_remains_authoritative() {
-        let config_dir = linku_common::tempdir().unwrap();
-        let configured_db = config_dir.path().join("configured-fullnode");
-        std::fs::create_dir_all(&configured_db).unwrap();
-        let inspected = Cell::new(false);
-
-        let resolved = select_persisted_fullnode_db_path(
-            config_dir.path(),
-            &configured_db,
-            ChainIdentifier::random(),
-            |_| {
-                inspected.set(true);
-                unreachable!()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(resolved, configured_db);
-        assert!(!inspected.get());
-    }
-
-    #[test]
-    fn legacy_config_fails_when_existing_candidates_are_not_from_the_expected_chain() {
-        let config_dir = linku_common::tempdir().unwrap();
-        let candidate = config_dir.path().join("full_node_db").join("other-chain");
-        std::fs::create_dir_all(candidate).unwrap();
-
-        let error = select_persisted_fullnode_db_path(
-            config_dir.path(),
-            Path::new("full_node_db/full_node_db/missing-node"),
-            ChainIdentifier::random(),
-            |_| Ok((ChainIdentifier::random(), 99)),
-        )
-        .unwrap_err();
-
-        assert!(error.to_string().contains("same chain"));
-    }
 }

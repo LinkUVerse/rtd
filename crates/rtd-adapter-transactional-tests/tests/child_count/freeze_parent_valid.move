@@ -8,56 +8,56 @@
 
 //# publish
 
-module test::m {
-    use rtd::dynamic_object_field as ofield;
+module test::m;
 
-    public struct S has key, store {
-        id: rtd::object::UID,
-    }
+use rtd::dynamic_object_field as ofield;
 
-    public struct R has key, store {
-        id: rtd::object::UID,
-        s: S,
-    }
+public struct S has key, store {
+    id: rtd::object::UID,
+}
 
-    public entry fun mint(ctx: &mut TxContext) {
-        let id = rtd::object::new(ctx);
-        rtd::transfer::public_transfer(S { id }, tx_context::sender(ctx))
-    }
+public struct R has key, store {
+    id: rtd::object::UID,
+    s: S,
+}
 
-    public entry fun add(parent: &mut S, idx: u64, ctx: &mut TxContext) {
-        let child = S { id: rtd::object::new(ctx) };
-        ofield::add(&mut parent.id, idx, child);
-    }
+public entry fun mint(ctx: &mut TxContext) {
+    let id = rtd::object::new(ctx);
+    rtd::transfer::public_transfer(S { id }, tx_context::sender(ctx))
+}
 
-    public entry fun remove(parent: &mut S, idx: u64) {
-        let S { id } = ofield::remove(&mut parent.id, idx);
-        rtd::object::delete(id)
-    }
+public entry fun add(parent: &mut S, idx: u64, ctx: &mut TxContext) {
+    let child = S { id: rtd::object::new(ctx) };
+    ofield::add(&mut parent.id, idx, child);
+}
 
-    public entry fun remove_and_add(parent: &mut S, idx: u64) {
-        let child: S = ofield::remove(&mut parent.id, idx);
-        ofield::add(&mut parent.id, idx, child)
-    }
+public entry fun remove(parent: &mut S, idx: u64) {
+    let S { id } = ofield::remove(&mut parent.id, idx);
+    rtd::object::delete(id)
+}
 
-    public entry fun remove_and_wrap(parent: &mut S, idx: u64, ctx: &mut TxContext) {
-        let child: S = ofield::remove(&mut parent.id, idx);
-        ofield::add(&mut parent.id, idx, R { id: rtd::object::new(ctx), s: child })
-    }
+public entry fun remove_and_add(parent: &mut S, idx: u64) {
+    let child: S = ofield::remove(&mut parent.id, idx);
+    ofield::add(&mut parent.id, idx, child)
+}
 
-    public entry fun delete(s: S) {
-        let S { id } = s;
-        rtd::object::delete(id)
-    }
+public entry fun remove_and_wrap(parent: &mut S, idx: u64, ctx: &mut TxContext) {
+    let child: S = ofield::remove(&mut parent.id, idx);
+    ofield::add(&mut parent.id, idx, R { id: rtd::object::new(ctx), s: child })
+}
 
-    public entry fun wrap(s: S, ctx: &mut TxContext) {
-        let r = R { id: rtd::object::new(ctx), s };
-        rtd::transfer::public_transfer(r, tx_context::sender(ctx))
-    }
+public entry fun delete(s: S) {
+    let S { id } = s;
+    rtd::object::delete(id)
+}
 
-    public entry fun freeze_object(s: S) {
-        rtd::transfer::public_freeze_object(s)
-    }
+public entry fun wrap(s: S, ctx: &mut TxContext) {
+    let r = R { id: rtd::object::new(ctx), s };
+    rtd::transfer::public_transfer(r, tx_context::sender(ctx))
+}
+
+public entry fun freeze_object(s: S) {
+    rtd::transfer::public_freeze_object(s)
 }
 
 //# run test::m::mint --sender A

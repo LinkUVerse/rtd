@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
+use rtd_macros::sim_test;
 
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
-    base_types::{FullObjectID, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
+    base_types::{FullObjectID, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair},
     effects::TransactionEffects,
     execution_status::{CommandArgumentError, ExecutionErrorKind},
@@ -64,10 +65,16 @@ impl TestRunner {
         telemetry_subscribers::init_for_testing();
         let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
 
-        let mut protocol_config =
-            ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
-        protocol_config
-            .set_disable_effects_tx_dependencies_for_testing(disable_effects_tx_dependencies);
+        let protocol_version = if disable_effects_tx_dependencies {
+            ProtocolVersion::max()
+        } else {
+            ProtocolVersion::new(137)
+        };
+        let protocol_config = ProtocolConfig::get_for_version(protocol_version, Chain::Unknown);
+        assert_eq!(
+            protocol_config.disable_effects_tx_dependencies(),
+            disable_effects_tx_dependencies
+        );
         let authority_state = TestAuthorityBuilder::new()
             .with_protocol_config(protocol_config)
             .build()
@@ -557,7 +564,7 @@ impl TestRunner {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_shared_object() {
     let mut user1 = TestRunner::new("shared_object_deletion").await;
     let effects = user1.create_shared_object().await;
@@ -611,7 +618,7 @@ async fn test_delete_shared_object() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_shared_object_immut() {
     let mut user1 = TestRunner::new("shared_object_deletion").await;
     let effects = user1.create_shared_object().await;
@@ -643,7 +650,7 @@ async fn test_delete_shared_object_immut() {
     ));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_shared_object_immut_mut_mut_interleave() {
     let mut user1 = TestRunner::new("shared_object_deletion").await;
     let effects = user1.create_shared_object().await;
@@ -741,7 +748,7 @@ async fn test_delete_shared_object_immut_mut_mut_interleave() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_shared_object_immut_mut_immut_interleave() {
     let mut user1 = TestRunner::new("shared_object_deletion").await;
     let effects = user1.create_shared_object().await;
@@ -906,17 +913,17 @@ async fn assert_mutate_after_delete_effects_dependencies(disable_effects_tx_depe
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_mutate_after_delete() {
     assert_mutate_after_delete_effects_dependencies(false).await;
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_mutate_after_delete_without_effects_dependencies() {
     assert_mutate_after_delete_effects_dependencies(true).await;
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_after_delete() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -969,7 +976,7 @@ async fn test_delete_after_delete() {
     assert!(effects.dependencies().contains(digest));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_shifting_mutate_and_deletes_multiple_objects() {
     let mut runner = TestRunner::new("shared_object_deletion").await;
     let effects1 = runner.create_shared_object().await;
@@ -1128,7 +1135,7 @@ async fn test_shifting_mutate_and_deletes_multiple_objects() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_mutate_after_delete_enqueued() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1206,7 +1213,7 @@ async fn test_mutate_after_delete_enqueued() {
     assert!(effects.dependencies().contains(digest));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_after_delete_enqueued() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1284,7 +1291,7 @@ async fn test_delete_after_delete_enqueued() {
     assert!(effects.dependencies().contains(digest));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_mutate_interleaved_read_only_enqueued_after_delete() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1424,7 +1431,7 @@ async fn test_mutate_interleaved_read_only_enqueued_after_delete() {
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_with_shared_after_mutate_enqueued() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects_0 = user_1.create_shared_object().await;
@@ -1548,7 +1555,7 @@ async fn test_delete_with_shared_after_mutate_enqueued() {
     assert!(third_mutate_effects.status().is_err());
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_wrap_not_allowed() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1582,7 +1589,7 @@ async fn test_wrap_not_allowed() {
     assert_eq!(effects.mutated().len(), 2);
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_vec_delete() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1607,7 +1614,7 @@ async fn test_vec_delete() {
     assert!(error.is_none());
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_convert_to_owned_not_allowed() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1636,7 +1643,7 @@ async fn test_convert_to_owned_not_allowed() {
     assert_eq!(effects.mutated().len(), 2);
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_freeze_not_allowed() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1665,7 +1672,7 @@ async fn test_freeze_not_allowed() {
     assert_eq!(effects.mutated().len(), 2);
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_deletion_twice() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1709,7 +1716,7 @@ async fn test_deletion_twice() {
     assert_eq!(effects.mutated().len(), 1);
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_certs_fail_after_delete() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1744,7 +1751,7 @@ async fn test_certs_fail_after_delete() {
     assert!(mutate_cert_result.is_ok());
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_delete_before_two_mutations() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1829,7 +1836,7 @@ async fn test_delete_before_two_mutations() {
     assert!(effects.dependencies().contains(mutate_digest));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_owned_object_version_increments_on_cert_denied() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;
@@ -1878,7 +1885,7 @@ async fn test_owned_object_version_increments_on_cert_denied() {
     assert_eq!(next_version, 5.into());
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_interspersed_mutations_with_delete() {
     let mut user_1 = TestRunner::new("shared_object_deletion").await;
     let effects = user_1.create_shared_object().await;

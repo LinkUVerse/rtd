@@ -10,7 +10,7 @@ use async_graphql::Context;
 use itertools::Either;
 use rtd_indexer_alt_reader::kv_loader::KvLoader;
 use rtd_rpc::proto::proto_to_timestamp_ms;
-use rtd_rpc::proto::rtd::rpc::v2;
+use rtd_rpc::proto::sui::rpc::v2;
 use rtd_types::digests::TransactionDigest;
 use rtd_types::effects::TransactionEvents;
 use tokio::sync::OnceCell;

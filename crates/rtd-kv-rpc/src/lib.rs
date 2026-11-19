@@ -26,11 +26,11 @@ use rtd_kvstore::TX_SEQ_DIGEST_PIPELINE;
 use rtd_package_resolver::PackageStore;
 use rtd_package_resolver::PackageStoreWithLruCache;
 use rtd_package_resolver::Resolver;
-use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoResponse;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerService;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerServiceServer;
-use rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageService;
-use rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageServiceServer;
+use rtd_rpc::proto::sui::rpc::v2::GetServiceInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerService;
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_server::LedgerServiceServer;
+use rtd_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageService;
+use rtd_rpc::proto::sui::rpc::v2::move_package_service_server::MovePackageServiceServer;
 use rtd_rpc_api::ServerVersion;
 use rtd_types::digests::ChainIdentifier;
 use rtd_types::message_envelope::Message;
@@ -618,7 +618,7 @@ impl KvRpcServer {
         let file_descriptor_sets: Vec<&'static [u8]> = vec![
             rtd_rpc_api::proto::google::protobuf::FILE_DESCRIPTOR_SET,
             rtd_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET,
-            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::sui::rpc::v2::FILE_DESCRIPTOR_SET,
         ];
 
         let registry = config.metrics_registry.unwrap_or_default();

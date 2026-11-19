@@ -23,7 +23,7 @@ use move_transactional_test_runner::tasks::{RunCommand, SyntaxChoice};
 use rtd_protocol_config::Chain;
 use rtd_types::accumulator_root::AccumulatorValue;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{RtdAddress, SequenceNumber};
+use rtd_types::base_types::{SequenceNumber, RtdAddress};
 use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
 use rtd_types::move_package::UpgradePolicy;
 use rtd_types::object::{Object, Owner};
@@ -241,14 +241,6 @@ pub struct RunGraphqlCommand {
 }
 
 #[derive(Debug, clap::Parser)]
-pub struct RunJsonRpcCommand {
-    #[clap(long = "show-headers")]
-    pub show_headers: bool,
-    #[clap(long, num_args(1..))]
-    pub cursors: Vec<String>,
-}
-
-#[derive(Debug, clap::Parser)]
 pub struct CreateCheckpointCommand {
     pub count: Option<u64>,
 }
@@ -334,7 +326,6 @@ pub enum RtdSubcommand<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> {
     GaslessAllowToken(GaslessAllowTokenCommand),
     ViewCheckpoint,
     RunGraphql(RunGraphqlCommand),
-    RunJsonRpc(RunJsonRpcCommand),
     Bench(RunCommand<ExtraValueArgs>, ExtraRunArgs),
     BenchProgrammable(ProgrammableTransactionCommand),
 }
@@ -392,9 +383,6 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::FromArgMatches
             Some(("run-graphql", matches)) => {
                 RtdSubcommand::RunGraphql(RunGraphqlCommand::from_arg_matches(matches)?)
             }
-            Some(("run-jsonrpc", matches)) => {
-                RtdSubcommand::RunJsonRpc(RunJsonRpcCommand::from_arg_matches(matches)?)
-            }
             Some(("bench", matches)) => match matches.subcommand() {
                 Some(("ptb", sub_matches)) => RtdSubcommand::BenchProgrammable(
                     ProgrammableTransactionCommand::from_arg_matches(sub_matches)?,
@@ -442,7 +430,6 @@ impl<ExtraValueArgs: ParsableValue, ExtraRunArgs: Parser> clap::CommandFactory
             .subcommand(GaslessAllowTokenCommand::command().name("gasless-allow-token"))
             .subcommand(clap::Command::new("view-checkpoint"))
             .subcommand(RunGraphqlCommand::command().name("run-graphql"))
-            .subcommand(RunJsonRpcCommand::command().name("run-jsonrpc"))
             .subcommand(
                 RunCommand::<ExtraValueArgs>::augment_args(ExtraRunArgs::command())
                     .name("bench")

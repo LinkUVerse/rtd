@@ -3,7 +3,7 @@
 
 use crate::{ErrorReason, Result, RpcService};
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::{GetDatatypeRequest, GetDatatypeResponse};
+use rtd_rpc::proto::sui::rpc::v2::{GetDatatypeRequest, GetDatatypeResponse};
 use rtd_types::move_package::MovePackage;
 
 use super::{

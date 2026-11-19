@@ -1,0 +1,19 @@
+---
+source: crates/move-compiler/tests/move_check_testsuite.rs
+info:
+  flavor: rtd
+  edition: legacy
+  lint: false
+---
+error[EC04015]: invalid use of native item
+<<<<<<<< HEAD:external-crates/move/crates/move-compiler/tests/rtd_mode/id_leak/invalid_object_native.snap
+  ┌─ tests/rtd_mode/id_leak/invalid_object_native.move:5:9
+========
+  ┌─ tests/rtd_mode/struct_with_key/invalid_object_native.move:5:9
+>>>>>>>> 56d510b2a7f11280ad8d02828ccf5d742a6dcd42:external-crates/move/crates/move-compiler/tests/rtd_mode/struct_with_key/invalid_object_native.snap
+  │
+2 │     native struct S has key;
+  │     ------ Struct declared 'native' here
+  ·
+5 │         S {}
+  │         ^^^^ Invalid argument usage for native struct 'a::test::S'. Native structs cannot be directly constructed/deconstructed, and their fields cannot be dirctly accessed

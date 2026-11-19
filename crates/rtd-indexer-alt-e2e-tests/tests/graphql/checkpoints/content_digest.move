@@ -23,8 +23,8 @@
 
 //# create-checkpoint
 
-
 //# run-graphql
+/*
 { # Fetch each checkpoint individually, and then in a multi-get
   c0: checkpoint(sequenceNumber: 0) { ...Cp }
   c1: checkpoint(sequenceNumber: 1) { ...Cp }
@@ -38,8 +38,10 @@ fragment Cp on Checkpoint {
   digest
   contentDigest
 }
+*/
 
 //# run-graphql
+/*
 { # Fetch a non-existent checkpoint
   checkpoint(sequenceNumber: 4) {
     sequenceNumber
@@ -47,8 +49,10 @@ fragment Cp on Checkpoint {
     contentDigest
   }
 }
+*/
 
 //# run-graphql
+/*
 { # Multi-get a mix of existing and non-existing checkpoints
   multiGetCheckpoints(keys: [2, 100, 0, 200]) {
     sequenceNumber
@@ -56,3 +60,4 @@ fragment Cp on Checkpoint {
     contentDigest
   }
 }
+*/

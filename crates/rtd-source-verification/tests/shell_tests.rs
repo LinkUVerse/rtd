@@ -3,9 +3,9 @@
 
 use fs_extra::dir::CopyOptions;
 use insta_cmd::get_cargo_bin;
-use rtd_config::RTD_CLIENT_CONFIG;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use rtd_config::RTD_CLIENT_CONFIG;
 use test_cluster::TestClusterBuilder;
 
 // [test_shell_snapshot] is run on every file matching [TEST_PATTERN] in [TEST_DIR].
@@ -98,4 +98,6 @@ fn get_rtd_package_dir() -> PathBuf {
 datatest_stable::harness!(test_shell_snapshot, TEST_DIR, TEST_PATTERN);
 
 #[cfg(msim)]
-fn main() {}
+fn main() {
+    let _ = (test_shell_snapshot, TEST_DIR, TEST_PATTERN);
+}

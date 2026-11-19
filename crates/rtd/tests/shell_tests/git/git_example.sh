@@ -13,7 +13,7 @@ git -C a -c user.email=test@test.com -c user.name=test commit -q -m "initial rev
 
 HASH=$(git -C a log --pretty=format:%H)
 
-rtd move --client.config "$CONFIG" cache-package testnet 01234567 \
+rtd move --client.config "$CONFIG" cache-package testnet 4c78adac \
 "{ git = \"file://$(pwd)/a\", rev = \"${HASH}\", subdir = \".\" }" 2>&1 \
 | sed "s|$(pwd)|<ROOT>|g" \
 | sed 's/"path":"[^"]*"/"path":"<PATH>"/' \

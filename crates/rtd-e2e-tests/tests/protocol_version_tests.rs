@@ -56,13 +56,18 @@ fn test_protocol_overrides_2() {
 mod sim_only_tests {
 
     use super::*;
-    use fastcrypto::encoding::Base64;
-    use linku_common::register_debug_fatal_handler;
     use move_binary_format::CompiledModule;
     use move_core_types::ident_str;
+    use linku_common::register_debug_fatal_handler;
+    use std::path::PathBuf;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use std::{fs, io, path::Path};
+    use rtd_core::authority::authority_test_utils::dev_inspect_for_testing;
     use rtd_core::authority::framework_injection;
     use rtd_framework::BuiltInFramework;
-    use rtd_json_rpc_api::WriteApiClient;
     use rtd_macros::*;
     use rtd_move_build::{BuildConfig, CompiledPackage};
     use rtd_protocol_config::Chain;
@@ -81,10 +86,11 @@ mod sim_only_tests {
         CallArg, Command, ObjectArg, ProgrammableMoveCall, ProgrammableTransaction,
         TEST_ONLY_GAS_UNIT_FOR_GENERIC, TransactionData,
     };
+    use rtd_types::transaction_executor::TransactionChecks;
     use rtd_types::{
         MOVE_STDLIB_PACKAGE_ID, RTD_BRIDGE_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID,
         RTD_SYSTEM_PACKAGE_ID,
-        base_types::{RtdAddress, SequenceNumber},
+        base_types::{SequenceNumber, RtdAddress},
         digests::TransactionDigest,
         object::Object,
         programmable_transaction_builder::ProgrammableTransactionBuilder,
@@ -94,16 +100,17 @@ mod sim_only_tests {
         RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_AUTHENTICATOR_STATE_OBJECT_ID, RTD_CLOCK_OBJECT_ID,
         RTD_RANDOMNESS_STATE_OBJECT_ID, RTD_SYSTEM_STATE_OBJECT_ID,
     };
-    use std::path::PathBuf;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use std::{fs, io, path::Path};
     use tempfile::TempDir;
     use test_cluster::TestCluster;
     use tokio::time::{Duration, sleep};
     use tracing::info;
+
+    // Upgrade tests need several validators so that version votes can reach or miss quorum.
+    fn upgrade_test_cluster_builder() -> TestClusterBuilder {
+        TestClusterBuilder::new()
+            .with_num_validators(4)
+            .with_epoch_duration_ms(20000)
+    }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum BuildKind {
@@ -143,8 +150,7 @@ mod sim_only_tests {
     async fn test_protocol_version_upgrade() {
         ProtocolConfig::poison_get_for_min_version();
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -163,8 +169,7 @@ mod sim_only_tests {
 
         ProtocolConfig::poison_get_for_min_version();
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -212,8 +217,7 @@ mod sim_only_tests {
 
         ProtocolConfig::poison_get_for_min_version();
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_version_callback(Arc::new(|idx, name| {
                 if name.is_some() && idx == 0 {
                     // first validator only does not support version FINISH.
@@ -248,8 +252,7 @@ mod sim_only_tests {
     async fn test_protocol_version_upgrade_forced() {
         ProtocolConfig::poison_get_for_min_version();
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_version_callback(Arc::new(|idx, name| {
                 if name.is_some() && idx == 0 {
                     // first validator only does not support version 2.
@@ -281,8 +284,7 @@ mod sim_only_tests {
             config
         });
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_version_callback(Arc::new(|idx, name| {
                 if name.is_some() && idx == 0 {
                     // first validator only does not support version FINISH.
@@ -324,8 +326,7 @@ mod sim_only_tests {
 
         ProtocolConfig::poison_get_for_min_version();
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_version_callback(Arc::new(|idx, name| {
                 if name.is_some() && idx <= 1 {
                     // two validators don't support version FINISH, so we never advance to FINISH.
@@ -453,8 +454,7 @@ mod sim_only_tests {
         let rtd_extra = ObjectID::from_single_byte(0x42);
         framework_injection::set_override(rtd_extra, fixture_modules("extra_package").await);
 
-        let cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -514,8 +514,7 @@ mod sim_only_tests {
         ProtocolConfig::poison_get_for_min_version();
 
         override_rtd_system_modules(to).await;
-        TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        upgrade_test_cluster_builder()
             .with_objects([rtd_system_package_object(from).await])
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
@@ -597,7 +596,6 @@ mod sim_only_tests {
     }
 
     async fn dev_inspect_call(cluster: &TestCluster, call: ProgrammableMoveCall) -> u64 {
-        let client = cluster.rpc_client();
         let sender = cluster.get_address_0();
 
         let pt = {
@@ -607,21 +605,23 @@ mod sim_only_tests {
         };
         let txn = TransactionKind::programmable(pt);
 
-        let response = client
-            .dev_inspect_transaction_block(
-                sender,
-                Base64::from_bytes(&bcs::to_bytes(&txn).unwrap()),
-                /* gas_price */ None,
-                /* epoch_id */ None,
-                /* additional_args */ None,
-            )
-            .await
-            .unwrap();
+        let response = dev_inspect_for_testing(
+            &cluster.fullnode_handle.rtd_node.state(),
+            sender,
+            txn,
+            None,
+            None,
+            None,
+            None,
+            TransactionChecks::Disabled,
+        )
+        .unwrap();
 
-        let results = response.results.unwrap();
-        let return_ = &results.first().unwrap().return_values.first().unwrap().0;
+        let results = response.execution_result.unwrap();
+        let (_, return_values) = results.first().unwrap();
+        let (return_, _) = return_values.first().unwrap();
 
-        bcs::from_bytes(&return_).unwrap()
+        bcs::from_bytes(return_).unwrap()
     }
 
     async fn execute_creating(
@@ -726,8 +726,7 @@ mod sim_only_tests {
 
         // Even though a new framework is available, the required new protocol version is not.
         override_rtd_system_modules("extend/compatible").await;
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_objects([rtd_system_package_object("extend/base").await])
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, START,
@@ -747,6 +746,7 @@ mod sim_only_tests {
         });
 
         let test_cluster = TestClusterBuilder::new()
+            .with_num_validators(4)
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -815,6 +815,7 @@ mod sim_only_tests {
         });
 
         let test_cluster = TestClusterBuilder::new()
+            .with_num_validators(4)
             .with_epoch_duration_ms(40000)
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
@@ -848,8 +849,7 @@ mod sim_only_tests {
         });
 
         override_rtd_system_modules("mock_rtd_systems/base").await;
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             // Overrides with a rtd system package that would abort during epoch change txn
             .with_objects([rtd_system_package_object("mock_rtd_systems/safe_mode").await])
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
@@ -883,6 +883,10 @@ mod sim_only_tests {
         assert!(system_state.safe_mode()); // enters safe mode
         assert!(system_state.epoch_start_timestamp_ms() >= genesis_epoch_start_time + 20000);
 
+        // wait_for_epoch only waits for the fullnode. Every validator must finish
+        // entering safe mode before we clear its safe-mode expectation.
+        test_cluster.wait_for_epoch_all_nodes(1).await;
+
         // We are getting out of safe mode soon.
         test_cluster.set_safe_mode_expected(false);
 
@@ -900,8 +904,7 @@ mod sim_only_tests {
             config
         });
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, START,
             ))
@@ -921,8 +924,7 @@ mod sim_only_tests {
 
         override_rtd_system_modules("mock_rtd_systems/shallow_upgrade").await;
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -958,8 +960,7 @@ mod sim_only_tests {
 
         override_rtd_system_modules("mock_rtd_systems/deep_upgrade").await;
 
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))
@@ -1024,8 +1025,7 @@ mod sim_only_tests {
         // put the new rtd system in a new path and point to it in the override.
         // It's important to also handle the new protocol version in protocol-config/lib.rs.
         // The MAX_PROTOCOL_VERSION must not be changed yet when testing this.
-        let test_cluster = TestClusterBuilder::new()
-            .with_epoch_duration_ms(20000)
+        let test_cluster = upgrade_test_cluster_builder()
             .with_supported_protocol_versions(SupportedProtocolVersions::new_for_testing(
                 START, FINISH,
             ))

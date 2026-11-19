@@ -14,20 +14,20 @@ use serde::Deserialize;
 use serde::Serialize;
 use tracing::warn;
 
-use rtd_rpc::proto::rtd::rpc::v2::Argument;
-use rtd_rpc::proto::rtd::rpc::v2::BalanceChange;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::Input;
-use rtd_rpc::proto::rtd::rpc::v2::MoveCall;
-use rtd_rpc::proto::rtd::rpc::v2::ProgrammableTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::Transaction as ProtoTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::TransactionKind;
-use rtd_rpc::proto::rtd::rpc::v2::argument::ArgumentKind;
-use rtd_rpc::proto::rtd::rpc::v2::command::Command;
-use rtd_rpc::proto::rtd::rpc::v2::input::InputKind;
-use rtd_rpc::proto::rtd::rpc::v2::transaction_kind::Data as TransactionKindData;
-use rtd_rpc::proto::rtd::rpc::v2::transaction_kind::Kind::ProgrammableTransaction as ProgrammableTransactionKind;
-use rtd_types::base_types::{ObjectID, RtdAddress, SequenceNumber};
+use rtd_rpc::proto::sui::rpc::v2::Argument;
+use rtd_rpc::proto::sui::rpc::v2::BalanceChange;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::Input;
+use rtd_rpc::proto::sui::rpc::v2::MoveCall;
+use rtd_rpc::proto::sui::rpc::v2::ProgrammableTransaction;
+use rtd_rpc::proto::sui::rpc::v2::Transaction as ProtoTransaction;
+use rtd_rpc::proto::sui::rpc::v2::TransactionKind;
+use rtd_rpc::proto::sui::rpc::v2::argument::ArgumentKind;
+use rtd_rpc::proto::sui::rpc::v2::command::Command;
+use rtd_rpc::proto::sui::rpc::v2::input::InputKind;
+use rtd_rpc::proto::sui::rpc::v2::transaction_kind::Data as TransactionKindData;
+use rtd_rpc::proto::sui::rpc::v2::transaction_kind::Kind::ProgrammableTransaction as ProgrammableTransactionKind;
+use rtd_types::base_types::{ObjectID, SequenceNumber, RtdAddress};
 use rtd_types::gas_coin::GasCoin;
 use rtd_types::governance::{ADD_STAKE_FUN_NAME, WITHDRAW_STAKE_FUN_NAME};
 use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
@@ -334,7 +334,7 @@ impl Operations {
             .metadata
             .ok_or_else(|| Error::MissingInput("Stake metadata".to_string()))?;
 
-        // Total issued RTD is less than u64, safe to cast.
+        // Total issued SUi is less than u64, safe to cast.
         let amount = if let Some(amount) = op.amount {
             if amount.value.is_positive() {
                 return Err(Error::MalformedOperationError(
@@ -946,7 +946,7 @@ impl Operations {
     fn parse_consolidate(
         sender: RtdAddress,
         inputs: &[Input],
-        commands: &[rtd_rpc::proto::rtd::rpc::v2::Command],
+        commands: &[rtd_rpc::proto::sui::rpc::v2::Command],
         status: Option<OperationStatus>,
     ) -> Option<Vec<Operation>> {
         use std::collections::BTreeSet;
@@ -1099,7 +1099,7 @@ impl Operations {
     fn parse_merge_and_redeem(
         sender: RtdAddress,
         inputs: &[Input],
-        commands: &[rtd_rpc::proto::rtd::rpc::v2::Command],
+        commands: &[rtd_rpc::proto::sui::rpc::v2::Command],
         status: Option<OperationStatus>,
     ) -> Option<Vec<Operation>> {
         use std::collections::BTreeSet;
@@ -1730,57 +1730,58 @@ impl Operations {
         }
     }
 
-    /// Compare initial balance_changes to new_operations and make sure
-    /// the balance-changes stay the same after updating the operations
+    /// Checks that `new_operations` reproduce the transaction's balance changes net of
+    /// `accounted_balances`, i.e. net of amounts already carried by operations emitted
+    /// elsewhere (parsed PTB operations and unstake principal/reward).
     fn validate_operations(
         initial_balance_changes: &[(BalanceChange, Currency)],
+        accounted_balances: &HashMap<(RtdAddress, Currency), i128>,
         new_operations: &[Operation],
     ) -> Result<(), anyhow::Error> {
-        let balances: HashMap<(RtdAddress, Currency), i128> = HashMap::new();
-        let mut initial_balances =
-            initial_balance_changes
-                .iter()
-                .fold(balances, |mut balances, (balance_change, ccy)| {
-                    if let (Some(addr_str), Some(amount_str)) =
-                        (&balance_change.address, &balance_change.amount)
-                        && let (Ok(owner), Ok(amount)) =
-                            (RtdAddress::from_str(addr_str), i128::from_str(amount_str))
-                    {
-                        *balances.entry((owner, ccy.clone())).or_default() += amount;
-                    }
-                    balances
-                });
+        let mut expected_balances = initial_balance_changes.iter().fold(
+            accounted_balances.clone(),
+            |mut balances, (balance_change, ccy)| {
+                if let (Some(addr_str), Some(amount_str)) =
+                    (&balance_change.address, &balance_change.amount)
+                    && let (Ok(owner), Ok(amount)) =
+                        (RtdAddress::from_str(addr_str), i128::from_str(amount_str))
+                {
+                    *balances.entry((owner, ccy.clone())).or_default() += amount;
+                }
+                balances
+            },
+        );
+        // Net-zero entries produce no balance-change operation.
+        expected_balances.retain(|_, amount| *amount != 0);
 
-        let mut new_balances = HashMap::new();
+        let mut new_balances: HashMap<(RtdAddress, Currency), i128> = HashMap::new();
         for op in new_operations {
             if let Some(Amount {
                 currency, value, ..
             }) = &op.amount
             {
-                if let Some(account) = &op.account {
-                    let balance_change = new_balances
-                        .remove(&(account.address, currency.clone()))
-                        .unwrap_or(0)
-                        + value;
-                    new_balances.insert((account.address, currency.clone()), balance_change);
-                } else {
-                    return Err(anyhow!("Missing account for a balance-change"));
-                }
+                let account = op
+                    .account
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Missing account for a balance-change"))?;
+                *new_balances
+                    .entry((account.address, currency.clone()))
+                    .or_default() += value;
             }
         }
 
-        for ((address, currency), amount_expected) in new_balances {
-            let new_amount = initial_balances.remove(&(address, currency)).unwrap_or(0);
-            if new_amount != amount_expected {
+        for ((address, currency), new_amount) in new_balances {
+            let expected_amount = expected_balances.remove(&(address, currency)).unwrap_or(0);
+            if new_amount != expected_amount {
                 return Err(anyhow!(
                     "Expected {} balance-change for {} but got {}",
-                    amount_expected,
+                    expected_amount,
                     address,
                     new_amount
                 ));
             }
         }
-        if !initial_balances.is_empty() {
+        if !expected_balances.is_empty() {
             return Err(anyhow!(
                 "Expected every item in initial_balances to be mapped"
             ));
@@ -1799,6 +1800,7 @@ impl Operations {
         new_gas_owner: RtdAddress,
         gas_used: i128,
         initial_balance_changes: &[(BalanceChange, Currency)],
+        accounted_balances: &HashMap<(RtdAddress, Currency), i128>,
     ) -> Result<Vec<Operation>, anyhow::Error> {
         let mut operations = vec![];
         if is_gascoin_transfer && prev_gas_owner != new_gas_owner {
@@ -1836,7 +1838,7 @@ impl Operations {
                     }
                 }
             }
-            Self::validate_operations(initial_balance_changes, &operations)?;
+            Self::validate_operations(initial_balance_changes, accounted_balances, &operations)?;
         }
         Ok(operations)
     }
@@ -1986,6 +1988,7 @@ impl Operations {
             gas_owner,
             gas_used,
             &balance_changes_with_currency,
+            &accounted_balances,
         )?;
 
         let ops: Operations = ops
@@ -2364,9 +2367,9 @@ mod tests {
     use super::*;
     use crate::types::ConstructionMetadata;
     use crate::types::internal_operation::{consolidate_to_fungible_pt, merge_and_redeem_fss_pt};
-    use rtd_rpc::proto::rtd::rpc::v2::Transaction;
+    use rtd_rpc::proto::sui::rpc::v2::Transaction;
     use rtd_types::Identifier;
-    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+    use rtd_types::base_types::{ObjectDigest, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
     use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
     use rtd_types::transaction::{
         CallArg, Command as NativeCommand, ObjectArg, ProgrammableTransaction,
@@ -2455,6 +2458,7 @@ mod tests {
             redeem_token_amount: None,
             redeem_plan: None,
             bind_epoch: None,
+            estimate_only: false,
         };
         let parsed_data = ops.into_internal()?.try_into_data(metadata)?;
         assert_eq!(data, parsed_data);
@@ -2501,6 +2505,7 @@ mod tests {
             redeem_token_amount: None,
             redeem_plan: None,
             bind_epoch: None,
+            estimate_only: false,
         };
         let parsed_data = ops.clone().into_internal()?.try_into_data(metadata)?;
 
@@ -2578,7 +2583,7 @@ mod tests {
     /// `PaymentCurrency::NonRtd(c)` must label every payment leg as PayCoin
     /// carrying exactly `c`, and never PayRtd.
     #[test]
-    fn test_parse_nonrtd_emits_pay_coin() -> Result<(), anyhow::Error> {
+    fn test_parse_nonsui_emits_pay_coin() -> Result<(), anyhow::Error> {
         use crate::types::CurrencyMetadata;
 
         let usdc = Currency {
@@ -2614,8 +2619,8 @@ mod tests {
     /// A cache backed by a client that never connects, so every non-RTD coin
     /// lookup fails with a transport (transient) error.
     fn unreachable_cache() -> CoinMetadataCache {
-        use rtd_rpc::client::Client;
         use std::num::NonZeroUsize;
+        use rtd_rpc::client::Client;
         CoinMetadataCache::new(
             Client::new("http://127.0.0.1:1").unwrap(),
             NonZeroUsize::new(1).unwrap(),
@@ -2732,12 +2737,12 @@ mod tests {
     /// owner and attribute gas to it.
     #[tokio::test]
     async fn test_try_from_executed_transaction_deleted_gas_coin() -> Result<(), anyhow::Error> {
+        use std::num::NonZeroUsize;
         use rtd_rpc::client::Client;
-        use rtd_rpc::proto::rtd::rpc::v2::changed_object::OutputObjectState;
-        use rtd_rpc::proto::rtd::rpc::v2::{
+        use rtd_rpc::proto::sui::rpc::v2::changed_object::OutputObjectState;
+        use rtd_rpc::proto::sui::rpc::v2::{
             ChangedObject, ExecutedTransaction, ExecutionStatus, GasCostSummary, TransactionEffects,
         };
-        use std::num::NonZeroUsize;
 
         let sender = RtdAddress::random_for_testing_only();
         let recipient = RtdAddress::random_for_testing_only();
@@ -2799,6 +2804,165 @@ mod tests {
             .find(|op| op.type_ == OperationType::Gas)
             .expect("expected a Gas operation");
         assert_eq!(gas_op.account.as_ref().map(|a| a.address), Some(sender));
+
+        Ok(())
+    }
+
+    /// Unstake + transfer of the gas coin to another address in one PTB (mainnet
+    /// tx 8aSAZjEfiuN3wUEx9hsyYQaHpk6TrVGvorQDjpCzDzhc, checkpoint 328343430). The
+    /// sender's balance-change operation is net of the unstake principal/reward
+    /// (emitted as separate StakePrinciple/StakeReward operations), and the gas-coin
+    /// validation must account for that rather than reject the block.
+    #[tokio::test]
+    async fn test_try_from_executed_transaction_unstake_with_gas_coin_transfer()
+    -> Result<(), anyhow::Error> {
+        use std::num::NonZeroUsize;
+        use rtd_rpc::client::Client;
+        use rtd_rpc::proto::sui::rpc::v2::owner::OwnerKind;
+        use rtd_rpc::proto::sui::rpc::v2::{
+            ChangedObject, Event, ExecutedTransaction, ExecutionStatus, GasCostSummary, Owner,
+            TransactionEffects, TransactionEvents,
+        };
+        use rtd_types::transaction::Argument as NativeArgument;
+
+        let sender = RtdAddress::random_for_testing_only();
+        let recipient = RtdAddress::random_for_testing_only();
+        let principal: i128 = 1_000_000_000_000;
+        let reward: i128 = 10_000_000_000;
+        let gas_coin_balance: i128 = 5_000_000_000;
+        let computation_cost: i128 = 1_000;
+
+        let pt = {
+            let mut builder = ProgrammableTransactionBuilder::new();
+            let system = builder.input(CallArg::RTD_SYSTEM_MUT).unwrap();
+            let staked_rtd = builder
+                .obj(ObjectArg::ImmOrOwnedObject(random_object_ref()))
+                .unwrap();
+            let balance = builder.command(NativeCommand::move_call(
+                RTD_SYSTEM_PACKAGE_ID,
+                Identifier::new("rtd_system").unwrap(),
+                Identifier::new("request_withdraw_stake_non_entry").unwrap(),
+                vec![],
+                vec![system, staked_rtd],
+            ));
+            let coin = builder.command(NativeCommand::move_call(
+                RTD_FRAMEWORK_PACKAGE_ID,
+                Identifier::new("coin").unwrap(),
+                Identifier::new("from_balance").unwrap(),
+                vec![rtd_types::TypeTag::from_str("0x2::rtd::RTD").unwrap()],
+                vec![balance],
+            ));
+            let recipient_arg = builder.pure(recipient).unwrap();
+            builder.command(NativeCommand::TransferObjects(vec![coin], recipient_arg));
+            builder.command(NativeCommand::TransferObjects(
+                vec![NativeArgument::GasCoin],
+                recipient_arg,
+            ));
+            builder.finish()
+        };
+        let gas_price = 10;
+        let data = TransactionData::new_programmable(
+            sender,
+            vec![random_object_ref()],
+            pt,
+            TEST_ONLY_GAS_UNIT_FOR_TRANSFER * gas_price,
+            gas_price,
+        );
+        let transaction: Transaction = data.into();
+
+        // Proto structs are #[non_exhaustive], so build by mutation.
+        let mut gas_output_owner = Owner::default();
+        gas_output_owner.kind = Some(OwnerKind::Address as i32);
+        gas_output_owner.address = Some(recipient.to_string());
+        let mut gas_object = ChangedObject::default();
+        gas_object.object_id = Some(ObjectID::random().to_string());
+        gas_object.output_owner = Some(gas_output_owner);
+
+        let mut status = ExecutionStatus::default();
+        status.success = Some(true);
+
+        let mut gas_used = GasCostSummary::default();
+        gas_used.computation_cost = Some(computation_cost as u64);
+        gas_used.storage_cost = Some(0);
+        gas_used.storage_rebate = Some(0);
+        gas_used.non_refundable_storage_fee = Some(0);
+
+        let mut effects = TransactionEffects::default();
+        effects.status = Some(status);
+        effects.gas_used = Some(gas_used);
+        effects.gas_object = Some(gas_object);
+
+        let unstake_fields = [("principal_amount", principal), ("reward_amount", reward)]
+            .into_iter()
+            .map(|(name, amount)| {
+                (
+                    name.to_string(),
+                    prost_types::Value {
+                        kind: Some(Kind::StringValue(amount.to_string())),
+                    },
+                )
+            })
+            .collect();
+        let mut unstake_event = Event::default();
+        unstake_event.event_type = Some("0x3::validator::UnstakingRequestEvent".to_string());
+        unstake_event.json = Some(Box::new(prost_types::Value {
+            kind: Some(Kind::StructValue(prost_types::Struct {
+                fields: unstake_fields,
+            })),
+        }));
+        let mut events = TransactionEvents::default();
+        events.events = vec![unstake_event];
+
+        let rtd_balance_change = |address: RtdAddress, amount: i128| {
+            let mut balance_change = BalanceChange::default();
+            balance_change.address = Some(address.to_string());
+            balance_change.coin_type = Some(RTD.metadata.coin_type.clone());
+            balance_change.amount = Some(amount.to_string());
+            balance_change
+        };
+        // The gas coin (after paying gas) and the unstaked RTD both go to the recipient.
+        let sender_change = -gas_coin_balance;
+        let recipient_change = principal + reward + gas_coin_balance - computation_cost;
+
+        let mut executed_tx = ExecutedTransaction::default();
+        executed_tx.transaction = Some(transaction);
+        executed_tx.effects = Some(effects);
+        executed_tx.events = Some(events);
+        executed_tx.balance_changes = vec![
+            rtd_balance_change(sender, sender_change),
+            rtd_balance_change(recipient, recipient_change),
+        ];
+
+        // Only RTD balance changes, which resolve without an RPC, so a client that
+        // never connects is sufficient.
+        let cache = CoinMetadataCache::new(
+            Client::new("http://127.0.0.1:1").unwrap(),
+            NonZeroUsize::new(1).unwrap(),
+        );
+
+        let ops = Operations::try_from_executed_transaction(executed_tx, &cache).await?;
+
+        let gas_op = ops
+            .0
+            .iter()
+            .find(|op| op.type_ == OperationType::Gas)
+            .expect("expected a Gas operation");
+        assert_eq!(gas_op.account.as_ref().map(|a| a.address), Some(sender));
+
+        // Every operation amount, gas included, must add up to the on-chain balance
+        // changes per address.
+        let mut net_by_address: HashMap<RtdAddress, i128> = HashMap::new();
+        for op in &ops.0 {
+            if let (Some(account), Some(amount)) = (&op.account, &op.amount) {
+                *net_by_address.entry(account.address).or_default() += amount.value;
+            }
+        }
+        assert_eq!(
+            net_by_address,
+            HashMap::from([(sender, sender_change), (recipient, recipient_change)]),
+            "operations: {:?}",
+            ops.0
+        );
 
         Ok(())
     }

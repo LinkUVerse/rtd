@@ -3,9 +3,9 @@
 
 use clap::Parser;
 use move_cli::base::migrate;
-use move_package_alt_compilation::build_config::BuildConfig;
-use rtd_package_alt::RtdFlavor;
+use move_package_compilation::build_config::BuildConfig;
 use std::path::Path;
+use rtd_package_alt::RtdFlavor;
 
 #[derive(Parser)]
 #[group(id = "rtd-move-migrate")]

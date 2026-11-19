@@ -53,13 +53,18 @@ use crate::transaction_outputs::TransactionOutputs;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry as DashMapEntry;
 use futures::{FutureExt, future::BoxFuture};
+use moka::sync::SegmentedCache as MokaCache;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::debug_fatal;
 use linku_common::random_util::randomize_cache_capacity_in_tests;
 use linku_common::sync::notify_read::NotifyRead;
-use moka::sync::SegmentedCache as MokaCache;
 use parking_lot::Mutex;
 use rayon::prelude::*;
+use std::collections::{BTreeMap, HashSet};
+use std::hash::Hash;
+use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
+use std::time::Instant;
 use rtd_config::ExecutionCacheConfig;
 use rtd_macros::fail_point;
 use rtd_protocol_config::ProtocolVersion;
@@ -81,16 +86,11 @@ use rtd_types::global_state_hash::GlobalStateHash;
 use rtd_types::message_envelope::Message;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use rtd_types::object::Object;
-use rtd_types::rtd_system_state::{RtdSystemState, get_rtd_system_state};
 use rtd_types::storage::{
     FullObjectKey, InputKey, MarkerValue, ObjectKey, ObjectOrTombstone, ObjectStore, PackageObject,
 };
+use rtd_types::rtd_system_state::{RtdSystemState, get_rtd_system_state};
 use rtd_types::transaction::{TransactionDataAPI, VerifiedTransaction};
-use std::collections::{BTreeMap, HashSet};
-use std::hash::Hash;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use std::time::Instant;
 use tap::TapOptional;
 use tracing::{debug, info, instrument, trace, warn};
 
@@ -768,28 +768,25 @@ impl WritebackCache {
     ) -> CacheResult<(SequenceNumber, ObjectEntry)> {
         self.metrics
             .record_cache_request(request_type, "object_by_id");
-        // Take the same lock as write_object_entry before fetching the latest cache Arc.
-        // Otherwise a writer can advance the dirty set between the two snapshots, or
-        // eviction can leave us comparing an old Arc with a newly published version.
-        #[cfg(debug_assertions)]
-        let dirty_entry = self.dirty.objects.entry(*object_id);
         let entry = self.object_by_id_cache.get(object_id);
 
-        #[cfg(debug_assertions)]
-        if let Some(entry) = &entry {
+        if cfg!(debug_assertions)
+            && let Some(entry) = &entry
+        {
             // check that cache is coherent
-            let highest: Option<ObjectEntry> = match &dirty_entry {
-                DashMapEntry::Occupied(entry) => entry.get().get_highest().map(|(_, o)| o.clone()),
-                DashMapEntry::Vacant(_) => None,
-            }
-            .or_else(|| {
-                let obj: Option<ObjectEntry> = self
-                    .store
-                    .get_latest_object_or_tombstone(*object_id)
-                    .unwrap()
-                    .map(|(_, o)| o.into());
-                obj
-            });
+            let highest: Option<ObjectEntry> = self
+                .dirty
+                .objects
+                .get(object_id)
+                .and_then(|entry| entry.get_highest().map(|(_, o)| o.clone()))
+                .or_else(|| {
+                    let obj: Option<ObjectEntry> = self
+                        .store
+                        .get_latest_object_or_tombstone(*object_id)
+                        .unwrap()
+                        .map(|(_, o)| o.into());
+                    obj
+                });
 
             let cache_entry = match &*entry.lock() {
                 LatestObjectCacheEntry::Object(_, entry) => Some(entry.clone()),
@@ -814,9 +811,6 @@ impl WritebackCache {
                 panic!("object_by_id cache is incoherent for {:?}", object_id);
             }
         }
-        // The fallback acquires the dirty lock itself; never carry our debug guard into it.
-        #[cfg(debug_assertions)]
-        drop(dirty_entry);
 
         if let Some(entry) = entry {
             let entry = entry.lock();
@@ -1729,11 +1723,16 @@ impl ObjectCacheRead for WritebackCache {
                     true
                 } else {
                     match key {
+                        // See multi_input_objects_available: a consensus input is not satisfied
+                        // by an object at the same version on a different stream.
                         InputKey::VersionedObject { id, version } => {
-                            matches!(
-                                self.get_object_by_key_cache_only(&id.id(), *version),
-                                CacheResult::Hit(_)
-                            )
+                            match self.get_object_by_key_cache_only(&id.id(), *version) {
+                                CacheResult::Hit(object) => {
+                                    !matches!(id, FullObjectID::Consensus(_))
+                                        || object.full_id() == *id
+                                }
+                                _ => false,
+                            }
                         }
                         InputKey::Package { id } => self.packages.contains_key(id),
                     }
@@ -2450,12 +2449,6 @@ impl GlobalStateHashStore for WritebackCache {
         epoch: EpochId,
     ) -> RtdResult<Option<(CheckpointSequenceNumber, GlobalStateHash)>> {
         self.store.get_root_state_hash_for_epoch(epoch)
-    }
-
-    fn get_root_state_hash_for_highest_epoch(
-        &self,
-    ) -> RtdResult<Option<(EpochId, (CheckpointSequenceNumber, GlobalStateHash))>> {
-        self.store.get_root_state_hash_for_highest_epoch()
     }
 
     fn insert_state_hash_for_epoch(

@@ -15,7 +15,7 @@ use tokio::time::Instant;
 use tonic::Status;
 use tower::{Layer, Service};
 
-pub const X_RTD_MIN_CHECKPOINT: &str = "x-rtd-min-checkpoint";
+pub const X_SUI_MIN_CHECKPOINT: &str = "x-rtd-min-checkpoint";
 // Match the existing dependency cache budget: an old success must not admit a read.
 const VIEW_MAX_AGE: Duration = Duration::from_secs(1);
 pub(crate) type ServiceView = Option<(Instant, u64)>;
@@ -98,7 +98,7 @@ async fn await_checkpoint(
     timeout: Duration,
     headers: &HeaderMap,
 ) -> Result<(), Status> {
-    let Some(floor) = checkpoint_header(headers, X_RTD_MIN_CHECKPOINT)? else {
+    let Some(floor) = checkpoint_header(headers, X_SUI_MIN_CHECKPOINT)? else {
         return Ok(());
     };
     // Public admission supplies a ceiling. A client floor may never bypass it.
@@ -134,7 +134,7 @@ mod tests {
 
     fn headers(value: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert(X_RTD_MIN_CHECKPOINT, value.parse().unwrap());
+        headers.insert(X_SUI_MIN_CHECKPOINT, value.parse().unwrap());
         headers
     }
 
@@ -240,14 +240,14 @@ mod tests {
     fn invalid_values_are_invalid_argument_and_u64_max_parses() {
         for value in ["", "invalid", "-1", "18446744073709551616", "1.5", " 1"] {
             assert_eq!(
-                checkpoint_header(&headers(value), X_RTD_MIN_CHECKPOINT)
+                checkpoint_header(&headers(value), X_SUI_MIN_CHECKPOINT)
                     .unwrap_err()
                     .code(),
                 tonic::Code::InvalidArgument
             );
         }
         assert_eq!(
-            checkpoint_header(&headers("18446744073709551615"), X_RTD_MIN_CHECKPOINT).unwrap(),
+            checkpoint_header(&headers("18446744073709551615"), X_SUI_MIN_CHECKPOINT).unwrap(),
             Some(u64::MAX)
         );
     }

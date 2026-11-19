@@ -10,8 +10,8 @@ use rand::{
     distributions::{Distribution, Uniform},
     rngs::OsRng,
 };
-use rtd_test_transaction_builder::make_transfer_rtd_transaction;
 use std::collections::{HashMap, HashSet};
+use rtd_test_transaction_builder::make_transfer_rtd_transaction;
 use tokio::time::{Duration, Instant, sleep};
 use tracing::{debug, trace};
 
@@ -125,7 +125,10 @@ async fn test_hash_collections() {
 // repeatable and deterministic.
 #[sim_test]
 async fn test_net_determinism() {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
 
     let txn = make_transfer_rtd_transaction(&test_cluster.wallet, None, None).await;
     let digest = test_cluster

@@ -97,13 +97,11 @@ A source of checkpoints is required (exactly one of `--remote-store-url`,
 `--local-ingestion-path`, or `--rpc-api-url`), and a `--config` must be
 supplied (see "Configuration" above for details on generating a configuration
 file).
-RTD has no public Mainnet checkpoint service. Use a local checkpoint directory or
-an explicitly configured RTD endpoint.
 
 ```sh
 cargo run --bin rtd-indexer-alt -- indexer               \
   --database-url {url}                                   \
-  --local-ingestion-path /path/to/rtd/checkpoints      \
+  --remote-store-url https://checkpoints.mainnet.rtd.io  \
   --config indexer_alt_config.toml
 ```
 

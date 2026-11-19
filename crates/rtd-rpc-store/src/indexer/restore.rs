@@ -40,9 +40,9 @@ use rtd_consistent_store::restore::metrics::RestoreMetrics;
 use rtd_consistent_store::restore_state;
 use rtd_futures::service::Service;
 use rtd_indexer_alt_framework::pipeline::Processor;
+use rtd_types::storage::ObjectStore;
 use rtd_types::rtd_system_state::RtdSystemStateTrait;
 use rtd_types::rtd_system_state::get_rtd_system_state;
-use rtd_types::storage::ObjectStore;
 use tracing::info;
 use tracing::warn;
 
@@ -75,6 +75,10 @@ use crate::schema::pruning_watermark;
 /// perpetual store's tip `T`, then follow live from there. They are
 /// bounded by the live object set, so a snapshot restore reproduces
 /// them exactly.
+///
+/// The [`Indexer`](crate::Indexer) registers each of these as a
+/// required snapshot member, so every snapshot includes all of them
+/// through its checkpoint.
 ///
 /// Matches the live half of
 /// [`PipelineLayer::embedded`](crate::config::PipelineLayer::embedded);

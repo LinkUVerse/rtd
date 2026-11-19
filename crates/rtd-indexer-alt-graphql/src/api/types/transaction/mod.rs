@@ -23,7 +23,7 @@ use rtd_indexer_alt_reader::ledger_grpc_reader::CheckpointedTransaction;
 use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_indexer_alt_reader::tx_digests::TxDigestKey;
 use rtd_pg_db::query::Query;
-use rtd_rpc::proto::rtd::rpc::v2;
+use rtd_rpc::proto::sui::rpc::v2;
 use rtd_rpc_cursor::CursorKind;
 use rtd_rpc_cursor::CursorToken;
 use rtd_rpc_cursor::Position;

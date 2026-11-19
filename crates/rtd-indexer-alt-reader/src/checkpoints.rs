@@ -8,7 +8,7 @@ use async_graphql::dataloader::Loader;
 use futures::future::try_join_all;
 use prost_types::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::crypto::AuthorityQuorumSignInfo;
 use rtd_types::messages_checkpoint::CheckpointContents;
 use rtd_types::messages_checkpoint::CheckpointSummary;

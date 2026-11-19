@@ -35,6 +35,7 @@ mod checked {
         session::{LoadedFunctionInstantiation, SerializedReturnValues},
     };
     use move_vm_types::loaded_data::runtime_types::{CachedDatatype, Type};
+    use serde::{de::DeserializeSeed, Deserialize};
     use rtd_move_natives::object_runtime::ObjectRuntime;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::execution_status::{CommandArgumentError, PackageUpgradeError};
@@ -61,7 +62,6 @@ mod checked {
         private_generics::{EVENT_MODULE, PRIVATE_TRANSFER_FUNCTIONS, TRANSFER_MODULE},
         INIT_FN_NAME,
     };
-    use serde::{de::DeserializeSeed, Deserialize};
 
     use crate::adapter::substitute_package_id;
     use crate::programmable_transactions::context::*;
@@ -893,7 +893,7 @@ mod checked {
         package_id: ObjectID,
         modules: &[CompiledModule],
     ) -> Result<(), ExecutionError> {
-        // TODO: avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
+        // TODO(https://github.com/LinkUVerse/rtd/issues/69): avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
         let new_module_bytes: Vec<_> = modules
             .iter()
             .map(|m| {
@@ -1037,7 +1037,7 @@ mod checked {
                 ExecutionErrorKind::FunctionNotFound,
                 format!(
                     "Could not resolve function '{}' in module {}",
-                    function, &module_id,
+                    function, module_id,
                 ),
             ));
         };
@@ -1154,7 +1154,7 @@ mod checked {
                     Type::Reference(_) | Type::MutableReference(_) => {
                         return Err(ExecutionError::from_kind(
                             ExecutionErrorKind::InvalidPublicFunctionReturnType { idx: idx as u16 },
-                        ))
+                        ));
                     }
                     t => t,
                 };

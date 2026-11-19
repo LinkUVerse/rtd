@@ -8,11 +8,8 @@ use crate::{
     natives::functions::{NativeContext, NativeFunction, NativeResult},
     shared::safe_ops::SafeIndex as _,
 };
-use move_binary_format::errors::PartialVMResult;
-use move_core_types::{
-    gas_algebra::{InternalGas, InternalGasPerByte, NumBytes},
-    language_storage::TypeTag,
-};
+use move_binary_format::{errors::PartialVMResult, safe_assert, safe_assert_eq};
+use move_core_types::{gas_algebra::InternalGas, language_storage::TypeTag};
 
 use smallvec::smallvec;
 use std::{collections::VecDeque, sync::Arc};
@@ -24,7 +21,7 @@ const E_NON_MODULE_TYPE: u64 = 0;
 #[derive(Debug, Clone)]
 pub struct GetGasParameters {
     pub base: InternalGas,
-    pub per_byte: InternalGasPerByte,
+    pub per_byte: InternalGas,
 }
 
 #[derive(Debug, Clone)]
@@ -48,8 +45,8 @@ fn native_get(
     ty_args: Vec<Type>,
     arguments: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert_eq!(ty_args.len(), 1);
-    debug_assert!(arguments.is_empty());
+    safe_assert_eq!(ty_args.len(), 1);
+    safe_assert!(arguments.is_empty());
 
     // Charge base fee
     native_charge_gas_early_exit!(context, gas_params.base);
@@ -65,7 +62,7 @@ fn native_get(
     // Charge base fee
     native_charge_gas_early_exit!(
         context,
-        gas_params.per_byte * NumBytes::new(type_name.len() as u64)
+        gas_params.per_byte.saturating_mul(type_name.len() as u64)
     );
 
     // make a std::string::String
@@ -87,8 +84,8 @@ fn native_id(
     arguments: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
     let gas_params = super::inner_gas_params!(gas_params)?;
-    debug_assert_eq!(ty_args.len(), 1);
-    debug_assert!(arguments.is_empty());
+    safe_assert_eq!(ty_args.len(), 1);
+    safe_assert!(arguments.is_empty());
 
     // Charge base fee
     native_charge_gas_early_exit!(context, gas_params.base);

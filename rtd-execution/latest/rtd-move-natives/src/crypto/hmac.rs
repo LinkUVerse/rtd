@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 use crate::{NativesCostTable, get_extension};
 use fastcrypto::{hmac, traits::ToFromBytes};
-use move_binary_format::errors::PartialVMResult;
-use move_binary_format::safe_unwrap;
+use move_binary_format::{errors::PartialVMResult, safe_assert};
+use move_binary_format::{safe_assert_eq, safe_unwrap};
 use move_core_types::gas_algebra::InternalGas;
 use move_vm_runtime::{
     execution::{
@@ -42,8 +42,8 @@ pub fn hmac_sha3_256(
     ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
 ) -> PartialVMResult<NativeResult> {
-    debug_assert!(ty_args.is_empty());
-    debug_assert!(args.len() == 2);
+    safe_assert!(ty_args.is_empty());
+    safe_assert_eq!(args.len(), 2);
 
     // Load the cost parameters from the protocol config
     let hmac_hmac_sha3_256_cost_params = get_extension!(context, NativesCostTable)?
@@ -64,13 +64,16 @@ pub fn hmac_sha3_256(
     // Charge the arg size dependent costs
     native_charge_gas_early_exit!(
         context,
-        hmac_hmac_sha3_256_cost_params.hmac_hmac_sha3_256_input_cost_per_byte
+        hmac_hmac_sha3_256_cost_params
+            .hmac_hmac_sha3_256_input_cost_per_byte
             // same cost for msg and key
-            * ((msg_len + key_len) as u64).into()
-            + hmac_hmac_sha3_256_cost_params.hmac_hmac_sha3_256_input_cost_per_block
-                * ((((msg_len + key_len) + (2 * HMAC_SHA3_256_BLOCK_SIZE - 2))
-                    / HMAC_SHA3_256_BLOCK_SIZE) as u64)
-                    .into()
+            .saturating_mul((msg_len + key_len) as u64)
+            + hmac_hmac_sha3_256_cost_params
+                .hmac_hmac_sha3_256_input_cost_per_block
+                .saturating_mul(
+                    (((msg_len + key_len) + (2 * HMAC_SHA3_256_BLOCK_SIZE - 2))
+                        / HMAC_SHA3_256_BLOCK_SIZE) as u64,
+                )
     );
 
     let hmac_key = safe_unwrap!(hmac::HmacKey::from_bytes(&key.as_bytes_ref()?));

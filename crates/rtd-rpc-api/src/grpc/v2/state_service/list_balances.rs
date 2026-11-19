@@ -7,8 +7,8 @@ use crate::RpcError;
 use crate::RpcService;
 use bytes::Bytes;
 use rtd_rpc::proto::google::rpc::bad_request::FieldViolation;
-use rtd_rpc::proto::rtd::rpc::v2::ListBalancesRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListBalancesResponse;
+use rtd_rpc::proto::sui::rpc::v2::ListBalancesRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListBalancesResponse;
 use rtd_sdk_types::Address;
 use tap::Pipe;
 

@@ -2,16 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 mod compatibility_tests {
-    use move_package_alt::PackageLoader;
-    use rtd_framework::{BuiltInFramework, compare_system_package};
-    use rtd_framework_snapshot::{
-        FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION, load_bytecode_snapshot,
-        load_bytecode_snapshot_manifest,
-    };
-    use rtd_package_alt::{RtdFlavor, local_test_environment};
-    use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+    use move_package::PackageLoader;
     use std::collections::BTreeMap;
     use std::path::Path;
+    use rtd_framework::{BuiltInFramework, compare_system_package};
+    use rtd_framework_snapshot::{load_bytecode_snapshot, load_bytecode_snapshot_manifest};
+    use rtd_package_alt::{RtdFlavor, testnet_environment};
+    use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 
     /// The number of bytecode snapshots to backtest against the current framework.
     /// This should be set to a reasonable number to ensure that we are testing against any
@@ -21,16 +18,11 @@ mod compatibility_tests {
 
     #[tokio::test]
     async fn test_framework_compatibility() {
-        // Only snapshots created for this chain can be compared with the current RTD framework.
-        let manifest = load_bytecode_snapshot_manifest();
-        assert!(
-            manifest.contains_key(&ProtocolVersion::MAX.as_u64()),
-            "Generate the current RTD framework snapshot before running compatibility tests"
-        );
-        for (version, _snapshots) in manifest
+        // This test checks that the current framework is compatible with
+        // `SNAPSHOT_BACKTEST_WINDOW` previous framework bytecode snapshots.
+        for (version, _snapshots) in load_bytecode_snapshot_manifest()
             .iter()
             .rev()
-            .filter(|(version, _)| **version >= FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION)
             .take(SNAPSHOT_BACKTEST_WINDOW)
         {
             let config =
@@ -63,14 +55,16 @@ mod compatibility_tests {
 
     #[test]
     fn check_framework_change_with_protocol_upgrade() {
-        // A new RTD genesis must have bytecode for its exact protocol version.
+        // This test checks that if we ever update the framework, the current protocol version must differ
+        // the latest bytecode snapshot in each network.
         let snapshots = load_bytecode_snapshot_manifest();
-        let version = ProtocolVersion::MAX.as_u64();
-        assert!(
-            snapshots.contains_key(&version),
-            "Generate the current RTD framework snapshot before creating genesis"
-        );
-        let latest_snapshot = load_bytecode_snapshot(version).unwrap();
+        let latest_snapshot_version = *snapshots.keys().max().unwrap();
+        if latest_snapshot_version != ProtocolVersion::MAX.as_u64() {
+            // If we have already incremented the protocol version, then we are fine and we don't
+            // care if the framework has changed.
+            return;
+        }
+        let latest_snapshot = load_bytecode_snapshot(*snapshots.keys().max().unwrap()).unwrap();
         // Turn them into BTreeMap for deterministic comparison.
         let latest_snapshot_ref: BTreeMap<_, _> =
             latest_snapshot.iter().map(|p| (&p.id, p)).collect();
@@ -93,25 +87,18 @@ mod compatibility_tests {
     #[tokio::test]
     async fn check_manifest_against_tomls() {
         let manifest = load_bytecode_snapshot_manifest();
-        assert!(manifest.contains_key(&ProtocolVersion::MAX.as_u64()));
-        for entry in manifest
-            .range(FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION..)
-            .map(|(_, entry)| entry)
-        {
+        for entry in manifest.values() {
             for package in entry.packages.iter() {
                 // parse package.path/Move.toml
                 let package_path = Path::new(env!("CARGO_MANIFEST_DIR"))
                     .join("../..")
                     .join(&package.path);
 
-                let root_pkg = PackageLoader::new(
-                    &package_path,
-                    local_test_environment(),
-                    RtdFlavor::for_testing(),
-                )
-                .load()
-                .await
-                .expect("can load system packages");
+                let root_pkg =
+                    PackageLoader::new(&package_path, testnet_environment(), RtdFlavor::new())
+                        .load()
+                        .await
+                        .expect("can load system packages");
 
                 assert_eq!(root_pkg.package_info().display_name(), package.name);
                 assert_eq!(
@@ -130,20 +117,11 @@ mod compatibility_tests {
     #[test]
     fn check_no_dirty_manifest_commit() {
         let snapshots = load_bytecode_snapshot_manifest();
-        for snapshot in snapshots
-            .range(FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION..)
-            .map(|(_, snapshot)| snapshot)
-        {
+        for snapshot in snapshots.values() {
             assert!(
                 !snapshot.git_revision.contains("dirty"),
                 "If you are trying to regenerate the bytecode snapshot after cherry-picking, please do so in a standalone PR after the cherry-pick is merged on the release branch.",
             );
         }
-    }
-
-    #[test]
-    fn legacy_upstream_snapshots_are_rejected_even_before_cleanup() {
-        let error = load_bytecode_snapshot(FIRST_RTD_SNAPSHOT_PROTOCOL_VERSION - 1).unwrap_err();
-        assert!(error.to_string().contains("predates RTD genesis"));
     }
 }

@@ -3,7 +3,7 @@
 
 use crate::{
     execution_mode::ExecutionMode,
-    gas_charger::GasCharger,
+    metering::gas_charger::GasMeter,
     object_runtime, sp,
     static_programmable_transactions::{
         env::Env,
@@ -14,9 +14,16 @@ use crate::{
         typing::{ast as T, verify::input_arguments::is_coin_send_funds},
     },
 };
-use linku_common::ZipDebugEqIteratorExt;
 use move_core_types::account_address::AccountAddress;
 use move_trace_format::format::MoveTraceBuilder;
+use linku_common::ZipDebugEqIteratorExt;
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use rtd_types::{
     base_types::TxContext,
     error::ExecutionErrorTrait,
@@ -25,20 +32,13 @@ use rtd_types::{
     metrics::ExecutionMetrics,
     object::Owner,
 };
-use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    rc::Rc,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tracing::instrument;
 
-pub fn execute<'env, 'pc, 'vm, 'state, 'linkage, 'extension, Mode: ExecutionMode>(
+pub(crate) fn execute<'env, 'pc, 'vm, 'state, 'linkage, 'extension, Mode: ExecutionMode>(
     env: &'env mut Env<'pc, 'vm, 'state, 'linkage, 'extension, Mode>,
     metrics: Arc<ExecutionMetrics>,
     tx_context: Rc<RefCell<TxContext>>,
-    gas_charger: &mut GasCharger,
+    gas_meter: &mut GasMeter,
     ast: T::Transaction,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
 ) -> ResultWithTimings<Mode::ExecutionResults, Mode::Error>
@@ -52,7 +52,7 @@ where
         env,
         metrics,
         tx_context,
-        gas_charger,
+        gas_meter,
         ast,
         trace_builder_opt,
     );
@@ -72,14 +72,14 @@ fn execute_inner<'env, 'pc, 'vm, 'state, 'linkage, 'extension, Mode: ExecutionMo
     env: &'env mut Env<'pc, 'vm, 'state, 'linkage, 'extension, Mode>,
     metrics: Arc<ExecutionMetrics>,
     tx_context: Rc<RefCell<TxContext>>,
-    gas_charger: &mut GasCharger,
+    gas_meter: &mut GasMeter,
     ast: T::Transaction,
     trace_builder_opt: &mut Option<MoveTraceBuilder>,
 ) -> Result<Mode::ExecutionResults, Mode::Error>
 where
     'pc: 'state,
 {
-    debug_assert_eq!(gas_charger.move_gas_status().stack_height_current(), 0);
+    debug_assert_eq!(gas_meter.move_gas_status().stack_height_current(), 0);
     let T::Transaction {
         gas_payment,
         bytes,
@@ -90,13 +90,17 @@ where
         withdrawal_compatibility_conversions: _,
         original_command_len: _,
         commands,
-        unified_linkage: _,
+        unified_linkage,
     } = ast;
+    assert_invariant!(
+        Rc::ptr_eq(&env.unified_linkage.0, &unified_linkage.0),
+        "typed transaction and execution environment must share linkage"
+    );
     let mut context = Context::new(
         env,
         metrics,
         tx_context,
-        gas_charger,
+        gas_meter,
         gas_payment,
         bytes,
         objects,
@@ -167,7 +171,7 @@ fn execute_command<Mode: ExecutionMode>(
         incurs_post_execution_checks: _,
     } = c;
     assert_invariant!(
-        context.gas_charger.move_gas_status().stack_height_current() == 0,
+        context.gas_meter.move_gas_status().stack_height_current() == 0,
         "stack height did not start at 0"
     );
     let is_move_call = matches!(command, T::Command__::MoveCall(_));
@@ -417,7 +421,7 @@ fn execute_command<Mode: ExecutionMode>(
         .collect::<Vec<_>>();
     context.result(result)?;
     assert_invariant!(
-        context.gas_charger.move_gas_status().stack_height_current() == 0,
+        context.gas_meter.move_gas_status().stack_height_current() == 0,
         "stack height did not end at 0"
     );
     Ok(())

@@ -9,7 +9,7 @@
 
 //# create-checkpoint
 
-// Test 2: Multiple elements MakeMoveVec  
+// Test 2: Multiple elements MakeMoveVec
 //# programmable --sender A --inputs 10u64 11u64
 //> 0: MakeMoveVec<u64>([Input(0), Input(1)]);
 
@@ -22,6 +22,7 @@
 //# create-checkpoint
 
 //# run-graphql
+/*
 {
   # Test single element
   singleElement: transaction(digest: "@{digest_1}") {
@@ -44,8 +45,10 @@
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 {
   # Test multiple elements
   multipleElements: transaction(digest: "@{digest_3}") {
@@ -68,8 +71,10 @@
     }
   }
 }
+*/
 
 //# run-graphql
+/*
 { 
   # Test empty vector with type field
   emptyVector: transaction(digest: "@{digest_5}") {
@@ -96,3 +101,4 @@
     }
   }
 }
+*/

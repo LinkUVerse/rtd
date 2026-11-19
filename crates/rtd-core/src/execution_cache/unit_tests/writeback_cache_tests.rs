@@ -5,18 +5,6 @@ use prometheus::default_registry;
 #[cfg(not(tidehunter))]
 use rand::Rng;
 use rand::{SeedableRng, rngs::StdRng};
-use rtd_framework::BuiltInFramework;
-use rtd_test_transaction_builder::TestTransactionBuilder;
-use rtd_types::{
-    base_types::{FullObjectRef, RtdAddress, random_object_ref},
-    crypto::{AccountKeyPair, deterministic_random_account_key, get_key_pair_from_rng},
-    object::{MoveObject, OBJECT_START_VERSION, Owner},
-    storage::RuntimeObjectResolver,
-};
-use rtd_types::{
-    effects::{TestEffectsBuilder, TransactionEffectsAPI},
-    event::Event,
-};
 #[cfg(not(tidehunter))]
 use std::time::{Duration, Instant};
 use std::{
@@ -27,6 +15,19 @@ use std::{
         Arc,
         atomic::{AtomicU32, Ordering},
     },
+};
+use rtd_framework::BuiltInFramework;
+use rtd_macros::sim_test;
+use rtd_test_transaction_builder::TestTransactionBuilder;
+use rtd_types::{
+    base_types::{FullObjectRef, RtdAddress, random_object_ref},
+    crypto::{AccountKeyPair, deterministic_random_account_key, get_key_pair_from_rng},
+    object::{MoveObject, OBJECT_START_VERSION, Owner},
+    storage::RuntimeObjectResolver,
+};
+use rtd_types::{
+    effects::{TestEffectsBuilder, TransactionEffectsAPI},
+    event::Event,
 };
 use tokio::sync::RwLock;
 
@@ -815,7 +816,7 @@ async fn test_lt_or_eq_with_cached_tombstone() {
     .await;
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_write_transaction_outputs_is_sync() {
     telemetry_subscribers::init_for_testing();
     Scenario::iterate(|mut s| async move {
@@ -1080,14 +1081,6 @@ async fn latest_object_cache_race_test() {
             let mut latest = OBJECT_START_VERSION;
 
             while start.elapsed() < Duration::from_secs(2) {
-                // Exercise the production read and its debug coherence check while
-                // writers, stale DB readers, and cache eviction are all racing.
-                if let CacheResult::Hit((version, _)) =
-                    cache.get_object_entry_by_id_cache_only("race_test", &object_id)
-                {
-                    assert!(version >= latest, "{} >= {}", version, latest);
-                    latest = version;
-                }
                 let Some(cur) = cache
                     .object_by_id_cache
                     .get(&object_id)
@@ -1106,36 +1099,6 @@ async fn latest_object_cache_race_test() {
     reader.join().unwrap();
     checker.join().unwrap();
     invalidator.join().unwrap();
-}
-
-#[tokio::test]
-#[cfg(all(debug_assertions, not(tidehunter)))]
-async fn latest_object_cache_coherence_rejects_corruption() {
-    let scenario = Scenario::new(None, Arc::new(AtomicU32::new(0))).await;
-    let cache = scenario.cache;
-    let object_id = ObjectID::random();
-    let owner = Owner::AddressOwner(RtdAddress::random_for_testing_only());
-    let version = OBJECT_START_VERSION;
-    let original = Object::with_id_owner_version_for_testing(object_id, version, owner.clone());
-    cache.write_object_entry(&object_id, version, original.into());
-
-    // Inject a cache value that was never written to the dirty set or store.
-    let corrupt = Object::with_id_owner_version_for_testing(object_id, version.next(), owner);
-    cache
-        .object_by_id_cache
-        .insert(
-            &object_id,
-            LatestObjectCacheEntry::Object(version.next(), corrupt.into()),
-            Ticket::Write,
-        )
-        .unwrap();
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        cache.get_object_entry_by_id_cache_only("corruption_test", &object_id)
-    }));
-    assert!(
-        result.is_err(),
-        "real cache incoherence must still be rejected"
-    );
 }
 
 #[tokio::test]
@@ -1201,7 +1164,7 @@ async fn test_transaction_cache_race() {
 // reader observes (live object at V, tombstone at V+1, root at V). The consistent
 // read must cap the account read at the root version instead of reading the latest
 // account tombstone.
-#[tokio::test]
+#[sim_test]
 async fn test_get_consistent_latest_account_amount_race_with_pending_settlement() {
     use crate::accumulators::funds_read::AccountFundsRead;
     use rtd_types::{

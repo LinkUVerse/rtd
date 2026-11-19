@@ -9,6 +9,8 @@ shared object that is created at 0x6 during genesis.
 -  [Struct `Clock`](#rtd_clock_Clock)
 -  [Constants](#@Constants_0)
 -  [Function `timestamp_ms`](#rtd_clock_timestamp_ms)
+-  [Function `borrow`](#rtd_clock_borrow)
+-  [Function `native_borrow`](#rtd_clock_native_borrow)
 -  [Function `create`](#rtd_clock_create)
 -  [Function `consensus_commit_prologue`](#rtd_clock_consensus_commit_prologue)
 
@@ -107,6 +109,60 @@ milliseconds since an arbitrary point in the past.
 <pre><code><b>public</b> <b>fun</b> <a href="../rtd/clock.md#rtd_clock_timestamp_ms">timestamp_ms</a>(<a href="../rtd/clock.md#rtd_clock">clock</a>: &<a href="../rtd/clock.md#rtd_clock_Clock">Clock</a>): u64 {
     <a href="../rtd/clock.md#rtd_clock">clock</a>.<a href="../rtd/clock.md#rtd_clock_timestamp_ms">timestamp_ms</a>
 }
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_clock_borrow"></a>
+
+## Function `borrow`
+
+A reference to the <code><a href="../rtd/clock.md#rtd_clock_Clock">Clock</a></code> without it being a transaction input.
+It is the same <code><a href="../rtd/clock.md#rtd_clock_Clock">Clock</a></code>, at the same timestamp, as one passed into
+the transaction.
+
+New code should read the time this way rather than take a <code><a href="../rtd/clock.md#rtd_clock_Clock">Clock</a></code>
+parameter, so that callers do not change when a function starts to
+need the time. Existing functions with <code>&<a href="../rtd/clock.md#rtd_clock_Clock">Clock</a></code> arguments can be
+supplied one from anywhere via <code><a href="../rtd/borrow.md#rtd_borrow">borrow</a>()</code>.
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/borrow.md#rtd_borrow">borrow</a>(): &<a href="../rtd/clock.md#rtd_clock_Clock">rtd::clock::Clock</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>public</b> <b>fun</b> <a href="../rtd/borrow.md#rtd_borrow">borrow</a>(): &<a href="../rtd/clock.md#rtd_clock_Clock">Clock</a> {
+    <a href="../rtd/clock.md#rtd_clock_native_borrow">native_borrow</a>()
+}
+</code></pre>
+
+
+
+</details>
+
+<a name="rtd_clock_native_borrow"></a>
+
+## Function `native_borrow`
+
+
+
+<pre><code><b>fun</b> <a href="../rtd/clock.md#rtd_clock_native_borrow">native_borrow</a>(): &<a href="../rtd/clock.md#rtd_clock_Clock">rtd::clock::Clock</a>
+</code></pre>
+
+
+
+<details>
+<summary>Implementation</summary>
+
+
+<pre><code><b>native</b> <b>fun</b> <a href="../rtd/clock.md#rtd_clock_native_borrow">native_borrow</a>(): &<a href="../rtd/clock.md#rtd_clock_Clock">Clock</a>;
 </code></pre>
 
 

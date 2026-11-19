@@ -16,12 +16,12 @@ use rtd_kvstore::BitmapIndexSpec;
 use rtd_kvstore::TransactionData;
 use rtd_kvstore::TxSeqDigestData;
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ListTransactionsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListTransactionsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_api::RpcError;
 use rtd_rpc_api::ledger_history::query_options::QueryOptions;
 use rtd_rpc_api::ledger_history::query_options::RangeExhaustion;
@@ -159,12 +159,12 @@ pub(crate) async fn list_transactions(
     // keyspace directly, bounded by limit_items.
     let digest_stream: BoxStream<'static, Result<Watermarked<TxSeqDigestData>, ScanStop>> =
         if let Some(filter) = &request.filter {
-            let scan_budget = ctx.scan_budget(BitmapIndexSpec::tx());
+            let scan_budget = ctx.scan_budget(BitmapIndexSpec::tx(rtd_kvstore::BitmapSchema::V2));
             let query = ctx.transaction_filter_query(filter)?;
             let seq_stream = client.eval_bitmap_query_stream(
                 query,
                 tx_range.clone(),
-                BitmapIndexSpec::tx(),
+                BitmapIndexSpec::tx(rtd_kvstore::BitmapSchema::V2),
                 options.scan_direction(),
                 scan_budget,
                 ctx.bitmap_skip_policy(),
@@ -687,7 +687,7 @@ mod tests {
     use rtd_kvstore::testing::insert_checkpoint_rows;
     use rtd_rpc::field::FieldMask;
     use rtd_rpc::field::FieldMaskUtil;
-    use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+    use rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest;
     use rtd_types::digests::TransactionDigest;
     use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
 
@@ -1000,7 +1000,7 @@ mod tests {
             let mut proto_options = ascending_options();
             if !direction.is_ascending() {
                 proto_options.ordering =
-                    Some(rtd_rpc::proto::rtd::rpc::v2::Ordering::Descending as i32);
+                    Some(rtd_rpc::proto::sui::rpc::v2::Ordering::Descending as i32);
             }
             let options =
                 QueryOptions::transactions_from_proto(Some(&proto_options), 10, 100).unwrap();
@@ -1050,7 +1050,7 @@ mod tests {
             let mut proto_options = ascending_options();
             if !direction.is_ascending() {
                 proto_options.ordering =
-                    Some(rtd_rpc::proto::rtd::rpc::v2::Ordering::Descending as i32);
+                    Some(rtd_rpc::proto::sui::rpc::v2::Ordering::Descending as i32);
             }
             let options =
                 QueryOptions::transactions_from_proto(Some(&proto_options), 10, 100).unwrap();

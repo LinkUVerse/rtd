@@ -4,6 +4,8 @@
 use futures::future::join_all;
 use futures::join;
 use rand::distributions::Distribution;
+use std::net::SocketAddr;
+use std::time::{Duration, SystemTime};
 use rtd_macros::{register_fail_point_async, sim_test};
 use rtd_protocol_config::ProtocolVersion;
 use rtd_swarm_config::genesis_config::{AccountConfig, DEFAULT_GAS_AMOUNT};
@@ -19,8 +21,6 @@ use rtd_types::execution_status::{
 };
 use rtd_types::messages_grpc::WaitForEffectsResponse;
 use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability};
-use std::net::SocketAddr;
-use std::time::{Duration, SystemTime};
 use test_cluster::TestClusterBuilder;
 use tokio::time::sleep;
 use tracing::info;
@@ -82,6 +82,7 @@ async fn shared_object_deletion() {
 async fn shared_object_deletion_multiple_times() {
     let num_deletions = 300;
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_accounts(vec![AccountConfig {
             address: None,
             gas_amounts: vec![DEFAULT_GAS_AMOUNT; num_deletions],
@@ -139,6 +140,7 @@ async fn shared_object_deletion_multiple_times() {
 async fn shared_object_deletion_multiple_times_cert_racing() {
     let num_deletions = 10;
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_accounts(vec![AccountConfig {
             address: None,
             gas_amounts: vec![DEFAULT_GAS_AMOUNT; num_deletions],
@@ -210,7 +212,10 @@ async fn shared_object_deletion_multi_certs() {
         sleep(Duration::from_millis(delay)).await;
     });
 
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
 
     let (package, counter) = publish_basics_package_and_make_counter(&test_cluster.wallet).await;
     let package_id = package.0;
@@ -305,6 +310,7 @@ async fn assert_checkpoint_order_with_effects_dependencies(
     expect_effects_dependencies_disabled: bool,
 ) {
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_protocol_version(protocol_version)
         .with_accounts(vec![AccountConfig {
             address: None,
@@ -330,6 +336,20 @@ async fn assert_checkpoint_order_with_effects_dependencies(
     );
 
     let (package, counter) = publish_basics_package_and_make_counter(&test_cluster.wallet).await;
+
+    // Each commit's prologue also waits out this delay, and prologues execute serially because
+    // each advances the Clock. While the delay is registered, prologues execute slower than
+    // commits arrive and checkpoint lag grows. Registering it after setup keeps that lag out of
+    // the bounded checkpoint waits above; the settlement wait below has no timeout.
+    register_fail_point_async("transaction_execution_delay", move || async move {
+        let delay = {
+            let dist = rand::distributions::Uniform::new(0, 1000);
+            let mut rng = rand::thread_rng();
+            dist.sample(&mut rng)
+        };
+        sleep(Duration::from_millis(delay)).await;
+    });
+
     let package_id = package.0;
     let counter_id = counter.0;
     let counter_initial_shared_version = counter.1;
@@ -348,8 +368,8 @@ async fn assert_checkpoint_order_with_effects_dependencies(
     let gas = &accounts_and_gas[0].1;
     let rgp = test_cluster.get_reference_gas_price().await;
 
-    // The soft bundle submits this shared schedule in one consensus request. The failpoint in the
-    // caller delays execution, so the independent transfer can finish in a different order.
+    // The soft bundle submits this shared schedule in one consensus request. The failpoint
+    // delays execution, so the independent transfer can finish in a different order.
     let read_a = TestTransactionBuilder::new(sender, gas[0], rgp)
         .move_call(
             package_id,
@@ -501,20 +521,7 @@ async fn assert_checkpoint_order_with_effects_dependencies(
 /// order; checkpoint construction and settlement must nevertheless retain the shared schedule.
 #[sim_test]
 async fn shared_checkpoint_order_without_effects_dependencies() {
-    register_fail_point_async("transaction_execution_delay", move || async move {
-        let delay = {
-            let dist = rand::distributions::Uniform::new(0, 1000);
-            let mut rng = rand::thread_rng();
-            dist.sample(&mut rng)
-        };
-        sleep(Duration::from_millis(delay)).await;
-    });
-
-    // Mainnet simulation runs retain the flag-off protocol configuration.
-    let flag_enabled = rtd_types::digests::ChainIdentifier::default().chain()
-        != rtd_protocol_config::Chain::Mainnet;
-    assert_checkpoint_order_with_effects_dependencies(ProtocolVersion::new(138), flag_enabled)
-        .await;
+    assert_checkpoint_order_with_effects_dependencies(ProtocolVersion::MAX, true).await;
 }
 
 /// End-to-end shared transaction test for a Rtd validator. It does not test the client or wallet,
@@ -674,7 +681,11 @@ async fn call_shared_object_contract() {
 #[ignore("Disabled due to flakiness - re-enable when failure is fixed")]
 #[sim_test]
 async fn access_clock_object_test() {
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .with_production_config()
+        .build()
+        .await;
     let package_id = publish_basics_package(&test_cluster.wallet).await.0;
 
     let transaction = test_cluster

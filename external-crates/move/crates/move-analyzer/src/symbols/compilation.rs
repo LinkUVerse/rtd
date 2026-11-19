@@ -38,7 +38,7 @@ use move_compiler::{
     diagnostics::codes::Severity,
     editions::{Edition, Flavor},
     expansion::ast::ModuleIdent,
-    linters::LintLevel,
+    linters::LintSelection,
     parser::ast as P,
     shared::{
         Identifier, NamedAddressMap, NamedAddressMaps, PackagePaths, files::MappedFiles,
@@ -48,8 +48,8 @@ use move_compiler::{
 };
 use move_ir_types::location::Loc;
 
-use move_package_alt::{MoveFlavor, RootPackage};
-use move_package_alt_compilation::{
+use move_package::{MoveFlavor, RootPackage};
+use move_package_compilation::{
     build_config::BuildConfig,
     build_plan::BuildPlan,
     compilation::{compiler_flags, make_deps_for_compiler},
@@ -391,12 +391,12 @@ pub fn get_compiled_pkg<F: MoveFlavor>(
     packages_info: Arc<Mutex<CachedPackages>>,
     ide_files_root: VfsPath,
     pkg_path: &Path,
-    lint: LintLevel,
+    lint: LintSelection,
     move_flavor: Arc<F>,
     flavor: Option<Flavor>,
     cursor_file_opt: Option<&PathBuf>,
 ) -> Result<(Option<CompiledPkgInfo>, BTreeMap<PathBuf, Vec<Diagnostic>>)> {
-    let build_config = move_package_alt_compilation::build_config::BuildConfig {
+    let build_config = move_package_compilation::build_config::BuildConfig {
         test_mode: true,
         default_flavor: flavor,
         lint_flag: lint.into(),
@@ -1016,7 +1016,7 @@ fn compute_mapped_files<F: MoveFlavor>(
         .unwrap_or(Edition::LEGACY);
 
     for rpkg in root_pkg.packages() {
-        for f in get_sources(rpkg.path(), build_config).unwrap() {
+        for f in get_sources(rpkg.path(), build_config)? {
             let is_dep = !rpkg.is_root();
             // dunce does a better job of canonicalization on Windows
             let fname = canonicalize_path(PathBuf::from(f.as_str()))

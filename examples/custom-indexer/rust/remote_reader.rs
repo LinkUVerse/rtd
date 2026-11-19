@@ -26,7 +26,7 @@ impl Worker for CustomWorker {
 async fn main() -> Result<()> {
     let (executor, term_sender) = setup_single_workflow(
         CustomWorker,
-        std::env::var("RTD_CHECKPOINT_STORE_URL")?,
+        "https://checkpoints.testnet.rtd.io".to_string(),
         0,    /* initial checkpoint number */
         5,    /* concurrency */
         None, /* extra reader options */

@@ -13,12 +13,12 @@ use futures::stream::BoxStream;
 use linku_common::ZipDebugEqIteratorExt;
 use rtd_inverted_index::BitmapQuery;
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::Event as ProtoEvent;
-use rtd_rpc::proto::rtd::rpc::v2::ListEventsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListEventsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::Event as ProtoEvent;
+use rtd_rpc::proto::sui::rpc::v2::ListEventsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListEventsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_cursor::Position;
 use rtd_types::storage::LedgerTxSeqDigest;
 use tokio::task::JoinHandle;
@@ -796,8 +796,8 @@ fn end_response(watermark: Watermark, reason: QueryEndReason) -> ListEventsRespo
 mod tests {
     use super::*;
     use rtd_rpc::field::FieldMask;
-    use rtd_rpc::proto::rtd::rpc::v2::Ordering;
-    use rtd_rpc::proto::rtd::rpc::v2::QueryOptions as ProtoQueryOptions;
+    use rtd_rpc::proto::sui::rpc::v2::Ordering;
+    use rtd_rpc::proto::sui::rpc::v2::QueryOptions as ProtoQueryOptions;
     use rtd_rpc_cursor::CursorToken;
 
     fn options(ascending: bool) -> QueryOptions {

@@ -15,18 +15,16 @@ export function getKeypair(privateKey: string): Ed25519Keypair {
 	return Ed25519Keypair.fromSecretKey(secretKey);
 }
 
-// The DeepBook SDK must contain deployment records for this RTD Testnet.
-// Once verified, reference pools and coins by key instead of hardcoding IDs.
+// Testnet DeepBook client. The SDK ships Testnet package, coin, and pool
+// constants, so you reference pools and coins by key (for example 'DEEP_RTD' or
+// 'DEEP') instead of hardcoding IDs. Read-only calls work without a manager.
 export function deepbookClient(
 	address: string,
 	balanceManagers?: { [key: string]: BalanceManager },
 ): DeepBookTestnetClient {
-	const baseUrl = (globalThis as { process?: { env?: Record<string, string | undefined> } })
-		.process?.env?.RTD_DEEPBOOK_GRPC_URL;
-	if (!baseUrl) throw new Error('RTD_DEEPBOOK_GRPC_URL is required for an RTD DeepBook deployment');
 	return new RtdGrpcClient({
 		network: 'testnet',
-		baseUrl,
+		baseUrl: 'https://fullnode.testnet.rtd.io:443',
 	}).$extend(deepbook({ address, balanceManagers }));
 }
 // docs::/#client

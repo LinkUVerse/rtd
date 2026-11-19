@@ -9,14 +9,14 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use rtd_inverted_index::BitmapQuery;
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::Checkpoint;
-use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
-use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
+use rtd_rpc::proto::sui::rpc::v2::Checkpoint;
+use rtd_rpc::proto::sui::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListCheckpointsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListCheckpointsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::get_checkpoint_request::CheckpointId;
 use rtd_rpc_cursor::Position;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -957,8 +957,8 @@ fn end_response(watermark: Watermark, reason: QueryEndReason) -> ListCheckpoints
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtd_rpc::proto::rtd::rpc::v2::Ordering;
-    use rtd_rpc::proto::rtd::rpc::v2::QueryOptions as ProtoQueryOptions;
+    use rtd_rpc::proto::sui::rpc::v2::Ordering;
+    use rtd_rpc::proto::sui::rpc::v2::QueryOptions as ProtoQueryOptions;
     use rtd_rpc_cursor::CursorToken;
 
     fn options(ascending: bool) -> QueryOptions {

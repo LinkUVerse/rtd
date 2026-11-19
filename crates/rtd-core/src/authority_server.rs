@@ -7,16 +7,23 @@ use async_trait::async_trait;
 use fastcrypto::traits::KeyPair;
 use futures::{TryFutureExt, future};
 use itertools::Itertools as _;
+use moka::sync::Cache;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::{assert_reachable, debug_fatal};
 use linku_metrics::spawn_monitored_task;
-use moka::sync::Cache;
 use parking_lot::Mutex;
 use prometheus::{
     Gauge, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, Registry,
     register_gauge_with_registry, register_histogram_vec_with_registry,
     register_histogram_with_registry, register_int_counter_vec_with_registry,
     register_int_counter_with_registry, register_int_gauge_with_registry,
+};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::{Duration, Instant, SystemTime},
 };
 use rtd_network::{
     api::{Validator, ValidatorServer},
@@ -53,13 +60,6 @@ use rtd_types::{
     messages_checkpoint::{
         CheckpointRequest, CheckpointRequestV2, CheckpointResponse, CheckpointResponseV2,
     },
-};
-use std::{
-    collections::{HashMap, HashSet},
-    io,
-    net::{IpAddr, SocketAddr},
-    sync::Arc,
-    time::{Duration, Instant, SystemTime},
 };
 use tokio::time::timeout;
 use tonic::metadata::{Ascii, MetadataValue};
@@ -703,6 +703,12 @@ impl ValidatorService {
         inflight_guard: &mut InflightTransactionsGuard,
     ) -> RtdResult<(RawSubmitTxResponse, Weight)> {
         let epoch_store = state.load_epoch_store_one_call_per_task();
+        // A node leaving the committee keeps serving until reconfiguration shuts this server
+        // down, but it can no longer sequence transactions: a submission would wait for a
+        // consensus position until the epoch ends.
+        if !epoch_store.is_validator() {
+            return Err(RtdErrorKind::ValidatorHaltedAtEpochEnd.into());
+        }
         let submit_type = SubmitTxType::try_from(request.submit_type).map_err(|e| {
             RtdErrorKind::GrpcMessageDeserializeError {
                 type_info: "RawSubmitTxRequest.submit_type".to_string(),
@@ -775,6 +781,8 @@ impl ValidatorService {
         let mut duplicate_at_admission = false;
         // First gas price seen in this soft bundle.
         let mut expected_soft_bundle_gas_price = None;
+        // First member of this soft bundle, with the proposers it allows.
+        let mut expected_soft_bundle_allowed_proposers = None;
         // Transaction digests seen in this request attempt, used to reject repeated transactions.
         let mut request_digests = HashSet::new();
 
@@ -829,7 +837,10 @@ impl ValidatorService {
                 continue;
             }
 
-            // Soft bundles require all transactions to use the same gas price.
+            // Soft bundles require all transactions to use the same gas price, and to name
+            // the same allowed proposers: the bundle is proposed as one unit, so members
+            // disagreeing on who may propose it cannot all be honoured, and an
+            // unrestricted member would otherwise carry a restricted one past its bound.
             if is_soft_bundle_request {
                 let gas_price = transaction.data().transaction_data().gas_price();
                 if let Some(expected) = expected_soft_bundle_gas_price {
@@ -846,6 +857,29 @@ impl ValidatorService {
                     );
                 } else {
                     expected_soft_bundle_gas_price = Some(gas_price);
+                }
+
+                let allowed_proposers = transaction
+                    .data()
+                    .transaction_data()
+                    .expiration()
+                    .allowed_proposers(epoch_store.epoch())
+                    .cloned();
+                if let Some((first_digest, expected)) = &expected_soft_bundle_allowed_proposers {
+                    fp_ensure!(
+                        allowed_proposers == *expected,
+                        RtdErrorKind::UserInputError {
+                            error: UserInputError::InvalidExpiration {
+                                error: format!(
+                                    "soft bundle members must name the same allowed proposers: \
+                                     transaction {tx_digest} differs from {first_digest}"
+                                ),
+                            }
+                        }
+                        .into()
+                    );
+                } else {
+                    expected_soft_bundle_allowed_proposers = Some((tx_digest, allowed_proposers));
                 }
             }
 
@@ -900,6 +934,24 @@ impl ValidatorService {
                         .with_label_values(&["rejected_overload"])
                         .inc();
                 }
+                results[idx] = Some(SubmitTxResult::Rejected { error });
+                continue;
+            }
+
+            // The rate-limiter slot is not refunded, so a gasless transaction before its
+            // `min_timestamp` is rejected first.
+            if is_gasless
+                && let Err(error) = epoch_store
+                    .check_timestamp_expiration_at_submission(transaction.data().transaction_data())
+                && matches!(
+                    error.as_inner(),
+                    RtdErrorKind::TransactionNotYetValid { .. }
+                )
+            {
+                metrics
+                    .submission_rejected_transactions
+                    .with_label_values(&[error.to_variant_name()])
+                    .inc();
                 results[idx] = Some(SubmitTxResult::Rejected { error });
                 continue;
             }
@@ -1030,8 +1082,7 @@ impl ValidatorService {
                             _ => None,
                         })
                         .collect();
-                    let existing_locks =
-                        epoch_store.get_owned_object_locks_map(&owned_object_refs)?;
+                    let existing_locks = epoch_store.get_owned_object_locks_map(&owned_object_refs);
                     if let Err(error) = epoch_store.try_acquire_owned_object_locks_post_consensus(
                         &owned_object_refs,
                         tx_digest,
@@ -1108,6 +1159,23 @@ impl ValidatorService {
                     ?tx_digest,
                     "handle_submit_transaction: consensus message already processed"
                 );
+                continue;
+            }
+
+            // Checked after the lookups above, so that a retry of a transaction that already
+            // executed gets its effects rather than an expiry error.
+            if let Err(error) = epoch_store.check_timestamp_expiration_at_submission(
+                verified_transaction.tx().data().transaction_data(),
+            ) {
+                debug!(
+                    ?tx_digest,
+                    "Transaction rejected during submission: {error}"
+                );
+                metrics
+                    .submission_rejected_transactions
+                    .with_label_values(&[error.to_variant_name()])
+                    .inc();
+                results[idx] = Some(SubmitTxResult::Rejected { error });
                 continue;
             }
 
@@ -1379,18 +1447,24 @@ impl ValidatorService {
                 let mut receivers = Vec::with_capacity(tx_groups.len());
                 for txns in tx_groups {
                     let gas_price = Self::extract_gas_price(&txns);
-                    let (rx, newly_inserted) = aq
-                        .try_insert(gas_price, txns, submitter_client_addr)
-                        .await?;
-                    if !newly_inserted {
-                        // Duplicate of an in-flight submission; flag the request as spam. The
-                        // per-tx result is still Submitted, so this is tracked separately.
-                        duplicate_at_admission = true;
+                    match aq.try_insert(gas_price, txns, submitter_client_addr).await {
+                        Ok((rx, newly_inserted)) => {
+                            if !newly_inserted {
+                                // Duplicate of an in-flight submission; flag the request as spam.
+                                // The per-tx result is still Submitted, so this is tracked
+                                // separately.
+                                duplicate_at_admission = true;
+                            }
+                            receivers.push(Ok(rx));
+                        }
+                        Err(error) if Self::is_owned_object_conflict(&error) => {
+                            receivers.push(Err(error))
+                        }
+                        Err(error) => return Err(error),
                     }
-                    receivers.push(rx);
                 }
                 future::join_all(receivers.into_iter().map(|rx| async move {
-                    match rx.await {
+                    match rx?.await {
                         Ok(result) => result.map_err(RtdError::from),
                         Err(_) => Err(RtdError::from(
                             RtdErrorKind::TooManyTransactionsPendingConsensus,
@@ -1485,6 +1559,16 @@ impl ValidatorService {
                             results[idx] = Some(SubmitTxResult::Submitted { consensus_position });
                         }
                     }
+                    // Another queued transaction holds an owned gas object of this group. Report
+                    // it per-tx, like a duplicate, so it counts toward the request's spam weight
+                    // and does not fail the other groups. The group is not queued, so its digests
+                    // are released rather than recorded as recently submitted.
+                    Err(err) if Self::is_owned_object_conflict(&err) => {
+                        for (idx, tx_digest) in txns_meta {
+                            inflight_guard.release(tx_digest);
+                            results[idx] = Some(SubmitTxResult::Rejected { error: err.clone() });
+                        }
+                    }
                     // The transaction(s) in this group are already being processed by consensus.
                     // Report per-tx as a retriable rejection rather than failing the whole request.
                     Err(err) => {
@@ -1527,6 +1611,10 @@ impl ValidatorService {
         );
         let response = Self::try_from_submit_tx_response(results)?;
         Ok((response, spam_weight))
+    }
+
+    fn is_owned_object_conflict(error: &RtdError) -> bool {
+        matches!(error.as_inner(), RtdErrorKind::OwnedObjectConflict { .. })
     }
 
     /// Traffic-control spam weight for a whole submit request. The request is spam unless it is
@@ -1723,6 +1811,17 @@ impl InflightTransactionsGuard {
 
         self.acquired.insert(digest);
         AcquireOutcome::Acquired
+    }
+
+    /// Releases a digest that was not queued, so a resubmission is handled afresh instead of
+    /// being suppressed as recently submitted.
+    fn release(&mut self, digest: TransactionDigest) {
+        if !self.acquired.remove(&digest) {
+            return;
+        }
+        let mut set = self.inflight.lock();
+        set.remove(&digest);
+        self.metrics.inflight_transactions.set(set.len() as i64);
     }
 
     fn recently_processed_outcome(&self, digest: TransactionDigest) -> Option<AcquireOutcome> {
@@ -2031,6 +2130,7 @@ impl ValidatorService {
             num_inflight_execution_transactions,
             last_locally_built_checkpoint,
             last_committed_leader_round,
+            staggering_active: Some(epoch_store.staggered_submission().is_active()),
         };
 
         let raw_response = typed_response
@@ -2354,6 +2454,29 @@ mod inflight_guard_tests {
         assert!(matches!(
             g1.try_acquire(digest),
             AcquireOutcome::AlreadyAcquiredByThisRequest
+        ));
+    }
+
+    #[test]
+    fn released_digest_is_not_recorded_as_recently_submitted() {
+        let inflight = Arc::new(Mutex::new(HashSet::new()));
+        let cache = ValidatorService::new_recently_submitted_cache(Duration::from_secs(10));
+        let metrics = Arc::new(ValidatorServiceMetrics::new(&Registry::new()));
+        let digest = TransactionDigest::random();
+
+        {
+            let mut g = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+            assert!(matches!(g.try_acquire(digest), AcquireOutcome::Acquired));
+            g.release(digest);
+            assert_eq!(inflight.lock().len(), 0);
+            assert_eq!(metrics.inflight_transactions.get(), 0);
+        }
+        cache.run_pending_tasks();
+
+        let mut g_after = make_guard(inflight.clone(), cache.clone(), metrics.clone());
+        assert!(matches!(
+            g_after.try_acquire(digest),
+            AcquireOutcome::Acquired
         ));
     }
 

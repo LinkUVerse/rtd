@@ -7,11 +7,10 @@ use runtime::AddResult;
 pub use runtime::ScratchRuntime;
 
 use crate::{NativesCostTable, get_extension, get_extension_mut};
-use move_binary_format::errors::{PartialVMError, PartialVMResult};
+use move_binary_format::errors::PartialVMResult;
+use move_binary_format::partial_vm_error;
 use move_binary_format::{safe_assert, safe_assert_eq, safe_unwrap};
-use move_core_types::{
-    account_address::AccountAddress, gas_algebra::InternalGas, vm_status::StatusCode,
-};
+use move_core_types::{account_address::AccountAddress, gas_algebra::InternalGas};
 use move_vm_runtime::native_charge_gas_early_exit;
 use move_vm_runtime::natives::functions::NativeContext;
 use move_vm_runtime::{
@@ -20,9 +19,9 @@ use move_vm_runtime::{
     pop_arg,
     shared::views::{SizeConfig, ValueView},
 };
-use rtd_types::error::VMMemoryLimitExceededSubStatusCode;
 use smallvec::smallvec;
 use std::collections::VecDeque;
+use rtd_types::error::VMMemoryLimitExceededSubStatusCode;
 use tracing::instrument;
 
 // These must match the error constants declared in `rtd::scratch`.
@@ -82,11 +81,11 @@ pub fn add_impl(
             E_ENTRY_ALREADY_EXISTS,
         )),
         // Per-transaction capacity limit exceeded.
-        AddResult::LimitExceeded => Err(PartialVMError::new(StatusCode::MEMORY_LIMIT_EXCEEDED)
-            .with_message("Per-transaction scratch size limit was exceeded".to_string())
-            .with_sub_status(
-                VMMemoryLimitExceededSubStatusCode::SCRATCH_SIZE_LIMIT_EXCEEDED as u64,
-            )),
+        AddResult::LimitExceeded => Err(partial_vm_error!(
+            MEMORY_LIMIT_EXCEEDED,
+            "Per-transaction scratch size limit was exceeded"
+        )
+        .with_sub_status(VMMemoryLimitExceededSubStatusCode::SCRATCH_SIZE_LIMIT_EXCEEDED as u64)),
     }
 }
 
@@ -143,7 +142,7 @@ pub fn read_impl(
 
     native_charge_gas_early_exit!(
         context,
-        scratch_read_value_cost * value_size(&entry.value)?.into()
+        scratch_read_value_cost.saturating_mul(value_size(&entry.value)?)
     );
     let value = entry.value.copy_value();
 
@@ -270,7 +269,7 @@ pub fn exists_with_type_impl(
 
     native_charge_gas_early_exit!(
         context,
-        scratch_exists_with_type_type_cost * u64::from(ty.size()?).into()
+        scratch_exists_with_type_type_cost.saturating_mul(u64::from(ty.size()?))
     );
 
     let scratch_runtime: &ScratchRuntime = get_extension!(context)?;

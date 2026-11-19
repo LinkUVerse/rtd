@@ -2,7 +2,7 @@
 name = "rtd-transactional-test-runner"
 version = "0.1.0"
 edition = "2024"
-authors = ["LinkU Labs"]
+authors = ["LinkU Labs <eng@linkuverse.com>"]
 description = "Move framework for Rtd platform"
 license = "Apache-2.0"
 publish = false
@@ -24,7 +24,6 @@ tempfile.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 futures.workspace = true
 criterion.workspace = true
 tracing.workspace = true
@@ -53,11 +52,7 @@ rtd-core.workspace = true
 rtd-framework.workspace = true
 rtd-protocol-config.workspace = true
 rtd-types.workspace = true
-rtd-json-rpc-types.workspace = true
-rtd-json-rpc.workspace = true
-rtd-json-rpc-api.workspace = true
 rtd-framework-snapshot.workspace = true
-rtd-storage.workspace = true
 typed-store.workspace = true
 
 [[bin]]

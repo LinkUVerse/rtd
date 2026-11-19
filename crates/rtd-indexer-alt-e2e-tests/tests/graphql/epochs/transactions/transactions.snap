@@ -84,7 +84,7 @@ task 13, lines 44-46:
 mutated: object(0,0)
 gas summary: computation_cost: 1000000, storage_cost: 988000,  storage_rebate: 978120, non_refundable_storage_fee: 9880
 
-task 14, lines 48-63:
+task 14, lines 48-65:
 //# run-graphql
 Response: {
   "data": {
@@ -94,12 +94,12 @@ Response: {
         "pageInfo": {
           "hasPreviousPage": false,
           "hasNextPage": false,
-          "startCursor": "KAE6BAgAEAA=",
-          "endCursor": "KAE6BAgAEAE="
+          "startCursor": "AAABCCgBOgIQAEoAAQAAAAAAAAAAAAAAAAAAAAAA",
+          "endCursor": "AAABCigCOgIQAkoCCAIBAQIAAAAAAAAAAAAAAAAAAAA="
         },
         "edges": [
           {
-            "cursor": "KAE6BAgAEAA=",
+            "cursor": "AAABCCgBOgIQAEoAAQAAAAAAAAAAAAAAAAAAAAAA",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -109,7 +109,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAE=",
+            "cursor": "AAABCigBOgIQAUoCCAEBAAEAAAAAAAAAAAAAAAAAAAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -124,7 +124,7 @@ Response: {
   }
 }
 
-task 15, lines 65-80:
+task 15, lines 67-84:
 //# run-graphql
 Response: {
   "data": {
@@ -135,12 +135,12 @@ Response: {
         "pageInfo": {
           "hasPreviousPage": false,
           "hasNextPage": false,
-          "startCursor": "KAE6BAgAEAI=",
-          "endCursor": "KAE6BAgAEAo="
+          "startCursor": "AAABCigBOgIQAkoCCAIBAAIAAAAAAAAAAAAAAAAAAAA=",
+          "endCursor": "AAABCigCOgIQC0oCCAYBAQYAAAAAAAAAAAAAAAAAAAA="
         },
         "edges": [
           {
-            "cursor": "KAE6BAgAEAI=",
+            "cursor": "AAABCigBOgIQAkoCCAIBAAIAAAAAAAAAAAAAAAAAAAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -150,7 +150,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAM=",
+            "cursor": "AAABDCgBOgIQA0oECAIQAQEAAgAAAAAAAAABAAAAAAAAAA==",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -160,7 +160,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAQ=",
+            "cursor": "AAABDCgBOgIQBEoECAIQAgEAAgAAAAAAAAACAAAAAAAAAA==",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -170,7 +170,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAU=",
+            "cursor": "AAABDCgBOgIQBUoECAIQAwEAAgAAAAAAAAADAAAAAAAAAA==",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -180,7 +180,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAY=",
+            "cursor": "AAABCigBOgIQBkoCCAMBAAMAAAAAAAAAAAAAAAAAAAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -190,7 +190,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAc=",
+            "cursor": "AAABDCgBOgIQB0oECAMQAQEAAwAAAAAAAAABAAAAAAAAAA==",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -200,7 +200,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAg=",
+            "cursor": "AAABCigBOgIQCEoCCAQBAAQAAAAAAAAAAAAAAAAAAAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -210,7 +210,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAk=",
+            "cursor": "AAABCigBOgIQCUoCCAUBAAUAAAAAAAAAAAAAAAAAAAA=",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -220,7 +220,7 @@ Response: {
             }
           },
           {
-            "cursor": "KAE6BAgAEAo=",
+            "cursor": "AAABDCgBOgIQCkoECAUQAQEABQAAAAAAAAABAAAAAAAAAA==",
             "node": {
               "effects": {
                 "checkpoint": {
@@ -235,7 +235,7 @@ Response: {
   }
 }
 
-task 16, lines 82-96:
+task 16, lines 86-102:
 //# run-graphql
 Response: {
   "data": {

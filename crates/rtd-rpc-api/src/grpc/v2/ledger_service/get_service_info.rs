@@ -3,7 +3,7 @@
 
 use crate::RpcError;
 use crate::RpcService;
-use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoResponse;
+use rtd_rpc::proto::sui::rpc::v2::GetServiceInfoResponse;
 use rtd_rpc::proto::timestamp_ms_to_proto;
 use rtd_sdk_types::Digest;
 

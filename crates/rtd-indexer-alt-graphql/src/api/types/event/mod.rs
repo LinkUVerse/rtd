@@ -17,7 +17,7 @@ use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::StreamPage;
 use rtd_indexer_alt_reader::kv_loader::KvLoader;
 use rtd_indexer_alt_reader::pg_reader::PgReader;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2;
+use rtd_rpc::proto::sui::rpc::v2;
 use rtd_rpc_cursor::CursorKind;
 use rtd_rpc_cursor::CursorToken;
 use rtd_rpc_cursor::Position;

@@ -8,8 +8,6 @@ mod metrics;
 
 use crate::accumulators::{self, AccumulatorSettlementTxBuilder};
 use crate::authority::AuthorityState;
-#[cfg(not(tidehunter))]
-use crate::authority::authority_store_tables::AuthorityPerpetualTables;
 use crate::authority_client::{AuthorityAPI, make_network_authority_clients_with_network_config};
 use crate::checkpoints::causal_order::CausalOrder;
 use crate::checkpoints::checkpoint_output::CertifiedCheckpointOutput;
@@ -24,7 +22,6 @@ use crate::global_state_hasher::GlobalStateHasher;
 use crate::stake_aggregator::{InsertResult, MultiStakeAggregator};
 use consensus_core::CommitRef;
 use diffy::create_patch;
-use futures::FutureExt as _;
 use itertools::Itertools;
 use linku_common::ZipDebugEqIteratorExt;
 use linku_common::random::get_rng;
@@ -33,6 +30,7 @@ use linku_common::{assert_reachable, debug_fatal, fatal, in_antithesis};
 use linku_metrics::{MonitoredFutureExt, monitored_scope, spawn_monitored_task};
 use parking_lot::Mutex;
 use pin_project_lite::pin_project;
+use serde::{Deserialize, Serialize};
 use rtd_macros::fail_point_arg;
 use rtd_network::default_linku_network_config;
 use rtd_types::accumulator_metadata;
@@ -42,7 +40,6 @@ use rtd_types::messages_checkpoint::{
     CheckpointArtifacts, CheckpointCommitment, VersionedFullCheckpointContents,
 };
 use rtd_types::rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait;
-use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, watch};
 #[cfg(not(tidehunter))]
 use typed_store::rocks::{DBOptions, ReadWriteOptions, default_db_options};
@@ -51,12 +48,23 @@ use crate::authority::authority_per_epoch_store::AuthorityPerEpochStore;
 use crate::authority::authority_store_pruner::PrunerWatermarks;
 use crate::consensus_handler::SequencedConsensusTransactionKey;
 use rand::seq::SliceRandom;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
+use std::future::Future;
+use std::io::Write;
+use std::path::Path;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::OnceLock;
+use std::sync::Weak;
+use std::task::{Context, Poll};
+use std::time::{Duration, SystemTime};
 use rtd_protocol_config::ProtocolVersion;
 use rtd_types::base_types::{AuthorityName, EpochId, TransactionDigest};
 use rtd_types::committee::StakeUnit;
 use rtd_types::crypto::AuthorityStrongQuorumSignInfo;
 use rtd_types::digests::{
-    ChainIdentifier, CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
+    CheckpointContentsDigest, CheckpointDigest, Digest, TransactionEffectsDigest,
 };
 use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
 use rtd_types::error::{RtdErrorKind, RtdResult};
@@ -70,22 +78,11 @@ use rtd_types::messages_checkpoint::{
 };
 use rtd_types::messages_checkpoint::{CheckpointRequestV2, SignedCheckpointSummary};
 use rtd_types::messages_consensus::ConsensusTransactionKey;
-use rtd_types::rtd_system_state::{RtdSystemState, RtdSystemStateTrait};
 use rtd_types::signature::GenericSignature;
+use rtd_types::rtd_system_state::{RtdSystemState, RtdSystemStateTrait};
 use rtd_types::transaction::{
     TransactionDataAPI, TransactionKey, TransactionKind, VerifiedTransaction,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::File;
-use std::future::Future;
-use std::io::Write;
-use std::path::Path;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::OnceLock;
-use std::sync::Weak;
-use std::task::{Context, Poll};
-use std::time::{Duration, SystemTime};
 use tokio::sync::Notify;
 use tracing::{debug, error, info, instrument, trace, warn};
 use typed_store::DBMapUtils;
@@ -385,82 +382,6 @@ pub struct CheckpointStore {
     /// The running binary's version, set once at node startup. Embedded in fork markers so
     /// recovery can refuse to clear a fork with the same binary version that produced it.
     binary_version: OnceLock<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ReadonlyCheckpointStoreInspection {
-    pub chain_identifier: ChainIdentifier,
-    pub highest_executed_checkpoint: CheckpointSequenceNumber,
-}
-
-pub const READONLY_FULLNODE_DB_INSPECTION_SUPPORTED: bool = cfg!(not(tidehunter));
-
-#[cfg(not(tidehunter))]
-pub fn inspect_readonly_checkpoint_store(
-    path: &Path,
-) -> anyhow::Result<ReadonlyCheckpointStoreInspection> {
-    let tables = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        CheckpointStore::open_readonly(path)
-    }))
-    .map_err(|_| anyhow::anyhow!("cannot open checkpoint store at {}", path.display()))?;
-    tables
-        .try_catch_up_with_primary_all()
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-
-    let genesis = tables
-        .certified_checkpoints
-        .get(&0)?
-        .ok_or_else(|| anyhow::anyhow!("checkpoint store has no genesis checkpoint"))?;
-    let (highest_executed_checkpoint, expected_digest) = tables
-        .watermarks
-        .get(&CheckpointWatermark::HighestExecuted)?
-        .ok_or_else(|| anyhow::anyhow!("checkpoint store has no executed checkpoint watermark"))?;
-    let highest_executed = tables
-        .certified_checkpoints
-        .get(&highest_executed_checkpoint)?
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "executed checkpoint {highest_executed_checkpoint} is missing from checkpoint store"
-            )
-        })?;
-    anyhow::ensure!(
-        highest_executed.inner().digest() == &expected_digest,
-        "executed checkpoint {highest_executed_checkpoint} digest does not match its watermark"
-    );
-
-    Ok(ReadonlyCheckpointStoreInspection {
-        chain_identifier: ChainIdentifier::from(*genesis.inner().digest()),
-        highest_executed_checkpoint,
-    })
-}
-
-#[cfg(not(tidehunter))]
-pub fn inspect_readonly_fullnode_db(
-    db_path: &Path,
-) -> anyhow::Result<ReadonlyCheckpointStoreInspection> {
-    let object_store_path = db_path.join("live/store");
-    let object_store = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        AuthorityPerpetualTables::open_readonly(&object_store_path)
-    }))
-    .map_err(|_| {
-        anyhow::anyhow!(
-            "cannot open fullnode object store at {}",
-            object_store_path.display()
-        )
-    })?;
-    object_store
-        .try_catch_up_with_primary_all()
-        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    drop(object_store);
-
-    inspect_readonly_checkpoint_store(&db_path.join("live/checkpoints"))
-}
-
-#[cfg(tidehunter)]
-pub fn inspect_readonly_fullnode_db(
-    _db_path: &Path,
-) -> anyhow::Result<ReadonlyCheckpointStoreInspection> {
-    anyhow::bail!("read-only fullnode database inspection is unavailable with Tidehunter")
 }
 
 impl CheckpointStore {
@@ -1126,6 +1047,25 @@ impl CheckpointStore {
         batch.write()
     }
 
+    /// Like [`Self::insert_verified_checkpoint_contents`], but does not store full contents.
+    pub fn insert_checkpoint_contents_digests(
+        &self,
+        checkpoint: &VerifiedCheckpoint,
+        contents: &CheckpointContents,
+    ) -> Result<(), TypedStoreError> {
+        assert_eq!(&checkpoint.content_digest, contents.digest());
+        let mut batch = self.tables.checkpoint_content.batch();
+        batch.insert_batch(
+            &self.tables.checkpoint_sequence_by_contents_digest,
+            [(&checkpoint.content_digest, checkpoint.sequence_number())],
+        )?;
+        batch.insert_batch(
+            &self.tables.checkpoint_content,
+            [(contents.digest(), contents)],
+        )?;
+        batch.write()
+    }
+
     pub fn delete_full_checkpoint_contents(
         &self,
         seq: CheckpointSequenceNumber,
@@ -1452,9 +1392,7 @@ impl CheckpointStateHasher {
                 info!("Object state hasher was dropped, stopping checkpoint accumulation");
                 break;
             };
-            hasher
-                .accumulate_checkpoint(&effects, seq, &epoch_store)
-                .expect("epoch ended while accumulating checkpoint");
+            hasher.accumulate_checkpoint(&effects, seq, &epoch_store);
         }
     }
 }
@@ -1551,60 +1489,16 @@ impl CheckpointBuilder {
     /// It is optional to pass in consensus_replay_waiter, to make it easier to attribute
     /// if slow recovery of previously built checkpoints is due to consensus replay or
     /// checkpoint building.
-    async fn run(
-        mut self,
-        consensus_replay_waiter: Option<ReplayWaiter>,
-        checkpoint_builder_startup_tx: watch::Sender<Option<CheckpointSequenceNumber>>,
-    ) {
-        let consensus_recovery_monitor = if let Some(replay_waiter) = consensus_replay_waiter {
-            info!(
-                target: "rtd_startup",
-                "Waiting for consensus replay to reach the previous durable cursor"
-            );
-            let monitor = replay_waiter.wait_for_replay().await;
-            info!(
-                target: "rtd_startup",
-                "Previous durable cursor replayed; checkpoint recovery is running"
-            );
-            Some(monitor)
-        } else {
-            None
-        };
-
-        let mut startup_complete = false;
-        let mut post_recovery_drain_started = false;
+    async fn run(mut self, consensus_replay_waiter: Option<ReplayWaiter>) {
+        if let Some(replay_waiter) = consensus_replay_waiter {
+            info!("Waiting for consensus commits to replay ...");
+            replay_waiter.wait_for_replay().await;
+            info!("Consensus commits finished replaying");
+        }
+        info!("Starting CheckpointBuilder");
         loop {
             match self.maybe_build_checkpoints().await {
-                Ok(()) => {
-                    if !startup_complete {
-                        if let Some(monitor) = consensus_recovery_monitor.as_ref() {
-                            if !monitor.is_recovery_complete() {
-                                tokio::select! {
-                                    _ = self.notify.notified() => {}
-                                    _ = monitor.wait_for_recovery_complete() => {}
-                                }
-                                continue;
-                            }
-
-                            // The handler reports a commit handled only after publishing its
-                            // checkpoint notification. Drain the builder once more after the
-                            // recovered stream reaches that barrier.
-                            if !post_recovery_drain_started {
-                                post_recovery_drain_started = true;
-                                continue;
-                            }
-                        }
-
-                        let recovery_checkpoint = *self.last_built.borrow();
-                        checkpoint_builder_startup_tx.send_replace(Some(recovery_checkpoint));
-                        startup_complete = true;
-                        info!(
-                            target: "rtd_startup",
-                            recovery_checkpoint,
-                            "Validator checkpoint backlog processed"
-                        );
-                    }
-                }
+                Ok(()) => {}
                 err @ Err(
                     CheckpointBuilderError::ChangeEpochTxAlreadyExecuted
                     | CheckpointBuilderError::SystemPackagesMissing,
@@ -1635,11 +1529,7 @@ impl CheckpointBuilder {
             .expect("epoch should not have ended")
             .and_then(|s| s.checkpoint_height);
 
-        for (height, pending) in self
-            .epoch_store
-            .get_pending_checkpoints(last_height)
-            .expect("unexpected epoch store error")
-        {
+        for (height, pending) in self.epoch_store.get_pending_checkpoints(last_height) {
             debug!(checkpoint_commit_height = height, "Making checkpoint");
 
             let seq = self.make_checkpoint(pending).await?;
@@ -2113,7 +2003,7 @@ impl CheckpointBuilder {
 
             self.epoch_store
                 .consensus_messages_processed_notify(transaction_keys)
-                .await?;
+                .await;
         }
 
         let signatures = self
@@ -2204,11 +2094,8 @@ impl CheckpointBuilder {
                     .global_state_hasher
                     .upgrade()
                     .expect("No checkpoints should be getting built after local configuration");
-                let acc = state_acc.accumulate_checkpoint(
-                    &effects,
-                    sequence_number,
-                    &self.epoch_store,
-                )?;
+                let acc =
+                    state_acc.accumulate_checkpoint(&effects, sequence_number, &self.epoch_store);
 
                 state_acc
                     .wait_for_previous_running_root(&self.epoch_store, sequence_number)
@@ -2452,7 +2339,6 @@ async fn wait_for_effects_with_retry(
     } else {
         5
     };
-    let mut waited_seconds = 0;
     loop {
         match tokio::time::timeout(Duration::from_secs(delay), async {
             effects_store
@@ -2463,11 +2349,9 @@ async fn wait_for_effects_with_retry(
         {
             Ok(effects) => break effects,
             Err(_) => {
-                waited_seconds += delay;
-                warn!(
-                    ?tx_key,
-                    waited_seconds,
-                    "Checkpoint construction is waiting for transaction effects; execution is still in progress"
+                debug_fatal!(
+                    "Timeout waiting for transactions to be executed {:?}, retrying...",
+                    tx_key
                 );
             }
         }
@@ -2982,7 +2866,6 @@ enum CheckpointServiceState {
             CheckpointBuilder,
             CheckpointAggregator,
             CheckpointStateHasher,
-            watch::Sender<Option<CheckpointSequenceNumber>>,
         ),
     ),
     Started,
@@ -2995,14 +2878,13 @@ impl CheckpointServiceState {
         CheckpointBuilder,
         CheckpointAggregator,
         CheckpointStateHasher,
-        watch::Sender<Option<CheckpointSequenceNumber>>,
     ) {
         let mut state = CheckpointServiceState::Started;
         std::mem::swap(self, &mut state);
 
         match state {
-            CheckpointServiceState::Unstarted((builder, aggregator, hasher, startup_tx)) => {
-                (builder, aggregator, hasher, startup_tx)
+            CheckpointServiceState::Unstarted((builder, aggregator, hasher)) => {
+                (builder, aggregator, hasher)
             }
             CheckpointServiceState::Started => panic!("CheckpointServiceState is already started"),
         }
@@ -3018,13 +2900,6 @@ pub struct CheckpointService {
     // The highest sequence number that had already been built at the time CheckpointService
     // was constructed
     highest_previously_built_seq: CheckpointSequenceNumber,
-    // The builder alone owns the sender after spawn. If it stops before
-    // announcing recovery, subscribers see channel closure rather than hang.
-    checkpoint_builder_startup_rx: watch::Receiver<Option<CheckpointSequenceNumber>>,
-    // Critical checkpoint task panics must reach the node supervisor so consensus cannot
-    // continue persisting commits after the checkpoint pipeline has stopped.
-    checkpoint_service_failure_tx: watch::Sender<Option<String>>,
-    checkpoint_service_failure_rx: watch::Receiver<Option<String>>,
     metrics: Arc<CheckpointMetrics>,
     state: Mutex<CheckpointServiceState>,
 }
@@ -3065,8 +2940,6 @@ impl CheckpointService {
                 .unwrap_or(0);
 
         let (highest_currently_built_seq_tx, _) = watch::channel(highest_currently_built_seq);
-        let (checkpoint_builder_startup_tx, checkpoint_builder_startup_rx) = watch::channel(None);
-        let (checkpoint_service_failure_tx, checkpoint_service_failure_rx) = watch::channel(None);
 
         let (signature_sender, signature_receiver) = mpsc::unbounded_channel();
 
@@ -3108,15 +2981,11 @@ impl CheckpointService {
             signature_sender,
             highest_currently_built_seq_tx,
             highest_previously_built_seq,
-            checkpoint_builder_startup_rx,
-            checkpoint_service_failure_tx,
-            checkpoint_service_failure_rx,
             metrics,
             state: Mutex::new(CheckpointServiceState::Unstarted((
                 builder,
                 aggregator,
                 ckpt_state_hasher,
-                checkpoint_builder_startup_tx,
             ))),
         })
     }
@@ -3150,8 +3019,7 @@ impl CheckpointService {
         epoch_store: Arc<AuthorityPerEpochStore>,
         consensus_replay_waiter: Option<ReplayWaiter>,
     ) {
-        let (builder, aggregator, state_hasher, checkpoint_builder_startup_tx) =
-            self.state.lock().take_unstarted();
+        let (builder, aggregator, state_hasher) = self.state.lock().take_unstarted();
 
         // Clean up state hashes computed after the last built checkpoint
         // This prevents ECMH divergence after fork recovery restarts
@@ -3192,51 +3060,14 @@ impl CheckpointService {
 
         let (builder_finished_tx, builder_finished_rx) = tokio::sync::oneshot::channel();
 
-        let state_hasher_failure_tx = self.checkpoint_service_failure_tx.clone();
-        let state_hasher_task = spawn_monitored_task!(async move {
-            if std::panic::AssertUnwindSafe(state_hasher.run())
-                .catch_unwind()
-                .await
-                .is_err()
-            {
-                report_checkpoint_service_failure(
-                    &state_hasher_failure_tx,
-                    "checkpoint state hasher panicked",
-                );
-            }
-        });
-        let aggregator_failure_tx = self.checkpoint_service_failure_tx.clone();
-        let aggregator_task = spawn_monitored_task!(async move {
-            if std::panic::AssertUnwindSafe(aggregator.run())
-                .catch_unwind()
-                .await
-                .is_err()
-            {
-                report_checkpoint_service_failure(
-                    &aggregator_failure_tx,
-                    "checkpoint aggregator panicked",
-                );
-            }
-        });
-        let builder_failure_tx = self.checkpoint_service_failure_tx.clone();
+        let state_hasher_task = spawn_monitored_task!(state_hasher.run());
+        let aggregator_task = spawn_monitored_task!(aggregator.run());
 
         spawn_monitored_task!(async move {
             epoch_store
                 .within_alive_epoch(async move {
-                    if std::panic::AssertUnwindSafe(
-                        builder.run(consensus_replay_waiter, checkpoint_builder_startup_tx),
-                    )
-                    .catch_unwind()
-                    .await
-                    .is_err()
-                    {
-                        report_checkpoint_service_failure(
-                            &builder_failure_tx,
-                            "checkpoint builder panicked",
-                        );
-                    } else {
-                        builder_finished_tx.send(()).ok();
-                    }
+                    builder.run(consensus_replay_waiter).await;
+                    builder_finished_tx.send(()).ok();
                 })
                 .await
                 .ok();
@@ -3257,53 +3088,24 @@ impl CheckpointService {
         // crash would occur because we may be missing transactions that are below the
         // highest_synced_checkpoint watermark, which can cause a crash in
         // `CheckpointExecutor::extract_randomness_rounds`.
-        let mut checkpoint_service_failure_rx = self.checkpoint_service_failure_rx.clone();
-        if tokio::time::timeout(Duration::from_secs(120), async move {
+        let rebuild_timeout = if linku_common::in_antithesis() {
+            // Antithesis can pause nodes and executor threads throughout restart recovery.
+            Duration::from_secs(240)
+        } else {
+            Duration::from_secs(120)
+        };
+        if tokio::time::timeout(rebuild_timeout, async move {
             tokio::select! {
                 _ = builder_finished_rx => { debug!("CheckpointBuilder finished"); }
                 _ = self.wait_for_rebuilt_checkpoints() => (),
-                result = checkpoint_service_failure_rx.changed() => {
-                    if result.is_ok()
-                        && let Some(failure) = checkpoint_service_failure_rx.borrow().as_ref()
-                    {
-                        error!(%failure, "Checkpoint service failed during startup");
-                    }
-                }
             }
         })
         .await
         .is_err()
         {
-            warn!(
-                "Checkpoint rebuild exceeded the 120-second diagnostic interval; recovery continues in the supervised builder task"
-            );
+            debug_fatal!("Timed out waiting for checkpoints to be rebuilt");
         }
     }
-
-    pub fn checkpoint_service_failure_receiver(&self) -> watch::Receiver<Option<String>> {
-        self.checkpoint_service_failure_rx.clone()
-    }
-
-    pub fn checkpoint_builder_startup_receiver(
-        &self,
-    ) -> watch::Receiver<Option<CheckpointSequenceNumber>> {
-        self.checkpoint_builder_startup_rx.clone()
-    }
-}
-
-fn report_checkpoint_service_failure(
-    sender: &watch::Sender<Option<String>>,
-    failure: &'static str,
-) {
-    error!(%failure, "Critical checkpoint service task failure");
-    sender.send_if_modified(|current| {
-        if current.is_none() {
-            *current = Some(failure.to_owned());
-            true
-        } else {
-            false
-        }
-    });
 }
 
 impl CheckpointService {
@@ -3338,7 +3140,7 @@ impl CheckpointService {
         use crate::authority::authority_per_epoch_store::consensus_quarantine::ConsensusCommitOutput;
 
         let mut output = ConsensusCommitOutput::new(0);
-        epoch_store.write_pending_checkpoint(&mut output, &checkpoint)?;
+        epoch_store.write_pending_checkpoint(&mut output, &checkpoint);
         output.set_default_commit_stats_for_testing();
         epoch_store.push_consensus_output_for_tests(output);
         self.notify_checkpoint()?;
@@ -3447,7 +3249,10 @@ fn poll_count<Fut>(future: Fut) -> PollCounter<Fut> {
 mod tests {
     use super::*;
     use crate::authority::test_authority_builder::TestAuthorityBuilder;
+    use futures::FutureExt as _;
     use futures::future::BoxFuture;
+    use std::collections::HashMap;
+    use std::ops::Deref;
     use rtd_macros::sim_test;
     use rtd_protocol_config::{Chain, ProtocolConfig};
     use rtd_types::accumulator_event::AccumulatorEvent;
@@ -3455,61 +3260,8 @@ mod tests {
     use rtd_types::crypto::Signature;
     use rtd_types::effects::{TransactionEffects, TransactionEvents};
     use rtd_types::messages_checkpoint::SignedCheckpointSummary;
-    #[cfg(not(tidehunter))]
-    use rtd_types::test_checkpoint_data_builder::TestCheckpointBuilder;
     use rtd_types::transaction::VerifiedTransaction;
-    use std::collections::HashMap;
-    use std::ops::Deref;
     use tokio::sync::mpsc;
-
-    #[cfg(not(tidehunter))]
-    #[tokio::test]
-    async fn readonly_inspection_returns_chain_and_highest_executed_checkpoint() {
-        let directory = linku_common::tempdir().unwrap();
-        let store = CheckpointStore::new(directory.path(), Arc::new(PrunerWatermarks::default()));
-        let mut builder = TestCheckpointBuilder::new(0);
-        let mut expected_chain_identifier = None;
-
-        for sequence_number in 0..=1 {
-            let checkpoint = VerifiedCheckpoint::new_unchecked(builder.build_checkpoint().summary);
-            expected_chain_identifier
-                .get_or_insert_with(|| ChainIdentifier::from(*checkpoint.digest()));
-            assert_eq!(*checkpoint.sequence_number(), sequence_number);
-            store.insert_verified_checkpoint(&checkpoint).unwrap();
-            store
-                .update_highest_executed_checkpoint(&checkpoint)
-                .unwrap();
-        }
-        drop(store);
-
-        let inspection = inspect_readonly_checkpoint_store(directory.path()).unwrap();
-
-        assert_eq!(
-            inspection.chain_identifier,
-            expected_chain_identifier.unwrap()
-        );
-        assert_eq!(inspection.highest_executed_checkpoint, 1);
-    }
-
-    #[cfg(not(tidehunter))]
-    #[tokio::test]
-    async fn readonly_fullnode_inspection_requires_an_openable_object_store() {
-        let directory = linku_common::tempdir().unwrap();
-        let checkpoint_path = directory.path().join("live/checkpoints");
-        let store = CheckpointStore::new(&checkpoint_path, Arc::new(PrunerWatermarks::default()));
-        let checkpoint = VerifiedCheckpoint::new_unchecked(
-            TestCheckpointBuilder::new(0).build_checkpoint().summary,
-        );
-        store.insert_verified_checkpoint(&checkpoint).unwrap();
-        store
-            .update_highest_executed_checkpoint(&checkpoint)
-            .unwrap();
-        drop(store);
-
-        let error = inspect_readonly_fullnode_db(directory.path()).unwrap_err();
-
-        assert!(error.to_string().contains("object store"));
-    }
 
     #[tokio::test]
     async fn test_clear_locally_computed_checkpoints_from_deletes_inclusive_range() {
@@ -3641,8 +3393,7 @@ mod tests {
     pub async fn checkpoint_builder_test() {
         telemetry_subscribers::init_for_testing();
 
-        let mut protocol_config =
-            ProtocolConfig::get_for_version(ProtocolVersion::max(), Chain::Unknown);
+        let mut protocol_config = ProtocolConfig::get_for_version(140.into(), Chain::Unknown);
         protocol_config.disable_accumulators_for_testing();
         // This fixture supplies historical effects dependencies rather than consensus input order.
         protocol_config.set_disable_effects_tx_dependencies_for_testing(false);

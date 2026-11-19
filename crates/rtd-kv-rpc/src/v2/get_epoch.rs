@@ -6,9 +6,9 @@ use rtd_kvstore::tables::epochs::col;
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc::v2::Epoch;
-use rtd_rpc::proto::rtd::rpc::v2::ProtocolConfig as RpcProtocolConfig;
-use rtd_rpc::proto::rtd::rpc::v2::{GetEpochRequest, GetEpochResponse};
+use rtd_rpc::proto::sui::rpc::v2::Epoch;
+use rtd_rpc::proto::sui::rpc::v2::ProtocolConfig as RpcProtocolConfig;
+use rtd_rpc::proto::sui::rpc::v2::{GetEpochRequest, GetEpochResponse};
 use rtd_rpc_api::{
     ErrorReason,
     grpc::v2::protocol_config_to_proto,

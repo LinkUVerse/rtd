@@ -14,7 +14,7 @@ use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::AlphaLedgerGrpcReader;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::PageItem;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::StreamPage;
 use rtd_indexer_alt_reader::ledger_grpc_reader::LedgerGrpcArgs;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
 use rtd_rpc_cursor::CursorKind;
 use rtd_rpc_cursor::CursorToken;
 use rtd_rpc_cursor::Position;

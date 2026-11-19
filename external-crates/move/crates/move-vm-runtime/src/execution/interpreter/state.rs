@@ -16,6 +16,7 @@ use crate::{
         TypeLimits,
         constants::{CALL_STACK_SIZE_LIMIT, OPERAND_STACK_SIZE_LIMIT},
         safe_ops::{SafeArithmetic as _, SafeIndex as _},
+        type_size_formulae::TypeSize,
         vm_pointer::VMPointer,
     },
 };
@@ -41,6 +42,51 @@ macro_rules! debug_writeln {
 // Types
 // -------------------------------------------------------------------------------------------------
 
+/// A frame's realized type arguments, each paired with its [`TypeSize`]. Held struct-of-arrays,
+/// with the sizes *computed* from the types by the sole constructor ([`TypeArguments::new`]): a
+/// caller only ever supplies concrete types, so the sizes are always canonical and cannot drift.
+/// The `types()`/`sizes()` accessors hand out both as slices with no per-use allocation.
+#[derive(Debug, Clone)]
+pub(crate) struct TypeArguments {
+    types: Vec<Type>,
+    sizes: Vec<TypeSize>,
+}
+
+impl TypeArguments {
+    /// The empty argument list, for non-generic calls.
+    pub(crate) fn empty() -> Self {
+        Self {
+            types: vec![],
+            sizes: vec![],
+        }
+    }
+
+    /// Pair each (concrete) type with its size, computed here so the two can never drift.
+    pub(crate) fn new(
+        vtables: &VMDispatchTables,
+        types: Vec<Type>,
+        limits: &TypeLimits,
+    ) -> PartialVMResult<Self> {
+        let sizes = types
+            .iter()
+            .map(|ty| vtables.type_size_of(ty, limits))
+            .collect::<PartialVMResult<Vec<_>>>()?;
+        Ok(Self { types, sizes })
+    }
+
+    pub(crate) fn types(&self) -> &[Type] {
+        &self.types
+    }
+
+    pub(crate) fn sizes(&self) -> &[TypeSize] {
+        &self.sizes
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.types.is_empty()
+    }
+}
+
 /// `MachineState` instances can execute Move functions.
 ///
 /// An `MachineState` instance is a stand alone execution context for a function.
@@ -50,7 +96,7 @@ pub(crate) struct MachineState {
     /// Operand stack, where Move `Value`s are stored for stack operations.
     pub(crate) operand_stack: ValueStack,
     pub(crate) interner: Arc<IdentifierInterner>,
-    pub(crate) type_limits: TypeLimits,
+    pub(crate) type_limits: Arc<TypeLimits>,
     pub(crate) callstack_highwatermark: usize,
     pub(crate) valuestack_highwatermark: usize,
 }
@@ -78,7 +124,8 @@ pub(crate) struct CallFrame {
     pub(crate) pc: u16,
     pub(crate) function: VMPointer<Function>,
     pub(crate) stack_frame: StackFrame,
-    pub(crate) ty_args: Vec<Type>,
+    /// The frame's realized type arguments and their sizes (see [`TypeArguments`]).
+    pub(crate) ty_args: TypeArguments,
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -88,7 +135,7 @@ pub(crate) struct CallFrame {
 impl MachineState {
     pub(super) fn new(
         interner: Arc<IdentifierInterner>,
-        type_limits: TypeLimits,
+        type_limits: Arc<TypeLimits>,
         call_stack: CallStack,
     ) -> Self {
         let callstack_highwatermark = call_stack.heap.cur_size();
@@ -148,7 +195,7 @@ impl MachineState {
     pub fn push_call(
         &mut self,
         function: VMPointer<Function>,
-        ty_args: Vec<Type>,
+        ty_args: TypeArguments,
         args: Vec<Value>,
     ) -> VMResult<()> {
         self.call_stack
@@ -191,13 +238,16 @@ impl MachineState {
         let func = frame.function();
 
         debug_write!(buf, "    [{}] ", idx);
-        let module = func.module_id(&vtables.interner);
-        debug_write!(buf, "{}::{}::", module.address(), module.name());
-
-        debug_write!(buf, "{}", func.name(&vtables.interner));
-        let ty_args = frame.ty_args();
+        let name = func.vtable_key();
+        debug_write!(
+            buf,
+            "{}::{}::{}",
+            name.package_key(),
+            name.module_name_str(&vtables.interner),
+            name.member_name_str(&vtables.interner),
+        );
         let mut ty_tags = vec![];
-        for ty in ty_args {
+        for ty in frame.ty_args().types() {
             ty_tags.push(vtables.type_to_type_tag(ty)?);
         }
         if !ty_tags.is_empty() {
@@ -333,7 +383,7 @@ impl MachineState {
             .take(count)
             .map(|frame| {
                 let fun = frame.function();
-                (fun.module_id(interner).clone(), fun.index(), frame.pc)
+                (fun.module_id(interner), fun.index(), frame.pc)
             })
             .collect();
         ExecutionState::new(stack_trace)
@@ -407,7 +457,7 @@ impl CallStack {
     /// Create a new empty call stack.
     pub fn new(
         function: VMPointer<Function>,
-        ty_args: Vec<Type>,
+        ty_args: TypeArguments,
         args: Vec<Value>,
     ) -> PartialVMResult<Self> {
         let mut heap = MachineHeap::new();
@@ -434,7 +484,7 @@ impl CallStack {
         &mut self,
         interner: &IdentifierInterner,
         function: VMPointer<Function>,
-        ty_args: Vec<Type>,
+        ty_args: TypeArguments,
         args: Vec<Value>,
     ) -> VMResult<()> {
         let stack_frame = self
@@ -468,12 +518,13 @@ impl CallStack {
             return Err(err);
         };
         let frame = std::mem::replace(&mut self.current_frame, return_frame);
-        let index = frame.function().index();
+        let function = frame.function.ptr_clone();
+        let index = function.index();
         let pc = frame.pc;
-        let loc = frame.location(interner);
-        self.heap
-            .free_stack_frame(frame.stack_frame)
-            .map_err(|e| e.at_code_offset(index, pc).finish(loc))
+        self.heap.free_stack_frame(frame.stack_frame).map_err(|e| {
+            let location = Location::Module(function.module_id(interner));
+            e.at_code_offset(index, pc).finish(location)
+        })
     }
 }
 
@@ -482,7 +533,7 @@ impl CallFrame {
         self.function.to_ref()
     }
 
-    pub(super) fn ty_args(&self) -> &[Type] {
+    pub(super) fn ty_args(&self) -> &TypeArguments {
         &self.ty_args
     }
 

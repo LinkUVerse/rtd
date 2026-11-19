@@ -9,6 +9,9 @@ use prometheus::{
     Histogram, HistogramVec, IntCounterVec, Registry, register_histogram_vec_with_registry,
     register_int_counter_vec_with_registry,
 };
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use rtd_types::crypto::AuthorityPublicKeyBytes;
 use rtd_types::digests::TransactionEventsDigest;
 use rtd_types::effects::{SignedTransactionEffects, TransactionEffectsAPI, TransactionEvents};
@@ -29,9 +32,6 @@ use rtd_types::{
     error::{RtdError, RtdErrorKind, RtdResult},
     transaction::*,
 };
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use tap::TapFallible;
 use tracing::{error, instrument};
 

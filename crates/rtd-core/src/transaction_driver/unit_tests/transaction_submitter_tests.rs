@@ -12,11 +12,20 @@ use crate::{
 };
 use async_trait::async_trait;
 use consensus_types::block::BlockRef;
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::SocketAddr,
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
+use rtd_network::tonic;
 use rtd_types::{
-    base_types::{AuthorityName, random_object_ref},
+    base_types::{AuthorityName, ObjectID, random_object_ref},
     committee::Committee,
     digests::TransactionDigest,
-    error::{RtdError, RtdErrorKind, UserInputError},
+    error::{ErrorCategory, RtdError, RtdErrorKind, UserInputError},
     messages_checkpoint::{
         CheckpointRequest, CheckpointRequestV2, CheckpointResponse, CheckpointResponseV2,
     },
@@ -29,14 +38,6 @@ use rtd_types::{
     },
     rtd_system_state::RtdSystemState,
     transaction::Transaction,
-};
-use std::{
-    collections::{BTreeMap, HashMap},
-    net::SocketAddr,
-    sync::{
-        Arc, Mutex as StdMutex,
-        atomic::{AtomicUsize, Ordering},
-    },
 };
 use tokio::time::{Duration, sleep};
 
@@ -507,4 +508,17 @@ async fn test_submit_transaction_invalid_input() {
         }
         e => panic!("Expected InvalidTransaction error, got: {:?}", e),
     }
+}
+
+#[test]
+fn owned_object_conflict_is_retriable_and_not_a_validator_error() {
+    let error: RtdError = RtdErrorKind::OwnedObjectConflict {
+        object_id: ObjectID::random(),
+    }
+    .into();
+    let decoded = RtdError::from(tonic::Status::from(error.clone()));
+    assert_eq!(decoded, error);
+    assert!(!super::is_validator_error(&decoded));
+    assert_eq!(decoded.categorize(), ErrorCategory::Aborted);
+    assert!(decoded.categorize().is_submission_retriable());
 }

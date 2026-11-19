@@ -19,12 +19,12 @@ use rtd_kvstore::tables;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskTree;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::Checkpoint;
-use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::Checkpoint;
+use rtd_rpc::proto::sui::rpc::v2::ListCheckpointsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListCheckpointsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_api::ErrorReason;
 use rtd_rpc_api::RpcError;
 use rtd_rpc_api::ledger_history::query_options::QueryOptions;
@@ -183,13 +183,13 @@ pub(crate) async fn list_checkpoints(
     // keyspace directly, bounded by limit_items.
     let cp_data_stream: BoxStream<'static, Result<Watermarked<(u64, CheckpointData)>, ScanStop>> =
         if let Some(filter) = &request.filter {
-            let scan_budget = ctx.scan_budget(BitmapIndexSpec::tx());
+            let scan_budget = ctx.scan_budget(BitmapIndexSpec::tx(rtd_kvstore::BitmapSchema::V2));
             let tx_range = client.checkpoint_to_tx_range(cp_range.clone()).await?;
             let query = ctx.transaction_filter_query(filter)?;
             let tx_seq_stream = client.eval_bitmap_query_stream(
                 query,
                 tx_range,
-                BitmapIndexSpec::tx(),
+                BitmapIndexSpec::tx(rtd_kvstore::BitmapSchema::V2),
                 direction,
                 scan_budget,
                 ctx.bitmap_skip_policy(),
@@ -720,7 +720,7 @@ mod tests {
             query_context_with_mock_and_registry, two_transaction_object_checkpoint,
         };
         use rtd_kvstore::testing::insert_checkpoint_rows;
-        use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+        use rtd_rpc::proto::sui::rpc::v2::GetTransactionRequest;
         let (ctx, _, mock, server) =
             query_context_with_mock_and_registry("list_checkpoints", 1).await;
         let checkpoint = two_transaction_object_checkpoint();
@@ -1118,7 +1118,7 @@ mod tests {
             let mut proto_options = ascending_options();
             if !direction.is_ascending() {
                 proto_options.ordering =
-                    Some(rtd_rpc::proto::rtd::rpc::v2::Ordering::Descending as i32);
+                    Some(rtd_rpc::proto::sui::rpc::v2::Ordering::Descending as i32);
             }
             let options =
                 QueryOptions::checkpoints_from_proto(Some(&proto_options), 10, 100).unwrap();
@@ -1167,7 +1167,7 @@ mod tests {
             let mut proto_options = ascending_options();
             if !direction.is_ascending() {
                 proto_options.ordering =
-                    Some(rtd_rpc::proto::rtd::rpc::v2::Ordering::Descending as i32);
+                    Some(rtd_rpc::proto::sui::rpc::v2::Ordering::Descending as i32);
             }
             let options =
                 QueryOptions::checkpoints_from_proto(Some(&proto_options), 10, 100).unwrap();

@@ -23,7 +23,7 @@ use object_store::{
 use prost::Message;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use rtd_config::object_storage_config::validate_self_hosted_endpoint;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::full_checkpoint_content::Checkpoint;
 use rtd_types::messages_checkpoint::CheckpointSequenceNumber;
 use serde::{Deserialize, Serialize};

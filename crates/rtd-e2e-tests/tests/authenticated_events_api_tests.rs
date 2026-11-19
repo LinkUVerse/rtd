@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::language_storage::StructTag;
+use std::str::FromStr;
+use std::time::Duration;
 use rtd_keys::keystore::AccountKeystore;
 use rtd_light_client::authenticated_events::AuthenticatedEvent;
 use rtd_light_client::authenticated_events::mmr::apply_stream_updates;
@@ -12,14 +14,14 @@ use rtd_macros::sim_test;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
-use rtd_rpc::proto::rtd::rpc::v2::{
+use rtd_rpc::proto::sui::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::sui::rpc::v2::{
     AffectedObjectFilter, EventFilter, EventLiteral, EventStreamHeadFilter, EventTerm,
     GetCheckpointRequest, GetEpochRequest, ListEventsRequest, ListTransactionsRequest,
     QueryEndReason, QueryOptions, TransactionFilter, TransactionLiteral, TransactionTerm,
 };
-use rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_client::ProofServiceClient;
-use rtd_rpc::proto::rtd::rpc::v2alpha::{
+use rtd_rpc::proto::sui::rpc::v2alpha::proof_service_client::ProofServiceClient;
+use rtd_rpc::proto::sui::rpc::v2alpha::{
     GetCheckpointObjectProofRequest, GetCheckpointObjectProofResponse,
     get_checkpoint_object_proof_response,
 };
@@ -34,8 +36,6 @@ use rtd_types::object::Object;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
 use rtd_types::transaction::TransactionData;
 use rtd_types::{MoveTypeTagTraitGeneric, RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_FRAMEWORK_ADDRESS};
-use std::str::FromStr;
-use std::time::Duration;
 use test_cluster::{TestCluster, TestClusterBuilder};
 
 /// Test cluster config that enables ledger history indexing, which is what
@@ -694,9 +694,9 @@ async fn build_epoch_cache(
 }
 
 fn proto_node_to_local(
-    proto: &rtd_rpc::proto::rtd::rpc::v2alpha::MerkleNode,
+    proto: &rtd_rpc::proto::sui::rpc::v2alpha::MerkleNode,
 ) -> Result<fastcrypto::merkle::Node, String> {
-    use rtd_rpc::proto::rtd::rpc::v2alpha::merkle_node;
+    use rtd_rpc::proto::sui::rpc::v2alpha::merkle_node;
     let node = proto.node.as_ref().ok_or("MerkleNode missing oneof")?;
     match node {
         merkle_node::Node::Empty(_) => Ok(fastcrypto::merkle::Node::Empty),
@@ -712,7 +712,7 @@ fn proto_node_to_local(
 }
 
 fn proto_inclusion_proof_to_local(
-    proto: &rtd_rpc::proto::rtd::rpc::v2alpha::OcsInclusionProof,
+    proto: &rtd_rpc::proto::sui::rpc::v2alpha::OcsInclusionProof,
 ) -> Result<rtd_light_client::proof::ocs::OCSInclusionProof, String> {
     let merkle_proof_proto = proto.merkle_proof.as_ref().ok_or("Missing merkle_proof")?;
     let nodes = merkle_proof_proto
@@ -737,7 +737,7 @@ fn proto_inclusion_proof_to_local(
 }
 
 fn proto_object_ref_to_rtd_object_ref(
-    object_ref_proto: &rtd_rpc::proto::rtd::rpc::v2::ObjectReference,
+    object_ref_proto: &rtd_rpc::proto::sui::rpc::v2::ObjectReference,
 ) -> Result<rtd_types::base_types::ObjectRef, String> {
     let object_id_str = object_ref_proto
         .object_id
@@ -899,6 +899,7 @@ async fn list_authenticated_events_end_to_end() {
     let rpc_config = create_rpc_config_with_ledger_history();
 
     let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .disable_fullnode_pruning()
         .with_rpc_config(rpc_config)
         .with_epoch_duration_ms(10000)

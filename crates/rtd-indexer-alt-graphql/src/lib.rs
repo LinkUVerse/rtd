@@ -378,7 +378,10 @@ pub async fn start_rpc(
 
     let system_package_task = SystemPackageTask::new(
         system_package_task_args,
-        pg_reader.clone(),
+        ledger_grpc_reader
+            .clone()
+            .context("--ledger-grpc-url must be configured")?,
+        rtd_indexer_alt_reader::monotonic_read::CheckpointFloor::default(),
         package_store.clone(),
     );
 

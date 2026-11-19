@@ -7,7 +7,7 @@ use rand::prelude::StdRng;
 use rtd_rpc::field::FieldMask;
 use rtd_rpc::field::FieldMaskUtil;
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 
 use crate::types::crypto::KeypairTraits;
 use crate::types::full_checkpoint_content::CheckpointData;

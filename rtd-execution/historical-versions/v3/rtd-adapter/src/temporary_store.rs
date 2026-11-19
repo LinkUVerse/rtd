@@ -4,6 +4,7 @@
 use crate::gas_charger::GasCharger;
 use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::accumulator_root::AccumulatorObjId;
@@ -21,11 +22,11 @@ use rtd_types::execution_status::{ExecutionErrorKind, ExecutionStatus};
 use rtd_types::inner_temporary_store::InnerTemporaryStore;
 use rtd_types::layout_resolver::LayoutResolver;
 use rtd_types::object::Data;
-use rtd_types::rtd_system_state::{AdvanceEpochParams, get_rtd_system_state_wrapper};
 use rtd_types::storage::{BackingStore, DenyListResult, PackageObject};
+use rtd_types::rtd_system_state::{AdvanceEpochParams, get_rtd_system_state_wrapper};
 use rtd_types::{
     RTD_DENY_LIST_OBJECT_ID,
-    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest},
+    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest},
     effects::EffectsObjectChange,
     error::{ExecutionError, RtdResult},
     gas::GasCostSummary,
@@ -35,7 +36,6 @@ use rtd_types::{
     transaction::InputObjects,
 };
 use rtd_types::{RTD_SYSTEM_STATE_OBJECT_ID, TypeTag, is_system_package};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 pub struct TemporaryStore<'backing> {
     // The backing store for retrieving Move packages onchain.
@@ -544,6 +544,10 @@ impl<'backing> TemporaryStore<'backing> {
             self.execution_results.written_objects.len(),
             self.execution_results.modified_objects.len(),
             self.input_objects.len(),
+            0,
+            0,
+            &[],
+            false,
         )
     }
 
@@ -729,7 +733,7 @@ impl TemporaryStore<'_> {
                     panic!(
                         "Failed to load object {to_authenticate:?}.\n \
                          If it cannot be loaded, we would expect it to be in the wrapped object map: {:#?}",
-                        &self.wrapped_object_containers
+                        self.wrapped_object_containers
                     )
                 };
 

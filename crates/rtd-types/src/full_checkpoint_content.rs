@@ -7,12 +7,12 @@ use crate::base_types::{ExecutionData, ObjectID, ObjectRef};
 use crate::effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents};
 use crate::messages_checkpoint::{CertifiedCheckpointSummary, CheckpointContents};
 use crate::object::Object;
-use crate::rtd_system_state::RtdSystemStateTrait;
-use crate::rtd_system_state::get_rtd_system_state;
 use crate::signature::GenericSignature;
 use crate::storage::ObjectKey;
 use crate::storage::error::Error as StorageError;
 use crate::storage::{BackingPackageStore, EpochInfo};
+use crate::rtd_system_state::RtdSystemStateTrait;
+use crate::rtd_system_state::get_rtd_system_state;
 use crate::transaction::{Transaction, TransactionData, TransactionDataAPI, TransactionKind};
 use serde::{Deserialize, Serialize};
 use tap::Pipe;
@@ -332,7 +332,7 @@ impl Checkpoint {
     // Returns the required FieldMask to fetch all necessary fields for populating `Checkpoint`
     pub fn proto_field_mask() -> rtd_rpc::field::FieldMask {
         use rtd_rpc::field::FieldMaskUtil;
-        use rtd_rpc::proto::rtd::rpc::v2::Checkpoint;
+        use rtd_rpc::proto::sui::rpc::v2::Checkpoint;
 
         rtd_rpc::field::FieldMask::from_paths([
             Checkpoint::path_builder().sequence_number(),

@@ -24,8 +24,8 @@
 //! API-specific frontier-to-candidate adapter.
 
 use rtd_inverted_index::ScanDirection;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_cursor::{CursorKind, CursorToken, Position};
 
 use crate::ledger_history::query_options::{QueryOptions, RangeExhaustion};
@@ -291,11 +291,11 @@ mod tests {
     use rtd_rpc_cursor::{CursorKind, Position};
 
     fn options(ascending: bool) -> QueryOptions {
-        let mut request = rtd_rpc::proto::rtd::rpc::v2::QueryOptions::default();
+        let mut request = rtd_rpc::proto::sui::rpc::v2::QueryOptions::default();
         request.ordering = Some(if ascending {
-            rtd_rpc::proto::rtd::rpc::v2::Ordering::Ascending as i32
+            rtd_rpc::proto::sui::rpc::v2::Ordering::Ascending as i32
         } else {
-            rtd_rpc::proto::rtd::rpc::v2::Ordering::Descending as i32
+            rtd_rpc::proto::sui::rpc::v2::Ordering::Descending as i32
         });
         QueryOptions::transactions_from_proto(Some(&request), 100, 100).unwrap()
     }

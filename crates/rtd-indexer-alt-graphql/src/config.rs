@@ -466,6 +466,7 @@ impl Limits {
 
     pub(crate) fn package_resolver(&self) -> rtd_package_resolver::Limits {
         rtd_package_resolver::Limits {
+            max_layout_work: usize::MAX,
             max_type_argument_depth: self.max_type_argument_depth,
             max_type_argument_width: self.max_type_argument_width,
             max_type_nodes: self.max_type_nodes,

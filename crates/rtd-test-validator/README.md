@@ -3,7 +3,7 @@ an indexer.
 
 ## Guide
 
-Refer to [rtd-local-network.md](../../docs/content/guides/developer/getting-started/local-network.mdx)
+Refer to [local network](https://docs.rtd.io/getting-started/onboarding/local-network)
 
 ## Run with a persisted state
 You can combine this with indexer runs as well to save a persisted state on local development.

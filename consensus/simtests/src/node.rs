@@ -13,16 +13,15 @@ use consensus_config::{
     AuthorityIndex, Committee, ConsensusProtocolConfig, NetworkKeyPair, Parameters, ProtocolKeyPair,
 };
 use consensus_core::{
-    Clock, CommitConsumerArgs, CommitConsumerMonitor, CommittedSubDag, ConsensusAuthority,
-    NetworkType, TransactionClient, TransactionVerifier, storage::rocksdb_store::RocksDBStore,
-    to_socket_addr,
+    Clock, CommitConsumerArgs, CommittedSubDag, ConsensusAuthority, ConsumerMonitor, NetworkType,
+    TransactionClient, TransactionVerifier, storage::rocksdb_store::RocksDBStore, to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
+use linku_common::random_util::TempDir;
 use linku_metrics::monitored_mpsc::UnboundedReceiver;
 use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
-use tempfile::TempDir;
 use tracing::{info, trace};
 
 #[derive(Clone)]
@@ -67,21 +66,32 @@ impl AuthorityNode {
 
     /// Start this Node
     pub async fn start(&self) -> Result<()> {
-        self.start_with_config(self.config.clone()).await
+        self.start_with_config(self.config.clone(), None).await
+    }
+
+    /// Start with a caller-owned consumer that can apply and acknowledge replay
+    /// while startup is still pending.
+    pub async fn start_with_commit_consumer(&self, consumer: CommitConsumerArgs) -> Result<()> {
+        self.start_with_config(self.config.clone(), Some(consumer))
+            .await
     }
 
     /// Start this Node with an empty store.
     ///
     /// The empty store applies only to the process that this call starts.
     pub async fn start_with_empty_store(&self) -> Result<()> {
-        let db_dir = Arc::new(TempDir::new()?);
+        let db_dir = Arc::new(linku_common::tempdir()?);
         let mut config = self.config.clone();
         config.parameters.db_path = db_dir.path().to_path_buf();
         config.db_dir = db_dir;
-        self.start_with_config(config).await
+        self.start_with_config(config, None).await
     }
 
-    async fn start_with_config(&self, config: Config) -> Result<()> {
+    async fn start_with_config(
+        &self,
+        config: Config,
+        consumer: Option<CommitConsumerArgs>,
+    ) -> Result<()> {
         let node_type = if config.observer_network_keypair.is_some() {
             "Observer"
         } else {
@@ -90,7 +100,7 @@ impl AuthorityNode {
         info!(index = %config.authority_index, node_type = node_type, "starting in-memory node");
         // Each start creates a new simulator process. The boot counter is
         // process-local, so use the configured value for each new process.
-        *self.inner.lock() = Some(AuthorityNodeInner::spawn(config).await);
+        *self.inner.lock() = Some(AuthorityNodeInner::spawn(config, consumer).await);
         Ok(())
     }
 
@@ -116,11 +126,11 @@ impl AuthorityNode {
             }
 
             let mut commit_receiver = inner.take_commit_receiver();
-            let commit_consumer_monitor = inner.commit_consumer_monitor();
+            let consumer_monitor = inner.consumer_monitor();
             let _handle = tokio::spawn(async move {
                 while let Some(subdag) = commit_receiver.recv().await {
                     info!(authority =% authority_index, commit_index =% subdag.commit_ref.index, "Received committed subdag");
-                    commit_consumer_monitor.set_highest_handled_commit(subdag.commit_ref.index);
+                    consumer_monitor.set_highest_handled_commit(subdag.commit_ref.index);
                     let _ = commit_sender.send(subdag);
                 }
             });
@@ -128,10 +138,10 @@ impl AuthorityNode {
         Ok(())
     }
 
-    pub fn commit_consumer_monitor(&self) -> Arc<CommitConsumerMonitor> {
+    pub fn consumer_monitor(&self) -> Arc<ConsumerMonitor> {
         let inner = self.inner.lock();
         if let Some(inner) = inner.as_ref() {
-            inner.commit_consumer_monitor()
+            inner.consumer_monitor()
         } else {
             panic!("Node not initialised");
         }
@@ -187,7 +197,7 @@ impl AuthorityNode {
 
     /// If this Node is currently running
     pub fn is_running(&self) -> bool {
-        self.inner.lock().as_ref().map_or(false, |c| c.is_alive())
+        self.inner.lock().as_ref().is_some_and(|c| c.is_alive())
     }
 }
 
@@ -196,7 +206,7 @@ pub(crate) struct AuthorityNodeInner {
     cancel_sender: Option<tokio::sync::watch::Sender<bool>>,
     consensus_authority: Option<ConsensusAuthority>,
     commit_receiver: ArcSwapOption<UnboundedReceiver<CommittedSubDag>>,
-    commit_consumer_monitor: Arc<CommitConsumerMonitor>,
+    consumer_monitor: Arc<ConsumerMonitor>,
 }
 
 #[derive(Debug)]
@@ -204,12 +214,11 @@ struct NodeHandle {
     node_id: rtd_simulator::task::NodeId,
 }
 
-/// When dropped, stop and wait for the node running in this node to completely shutdown.
-impl Drop for AuthorityNodeInner {
+impl Drop for NodeHandle {
     fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            tracing::info!("shutting down {}", handle.node_id);
-            rtd_simulator::runtime::Handle::try_current().map(|h| h.delete_node(handle.node_id));
+        tracing::info!("shutting down {}", self.node_id);
+        if let Some(handle) = rtd_simulator::runtime::Handle::try_current() {
+            handle.delete_node(self.node_id);
         }
     }
 }
@@ -226,10 +235,16 @@ impl AuthorityNodeInner {
         if let Some(consensus_authority) = self.consensus_authority.take() {
             consensus_authority.stop().await;
         }
+        if let Some(handle) = self.handle.take() {
+            drop(handle);
+            // `delete_node` schedules the node's remaining task futures for destruction under
+            // msim. Wait until that ready queue has drained before a restart reopens RocksDB.
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
     }
 
     /// Spawn a new Node.
-    pub async fn spawn(config: Config) -> Self {
+    pub async fn spawn(config: Config, consumer: Option<CommitConsumerArgs>) -> Self {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(false);
         let (cancel_sender, cancel_receiver) = tokio::sync::watch::channel(false);
 
@@ -268,19 +283,27 @@ impl AuthorityNodeInner {
             .init(move || {
                 info!("Node restarted");
                 let config = config.clone();
+                let consumer = consumer.clone();
                 let mut cancel_receiver = cancel_receiver.clone();
                 let init_receiver_swap_clone = int_receiver_swap_clone.clone();
                 let startup_sender_clone = startup_sender.clone();
 
                 async move {
-                    let (consensus_authority, commit_receiver, commit_consumer_monitor) =
-                        super::node::make_authority(config).await;
+                    let (commit_consumer, commit_receiver) = match consumer {
+                        Some(consumer) => (consumer, None),
+                        None => {
+                            let (consumer, receiver) = CommitConsumerArgs::new(0, 0);
+                            (consumer, Some(receiver))
+                        }
+                    };
+                    let consumer_monitor = commit_consumer.monitor();
+                    let consensus_authority = make_authority(config, commit_consumer).await;
 
                     startup_sender_clone.send(true).ok();
                     init_receiver_swap_clone.store(Some(Arc::new((
                         consensus_authority,
                         commit_receiver,
-                        commit_consumer_monitor,
+                        consumer_monitor,
                     ))));
 
                     // run until canceled
@@ -294,24 +317,27 @@ impl AuthorityNodeInner {
             })
             .build();
 
+        // A full-replay startup may wait for application indefinitely. Keep the
+        // node guard across this await so cancelling startup also kills its tasks.
+        let handle = NodeHandle { node_id: node.id() };
         startup_receiver.changed().await.unwrap();
 
         let Some(init_tuple) = init_receiver_swap.swap(None) else {
             panic!("Components should be initialised by now");
         };
 
-        let Ok((consensus_authority, commit_receiver, commit_consumer_monitor)) =
+        let Ok((consensus_authority, commit_receiver, consumer_monitor)) =
             Arc::try_unwrap(init_tuple)
         else {
             panic!("commit receiver still in use");
         };
 
         Self {
-            handle: Some(NodeHandle { node_id: node.id() }),
+            handle: Some(handle),
             cancel_sender: Some(cancel_sender),
             consensus_authority: Some(consensus_authority),
-            commit_receiver: ArcSwapOption::new(Some(Arc::new(commit_receiver))),
-            commit_consumer_monitor,
+            commit_receiver: ArcSwapOption::new(commit_receiver.map(Arc::new)),
+            consumer_monitor,
         }
     }
 
@@ -340,8 +366,8 @@ impl AuthorityNodeInner {
         }
     }
 
-    pub fn commit_consumer_monitor(&self) -> Arc<CommitConsumerMonitor> {
-        self.commit_consumer_monitor.clone()
+    pub fn consumer_monitor(&self) -> Arc<ConsumerMonitor> {
+        self.consumer_monitor.clone()
     }
 
     pub fn transaction_client(&self) -> Arc<TransactionClient> {
@@ -361,11 +387,8 @@ impl AuthorityNodeInner {
 
 pub(crate) async fn make_authority(
     config: Config,
-) -> (
-    ConsensusAuthority,
-    UnboundedReceiver<CommittedSubDag>,
-    Arc<CommitConsumerMonitor>,
-) {
+    commit_consumer: CommitConsumerArgs,
+) -> ConsensusAuthority {
     let Config {
         authority_index,
         db_dir: _,
@@ -394,10 +417,7 @@ pub(crate) async fn make_authority(
             (Some(protocol_keypair), network_keypair)
         };
 
-    let (commit_consumer, commit_receiver) = CommitConsumerArgs::new(0, 0);
-    let commit_consumer_monitor = commit_consumer.monitor();
-
-    let authority = ConsensusAuthority::start(
+    ConsensusAuthority::start(
         NetworkType::Tonic,
         0,
         committee,
@@ -413,9 +433,7 @@ pub(crate) async fn make_authority(
         boot_counter,
         None,
     )
-    .await;
-
-    (authority, commit_receiver, commit_consumer_monitor)
+    .await
 }
 
 pub fn default_parameters() -> Parameters {

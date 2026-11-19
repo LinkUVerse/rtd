@@ -7,13 +7,13 @@
 
 //# publish
 
-module test::m1 {
-    use rtd::rtd::RTD;
-    use rtd::coin;
+module test::m1;
 
-    public fun mint_shared(ctx: &mut TxContext) {
-        transfer::public_share_object(coin::zero<RTD>(ctx))
-    }
+use rtd::coin;
+use rtd::rtd::RTD;
+
+public fun mint_shared(ctx: &mut TxContext) {
+    transfer::public_share_object(coin::zero<RTD>(ctx))
 }
 
 //# run test::m1::mint_shared

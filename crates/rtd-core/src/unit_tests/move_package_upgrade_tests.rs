@@ -9,6 +9,7 @@ use move_binary_format::{
     file_format_common::VERSION_MAX,
 };
 use move_core_types::{account_address::AccountAddress, ident_str, language_storage::StructTag};
+use rtd_macros::sim_test;
 use rtd_move_build::BuildConfig;
 use rtd_protocol_config::{Chain, ProtocolConfig};
 use rtd_types::{
@@ -23,16 +24,16 @@ use rtd_types::{
     transaction::{Argument, ObjectArg, ProgrammableTransaction, TEST_ONLY_GAS_UNIT_FOR_PUBLISH},
 };
 
-use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
-use rtd_types::error::UserInputError;
-use rtd_types::execution_status::{
-    CommandArgumentError, ExecutionErrorKind, ExecutionStatus, PackageUpgradeError,
-};
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
+};
+use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
+use rtd_types::error::UserInputError;
+use rtd_types::execution_status::{
+    CommandArgumentError, ExecutionErrorKind, ExecutionStatus, PackageUpgradeError,
 };
 
 use crate::authority::move_integration_tests::{
@@ -184,7 +185,6 @@ struct UpgradeStateRunner {
     pub authority_state: Arc<AuthorityState>,
     pub package: ObjectRef,
     pub upgrade_cap: ObjectRef,
-    pub rgp: u64,
 }
 
 impl UpgradeStateRunner {
@@ -206,7 +206,6 @@ impl UpgradeStateRunner {
         }
         let authority_state = builder.build().await;
         authority_state.insert_genesis_object(gas_object);
-        let rgp = authority_state.reference_gas_price_for_testing().unwrap();
 
         let (package, upgrade_cap) = build_and_publish_test_package_with_upgrade_cap(
             &authority_state,
@@ -225,7 +224,6 @@ impl UpgradeStateRunner {
             authority_state,
             package,
             upgrade_cap,
-            rgp,
         }
     }
 
@@ -236,7 +234,6 @@ impl UpgradeStateRunner {
         let gas_object = Object::with_id_owner_for_testing(gas_object_id, sender);
         let authority_state = TestAuthorityBuilder::new().build().await;
         authority_state.insert_genesis_object(gas_object);
-        let rgp = authority_state.reference_gas_price_for_testing().unwrap();
 
         let (package, upgrade_cap) = build_and_publish_package_with_upgrade_cap(
             &authority_state,
@@ -262,7 +259,6 @@ impl UpgradeStateRunner {
             authority_state,
             package,
             upgrade_cap,
-            rgp,
         }
     }
 
@@ -368,7 +364,7 @@ impl UpgradeStateRunner {
             &self.sender,
             &self.sender_key,
             pt,
-            self.rgp * TEST_ONLY_GAS_UNIT_FOR_PUBLISH,
+            TEST_ONLY_GAS_UNIT_FOR_PUBLISH,
         )
         .await
         .unwrap();
@@ -422,7 +418,7 @@ fn empty_module_with_dependencies(
 // A' => [C] | {C, B, A}
 // Test 1: Upgrade A to A' which depends on C. But only include `C` in the transitive deps.
 // Failure: `PublishUpgradeMissingDependency`
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_indirect_cross_package1() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -513,7 +509,7 @@ async fn publish_package_cyclic_indirect_cross_package1() {
 // A' => [C] | {C, B, A}
 // Test 2: Upgrade A to A' which depends on C. But only include `C` and `B` in the transitive deps.
 // Failure: `PublishUpgradeMissingDependency`
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_indirect_cross_package2() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -610,7 +606,7 @@ async fn publish_package_cyclic_indirect_cross_package2() {
 // Test 3: Upgrade A to A' which depends on C. But include `C`, `B`, and `A` in the transitive deps.
 // Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
 // `A'`s version ID but that will not be present yet).
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_indirect_cross_package3() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -701,7 +697,7 @@ async fn publish_package_cyclic_indirect_cross_package3() {
 // Test 4: Upgrade A to A' which depends on B. Include `B` and `A` in the transitive deps.
 // Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
 // `A'`s version ID but that will not be present yet).
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_direct_cross_package1() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -779,7 +775,7 @@ async fn publish_package_cyclic_direct_cross_package1() {
 // Test 4: Upgrade A to A' which depends on B. Include `B` and `A` in the transitive deps.
 // Failure: `VerificationOrDeserializationError` due to cyclic dependency (it will look for `A` at
 // `A'`s version ID but that will not be present yet).
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_direct_cross_package2() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -852,7 +848,7 @@ async fn publish_package_cyclic_direct_cross_package2() {
 }
 
 // Within the same package: A <=> B
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_direct_within_package() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 
@@ -894,7 +890,7 @@ async fn publish_package_cyclic_direct_within_package() {
 }
 
 // Within the same package: A -> B -> C -> A
-#[tokio::test]
+#[sim_test]
 async fn publish_package_cyclic_indirect_within_package() {
     let addr = |s| AccountAddress::from_str(s).unwrap();
 

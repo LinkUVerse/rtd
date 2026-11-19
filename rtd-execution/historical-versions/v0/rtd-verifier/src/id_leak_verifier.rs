@@ -27,6 +27,7 @@ use move_bytecode_verifier_meter::{Meter, Scope};
 use move_core_types::{
     account_address::AccountAddress, ident_str, identifier::IdentStr, vm_status::StatusCode,
 };
+use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 use rtd_types::{
     clock::CLOCK_MODULE_NAME,
     error::{ExecutionError, VMMVerifierErrorSubStatusCode},
@@ -34,7 +35,6 @@ use rtd_types::{
     rtd_system_state::RTD_SYSTEM_MODULE_NAME,
     RTD_FRAMEWORK_ADDRESS, RTD_SYSTEM_ADDRESS,
 };
-use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 
 #[cfg(msim)]
 use rtd_types::{

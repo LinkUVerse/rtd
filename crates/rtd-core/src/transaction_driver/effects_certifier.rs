@@ -113,8 +113,14 @@ impl EffectsCertifier {
             }
         };
 
-        let mut retrier =
-            RequestRetrier::new(authority_aggregator, client_monitor, vec![], vec![], None);
+        let mut retrier = RequestRetrier::new(
+            authority_aggregator,
+            client_monitor,
+            vec![],
+            vec![],
+            None,
+            None,
+        );
         let ping_type = get_ping_type(&tx_digest);
 
         // Channel for wait_for_acknowledgments to notify which validators have acked.
@@ -188,6 +194,7 @@ impl EffectsCertifier {
                             authority_name: current_target,
                             display_name,
                             operation: OperationType::Effects,
+                            tx_class: None,
                             ping_type,
                             result: Err(()),
                         });
@@ -198,6 +205,7 @@ impl EffectsCertifier {
                                 authority_name: current_target,
                                 display_name,
                                 operation: OperationType::Effects,
+                                tx_class: None,
                                 ping_type,
                                 result: Ok(latency),
                             });
@@ -213,6 +221,7 @@ impl EffectsCertifier {
                         authority_name: current_target,
                         display_name,
                         operation: OperationType::Effects,
+                        tx_class: None,
                         ping_type,
                         result: Err(()),
                     });
@@ -263,32 +272,34 @@ impl EffectsCertifier {
         )
         .await
         {
-            Ok(Ok(response)) => match response {
-                WaitForEffectsResponse::Executed {
-                    effects_digest,
-                    details,
-                } => {
-                    if let Some(details) = details {
-                        tracing::Span::current()
-                            .record("ret_effects_digest", format!("{:?}", effects_digest));
-                        Ok((effects_digest, details))
-                    } else {
-                        tracing::debug!("Execution data not found, retrying...");
-                        Err(TransactionRequestError::ValidatorInternal(
-                            "Execution data not found".to_string(),
-                        ))
+            Ok(Ok(response)) => {
+                match response {
+                    WaitForEffectsResponse::Executed {
+                        effects_digest,
+                        details,
+                    } => {
+                        if let Some(details) = details {
+                            tracing::Span::current()
+                                .record("ret_effects_digest", format!("{:?}", effects_digest));
+                            Ok((effects_digest, details))
+                        } else {
+                            tracing::debug!("Execution data not found, retrying...");
+                            Err(TransactionRequestError::ValidatorInternal(
+                                "Execution data not found".to_string(),
+                            ))
+                        }
                     }
+                    WaitForEffectsResponse::Rejected { error } => match error {
+                        Some(e) => Err(TransactionRequestError::RejectedAtValidator(e)),
+                        // Even though this response is not an error, returning an error which is required
+                        // by the function signature. This will get ignored by the caller as a retriable error.
+                        None => Err(TransactionRequestError::RejectedByConsensus),
+                    },
+                    WaitForEffectsResponse::Expired { epoch, round } => Err(
+                        TransactionRequestError::StatusExpired(epoch, round.unwrap_or(0)),
+                    ),
                 }
-                WaitForEffectsResponse::Rejected { error } => match error {
-                    Some(e) => Err(TransactionRequestError::RejectedAtValidator(e)),
-                    // Even though this response is not an error, returning an error which is required
-                    // by the function signature. This will get ignored by the caller as a retriable error.
-                    None => Err(TransactionRequestError::RejectedByConsensus),
-                },
-                WaitForEffectsResponse::Expired { epoch, round } => Err(
-                    TransactionRequestError::StatusExpired(epoch, round.unwrap_or(0)),
-                ),
-            },
+            }
             Ok(Err(e)) => Err(TransactionRequestError::Aborted(e)),
             Err(_) => Err(TransactionRequestError::TimedOutGettingFullEffectsAtValidator),
         }
@@ -444,6 +455,7 @@ impl EffectsCertifier {
                             authority_name: name,
                             display_name,
                             operation: OperationType::Effects,
+                            tx_class: None,
                             ping_type,
                             result: Err(()),
                         });
@@ -698,6 +710,7 @@ impl EffectsCertifier {
                         authority_name: name,
                         display_name: display_name.clone(),
                         operation: OperationType::Effects,
+                        tx_class: None,
                         ping_type,
                         result: Ok(latency),
                     });
@@ -708,6 +721,7 @@ impl EffectsCertifier {
                         authority_name: name,
                         display_name: display_name.clone(),
                         operation: OperationType::Effects,
+                        tx_class: None,
                         ping_type,
                         result: Err(()),
                     });

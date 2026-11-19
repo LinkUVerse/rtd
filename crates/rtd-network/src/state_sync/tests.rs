@@ -20,7 +20,7 @@ use rtd_config::object_storage_config::ObjectStoreConfig;
 use rtd_config::p2p::StateSyncConfig;
 use rtd_rpc::field::{FieldMask, FieldMaskUtil};
 use rtd_rpc::merge::Merge;
-use rtd_rpc::proto::rtd::rpc;
+use rtd_rpc::proto::sui::rpc;
 use rtd_swarm_config::test_utils::{CommitteeFixture, empty_contents};
 use rtd_types::full_checkpoint_content::CheckpointData;
 use rtd_types::{

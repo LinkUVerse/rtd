@@ -6,6 +6,11 @@ use clap::{Parser, ValueEnum};
 #[cfg(not(tidehunter))]
 use comfy_table::{Cell, ContentArrangement, Row, Table};
 use prometheus::Registry;
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::str;
+use std::sync::Arc;
+use strum_macros::EnumString;
 use rtd_config::node::AuthorityStorePruningConfig;
 use rtd_core::authority::authority_per_epoch_store::AuthorityEpochTables;
 use rtd_core::authority::authority_store_pruner::{
@@ -15,13 +20,7 @@ use rtd_core::authority::authority_store_pruner::{
 use rtd_core::authority::authority_store_tables::AuthorityPerpetualTables;
 use rtd_core::checkpoints::CheckpointStore;
 use rtd_core::epoch::committee_store::CommitteeStoreTables;
-use rtd_core::jsonrpc_index::IndexStoreTables;
 use rtd_types::base_types::EpochId;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::str;
-use std::sync::Arc;
-use strum_macros::EnumString;
 use tracing::info;
 use typed_store::rocks::{MetricConf, default_db_options};
 use typed_store::rocksdb::MultiThreaded;
@@ -30,7 +29,6 @@ use typed_store::traits::TableSummary;
 #[derive(EnumString, Clone, Parser, Debug, ValueEnum)]
 pub enum StoreName {
     Validator,
-    Index,
     Epoch,
     // TODO: Add the new checkpoint v2 tables.
 }
@@ -76,10 +74,6 @@ pub fn table_summary(
                 AuthorityPerpetualTables::open_readonly(&db_path).table_summary(table_name)
             }
         }
-        StoreName::Index => {
-            IndexStoreTables::get_read_only_handle(db_path, None, None, MetricConf::default())
-                .table_summary(table_name)
-        }
         StoreName::Epoch => {
             CommitteeStoreTables::get_read_only_handle(db_path, None, None, MetricConf::default())
                 .table_summary(table_name)
@@ -107,11 +101,6 @@ pub fn print_table_metadata(
                 } else {
                     AuthorityPerpetualTables::open_readonly(&db_path).objects.db
                 }
-            }
-            StoreName::Index => {
-                IndexStoreTables::get_read_only_handle(db_path, None, None, MetricConf::default())
-                    .event_by_move_module
-                    .db
             }
             StoreName::Epoch => {
                 CommitteeStoreTables::get_read_only_handle(
@@ -271,13 +260,6 @@ pub fn dump_table(
                     page_number,
                 )
             }
-        }
-        StoreName::Index => {
-            IndexStoreTables::get_read_only_handle(db_path, None, None, MetricConf::default()).dump(
-                table_name,
-                page_size,
-                page_number,
-            )
         }
         StoreName::Epoch => {
             CommitteeStoreTables::get_read_only_handle(db_path, None, None, MetricConf::default())

@@ -9,6 +9,7 @@ use consensus_core::{
     CommitAPI, CommitIndex, CommitRange,
     storage::{Store as ConsensusStore, rocksdb_store::RocksDBStore},
 };
+use std::sync::Arc;
 use rtd_core::{
     authority::authority_store_tables::AuthorityPerpetualTables, checkpoints::CheckpointStore,
     epoch::committee_store::CommitteeStore,
@@ -18,7 +19,6 @@ use rtd_types::{
     digests::{CheckpointContentsDigest, CheckpointDigest, TransactionDigest},
     messages_checkpoint::{CheckpointContents, CheckpointSequenceNumber, VerifiedCheckpoint},
 };
-use std::sync::Arc;
 
 use crate::db_shell::{
     backend::{Backend, DirEntry},

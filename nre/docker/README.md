@@ -23,15 +23,6 @@ network-key-pair:
 
 3. Place `genesis.blob` in the same directory as `docker-compose.yaml`. (available post genesis ceremony)
 
-Build the node image from this RTD checkout before starting the validator:
-
-```shell
-docker build -f docker/rtd-node/Dockerfile -t rtd-node:local .
-export RTD_NODE_IMAGE=rtd-node:local
-```
-
-Run the build command from the repository root. The source fork does not provide a verified public validator image or network genesis. Use only the genesis, private keys, and configuration from your own RTD ceremony.
-
 ## Connectivity
 
 You may need to explicitly open the ports outlined in [Rtd for Node Operators](../rtd_for_node_operators.md#connectivity) for the required Rtd Node connectivity.
@@ -40,7 +31,7 @@ You may need to explicitly open the ports outlined in [Rtd for Node Operators](.
 
 Start Rtd Node in detached mode:
 
-`docker compose up -d`
+`sudo docker compose up -d`
 
 ## Logs
 
@@ -49,13 +40,13 @@ By default, logs are stored at `/var/lib/docker/containers/[container-id]/[conta
 - View and follow
 
 ```shell
-docker compose logs -f validator
+sudo docker compose logs -f validator
 ```
 
 - By default all logs are output, limit this using `--since`
 
 ```shell
-docker logs --since 10m -f validator
+sudo docker logs --since 10m -f validator
 ```
 
 ## Storage
@@ -63,14 +54,16 @@ docker logs --since 10m -f validator
 - What is the size of the local Rtd database?
 
 ```shell
-# the compose file mounts this host directory directly
-sudo du -sh /opt/rtd/db
+# get the volume location on disk
+sudo docker volume inspect docker_suidb
+# get the size of the volume on disk
+sudo du -sh /var/lib/docker/volumes/docker_suidb/_data
 ```
 
 - Delete the local Rtd databases (volume)
 
 ```shell
-docker compose down -v
+sudo docker-compose down -v
 ```
 
 ## Updates
@@ -80,18 +73,18 @@ docker compose down -v
 1. Stop docker compose
 
 ```shell
-docker compose down
+sudo docker compose down
 ```
 
-2. Build and select the new RTD image from the intended source revision:
+2. Update docker-compose.yaml to reference the new image
 
 ```
-docker build -f docker/rtd-node/Dockerfile -t rtd-node:<RTD_COMMIT> .
-export RTD_NODE_IMAGE=rtd-node:<RTD_COMMIT>
+-    image: linku/rtd-node:<OLD_RTD_SHA>
++    image: linku/rtd-node:<NEW_RTD_SHA>
 ```
 
 3. Start docker compose in detached mode:
 
 ```shell
-docker compose up -d
+sudo docker compose up -d
 ```

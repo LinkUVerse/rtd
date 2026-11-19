@@ -31,9 +31,12 @@ mod nested_loop_tests;
 mod package_cache_tests;
 mod publish_tests;
 mod return_value_tests;
+mod subst_formula_tests;
 mod system_packages_tests;
 mod telemetry_tests;
 mod value_tests;
+mod vector_native_tests;
+mod vtable_key_tests;
 
 #[cfg(all(test, feature = "fuzzing"))]
 mod value_prop_tests;

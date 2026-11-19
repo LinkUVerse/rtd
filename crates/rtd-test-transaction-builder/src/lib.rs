@@ -4,12 +4,14 @@
 use move_core_types::ident_str;
 use move_core_types::u256::U256;
 use rand::Rng;
+use shared_crypto::intent::{Intent, IntentMessage};
+use std::path::PathBuf;
 use rtd_genesis_builder::validator_info::GenesisValidatorMetadata;
 use rtd_move_build::{BuildConfig, CompiledPackage};
 use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_sdk::wallet_context::WalletContext;
 use rtd_types::balance::Balance;
-use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber};
+use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
 use rtd_types::committee::EpochId;
 use rtd_types::crypto::{AccountKeyPair, Signature, Signer, get_key_pair};
 use rtd_types::digests::ChainIdentifier;
@@ -20,8 +22,8 @@ use rtd_types::multisig::{BitmapUnit, MultiSig, MultiSigPublicKey};
 use rtd_types::multisig_legacy::{MultiSigLegacy, MultiSigPublicKeyLegacy};
 use rtd_types::object::Owner;
 use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
-use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
 use rtd_types::signature::GenericSignature;
+use rtd_types::rtd_system_state::RTD_SYSTEM_MODULE_NAME;
 use rtd_types::transaction::{
     Argument, CallArg, DEFAULT_VALIDATOR_GAS_PRICE, FundsWithdrawalArg, ObjectArg,
     SharedObjectMutability, TEST_ONLY_GAS_UNIT_FOR_HEAVY_COMPUTATION_STORAGE,
@@ -29,8 +31,6 @@ use rtd_types::transaction::{
 };
 use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID, RTD_RANDOMNESS_STATE_OBJECT_ID};
 use rtd_types::{RTD_SYSTEM_PACKAGE_ID, TypeTag};
-use shared_crypto::intent::{Intent, IntentMessage};
-use std::path::PathBuf;
 
 #[derive(Clone)]
 pub enum FundSource {
@@ -275,7 +275,9 @@ impl TestTransactionBuilder {
             vec![
                 CallArg::Pure(bcs::to_bytes("example_nft_name").unwrap()),
                 CallArg::Pure(bcs::to_bytes("example_nft_description").unwrap()),
-                CallArg::Pure(bcs::to_bytes("https://example.invalid/rtd-logo.svg").unwrap()),
+                CallArg::Pure(
+                    bcs::to_bytes("https://rtd.io/_nuxt/img/rtd-logo.8d3c44e.svg").unwrap(),
+                ),
             ],
         )
     }
@@ -981,14 +983,8 @@ pub async fn increment_counter(
     context.execute_transaction_must_succeed(txn).await
 }
 
-/// Executes a transaction that generates a new random u128 using Random and emits it as an event.
-pub async fn emit_new_random_u128(
-    context: &WalletContext,
-    package_id: ObjectID,
-) -> ExecutedTransaction {
-    let (sender, gas_object) = context.get_one_gas_object().await.unwrap().unwrap();
-    let rgp = context.get_reference_gas_price().await.unwrap();
-
+/// Builds the `CallArg` for reading the shared randomness state object.
+pub async fn randomness_state_call_arg(context: &WalletContext) -> CallArg {
     let mut client = context.grpc_client().unwrap();
     let random_obj = client
         .get_object(RTD_RANDOMNESS_STATE_OBJECT_ID)
@@ -1002,11 +998,21 @@ pub async fn emit_new_random_u128(
     else {
         panic!("Expect Randomness to be shared object")
     };
-    let random_call_arg = CallArg::Object(ObjectArg::SharedObject {
+    CallArg::Object(ObjectArg::SharedObject {
         id: RTD_RANDOMNESS_STATE_OBJECT_ID,
         initial_shared_version,
         mutability: SharedObjectMutability::Immutable,
-    });
+    })
+}
+
+/// Executes a transaction that generates a new random u128 using Random and emits it as an event.
+pub async fn emit_new_random_u128(
+    context: &WalletContext,
+    package_id: ObjectID,
+) -> ExecutedTransaction {
+    let (sender, gas_object) = context.get_one_gas_object().await.unwrap().unwrap();
+    let rgp = context.get_reference_gas_price().await.unwrap();
+    let random_call_arg = randomness_state_call_arg(context).await;
 
     let txn = context
         .sign_transaction(

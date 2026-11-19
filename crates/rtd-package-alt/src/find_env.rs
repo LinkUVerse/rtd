@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, path::Path};
 use anyhow::bail;
 use indexmap::IndexMap;
 use move_compiler::format_oxford_list;
-use move_package_alt::{
+use move_package::{
     RootPackage,
     schema::{Environment, EnvironmentID, EnvironmentName},
 };
@@ -151,7 +151,7 @@ impl EnvFinder<'_> {
                     "Your current environment is `{active_env}`, but the package does not define an `{active_env}` environment.\n\n\
                     To publish on a different environment, you can use `rtd client switch --env <env>` before publishing.\n\n\
                     To make a temporary publication on `{active_env}`, use the `rtd client test-publish` command instead.\n\n\
-                    It is also possible to add a new environment to `Move.toml` if you want to maintain a persistent publication on `{active_env}`."
+                    It is also possible to add a new environment to `Move.toml` if you want to maintain a persistent publication on `{active_env}`; see https://docs.rtd.io/guides/developer/packages/move-package-management#environments for more details."
                 );
             } else {
                 let options =

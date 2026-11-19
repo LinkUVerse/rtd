@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use move_core_types::ident_str;
+use rtd_core::authority::authority_test_utils::dev_inspect_for_testing;
 use rtd_macros::*;
 use rtd_simulator::has_mainnet_protocol_config_override;
 use rtd_test_transaction_builder::{FundSource, TestTransactionBuilder};
 use rtd_types::{
-    base_types::{FullObjectRef, ObjectID, ObjectRef, RtdAddress, SequenceNumber},
+    base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress},
     coin_reservation::ParsedObjectRefWithdrawal,
     digests::CheckpointDigest,
     effects::TransactionEffectsAPI,
@@ -15,6 +16,7 @@ use rtd_types::{
         Argument, CallArg, Command, GasData, ObjectArg, TransactionData, TransactionDataAPI,
         TransactionDataV1, TransactionExpiration, TransactionKind,
     },
+    transaction_executor::TransactionChecks,
 };
 use test_cluster::addr_balance_test_env::{TestEnv, TestEnvBuilder, get_rtd_accumulator_object_id};
 
@@ -217,8 +219,9 @@ async fn test_coin_reservation_gating() {
     if has_mainnet_protocol_config_override() {
         return;
     }
-    // Explicitly disable coin reservation flags to test the gating logic
+    // Explicitly disable coin reservation flags to test the gating logic.
     let mut test_env = TestEnvBuilder::new()
+        .with_protocol_version(140.into())
         .with_proto_override_cb(Box::new(|_, mut cfg| {
             cfg.disable_coin_reservation_for_testing();
             cfg
@@ -1045,9 +1048,9 @@ async fn test_coin_reservation_rejected_in_sponsored_transaction() {
     if has_mainnet_protocol_config_override() {
         return;
     }
+    use shared_crypto::intent::Intent;
     use rtd_keys::keystore::AccountKeystore;
     use rtd_types::transaction::{GasData, ProgrammableTransaction, Transaction, TransactionData};
-    use shared_crypto::intent::Intent;
 
     let mut test_env = TestEnvBuilder::new()
         .with_proto_override_cb(Box::new(|_, mut cfg| {
@@ -2166,7 +2169,9 @@ async fn test_fake_coin_reservation_dry_run_does_not_panic() {
         .fullnode_handle
         .rtd_node
         .with(|node| node.state().clone());
-    let join = tokio::task::spawn(async move { state.dry_exec_transaction(tx_data).await });
+    let join = tokio::task::spawn(async move {
+        state.simulate_transaction(tx_data, TransactionChecks::Enabled, true)
+    });
 
     match join.await {
         Ok(Ok(_)) => panic!("dry-run with fake coin reservation should have errored"),
@@ -2209,18 +2214,16 @@ async fn test_fake_coin_reservation_dev_inspect_does_not_panic() {
         .rtd_node
         .with(|node| node.state().clone());
     let join = tokio::task::spawn(async move {
-        state
-            .dev_inspect_transaction_block(
-                sender,
-                tx_kind,
-                None,
-                None,
-                None,
-                None,
-                None,
-                /* skip_checks */ Some(true),
-            )
-            .await
+        dev_inspect_for_testing(
+            &state,
+            sender,
+            tx_kind,
+            None,
+            None,
+            None,
+            None,
+            TransactionChecks::Disabled,
+        )
     });
 
     match join.await {
@@ -2248,6 +2251,7 @@ async fn test_fake_coin_reservation_dry_run_safe_when_flag_disabled() {
         return;
     }
     let test_env = TestEnvBuilder::new()
+        .with_protocol_version(140.into())
         .with_proto_override_cb(Box::new(|_, mut cfg| {
             cfg.disable_coin_reservation_for_testing();
             cfg
@@ -2274,7 +2278,9 @@ async fn test_fake_coin_reservation_dry_run_safe_when_flag_disabled() {
         .fullnode_handle
         .rtd_node
         .with(|node| node.state().clone());
-    let join = tokio::task::spawn(async move { state.dry_exec_transaction(tx_data).await });
+    let join = tokio::task::spawn(async move {
+        state.simulate_transaction(tx_data, TransactionChecks::Enabled, true)
+    });
 
     match join.await {
         Ok(Ok(_)) => panic!("dry-run with fake coin reservation should have errored"),
@@ -2301,6 +2307,7 @@ async fn test_fake_coin_reservation_dev_inspect_safe_when_flag_disabled() {
         return;
     }
     let test_env = TestEnvBuilder::new()
+        .with_protocol_version(140.into())
         .with_proto_override_cb(Box::new(|_, mut cfg| {
             cfg.disable_coin_reservation_for_testing();
             cfg
@@ -2317,18 +2324,16 @@ async fn test_fake_coin_reservation_dev_inspect_safe_when_flag_disabled() {
         .rtd_node
         .with(|node| node.state().clone());
     let join = tokio::task::spawn(async move {
-        state
-            .dev_inspect_transaction_block(
-                sender,
-                tx_kind,
-                None,
-                None,
-                None,
-                None,
-                None,
-                /* skip_checks */ Some(true),
-            )
-            .await
+        dev_inspect_for_testing(
+            &state,
+            sender,
+            tx_kind,
+            None,
+            None,
+            None,
+            None,
+            TransactionChecks::Disabled,
+        )
     });
 
     match join.await {

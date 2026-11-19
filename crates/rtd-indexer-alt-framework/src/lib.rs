@@ -89,7 +89,8 @@ pub struct TaskArgs {
     ///
     /// By default there is no task name, and watermarks are keyed only by `pipeline`.
     ///
-    /// Sequential pipelines cannot be attached to a tasked indexer.
+    /// Sequential pipelines cannot be attached to a tasked indexer, unless `--pipeline` excludes
+    /// them.
     ///
     /// The framework ensures that tasked pipelines never commit checkpoints below the main
     /// pipeline’s pruner watermark. Requires `--reader-interval-ms`.
@@ -149,7 +150,8 @@ pub struct Indexer<S: Store> {
     ///
     /// By default there is no task name, and watermarks are keyed only by `pipeline`.
     ///
-    /// Sequential pipelines cannot be attached to a tasked indexer.
+    /// Sequential pipelines cannot be attached to a tasked indexer, unless `--pipeline` excludes
+    /// them.
     ///
     /// The framework ensures that tasked pipelines never commit checkpoints below the main
     /// pipeline’s pruner watermark.
@@ -164,8 +166,8 @@ pub struct Indexer<S: Store> {
     /// with the same name isn't added twice.
     added_pipelines: BTreeSet<&'static str>,
 
-    /// Registered pipelines, waiting to be grouped into ingestion cohorts and started when the
-    /// indexer is run.
+    /// Pipelines that are registered and enabled, waiting to be grouped into ingestion cohorts and
+    /// started when the indexer is run.
     pipelines: Vec<PendingPipeline>,
 }
 
@@ -241,7 +243,7 @@ impl<S: Store> Indexer<S> {
         registry: &Registry,
     ) -> anyhow::Result<Self> {
         let ingestion_factory =
-            IngestionFactory::new(client_args, ingestion_config, metrics_prefix, registry)?;
+            IngestionFactory::new(client_args, ingestion_config, metrics_prefix, registry).await?;
         Self::with_ingestion_factory(
             store,
             indexer_args,
@@ -259,7 +261,9 @@ impl<S: Store> Indexer<S> {
     /// them in here, and the indexer creates its ingestion services from them.
     ///
     /// All the indexer's ingestion services clone `ingestion_client` and report to its metrics
-    /// handle, and each gets its own clone of the streaming client (if any).
+    /// handle, and each gets its own clone of the streaming client (if any). If
+    /// `gap_fill_client` is provided, it fetches the checkpoints between each service's position
+    /// and the start of a newly connected stream, instead of `ingestion_client`.
     ///
     /// [`IngestionClientTrait`]: crate::ingestion::ingestion_client::IngestionClientTrait
     /// [`CheckpointStreamingClient`]: crate::ingestion::streaming_client::CheckpointStreamingClient
@@ -268,12 +272,17 @@ impl<S: Store> Indexer<S> {
         indexer_args: IndexerArgs,
         ingestion_client: IngestionClient,
         streaming_client: Option<ArcStreamingClient>,
+        gap_fill_client: Option<IngestionClient>,
         ingestion_config: IngestionConfig,
         metrics_prefix: Option<&str>,
         registry: &Registry,
     ) -> anyhow::Result<Self> {
-        let ingestion_factory =
-            IngestionFactory::with_clients(ingestion_client, streaming_client, ingestion_config);
+        let ingestion_factory = IngestionFactory::with_clients(
+            ingestion_client,
+            streaming_client,
+            gap_fill_client,
+            ingestion_config,
+        );
         Self::with_ingestion_factory(
             store,
             indexer_args,
@@ -346,13 +355,10 @@ impl<S: Store> Indexer<S> {
         self.ingestion_factory.metrics()
     }
 
-    /// The pipelines that this indexer will run.
+    /// The pipelines that this indexer will run: those registered with it and not excluded by
+    /// `--pipeline`.
     pub fn pipelines(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.added_pipelines.iter().copied().filter(|p| {
-            self.enabled_pipelines
-                .as_ref()
-                .is_none_or(|e| e.contains(*p))
-        })
+        self.pipelines.iter().map(|p| p.name)
     }
 
     /// The minimum next checkpoint across all sequential pipelines. This value is used to
@@ -548,7 +554,13 @@ impl<T: SequentialStore> Indexer<T> {
         handler: H,
         config: SequentialConfig,
     ) -> anyhow::Result<()> {
-        if self.task.is_some() {
+        // A pipeline excluded by `--pipeline` is skipped by `add_pipeline` below, so it does not
+        // stop a tasked indexer from running the pipelines that are enabled.
+        let enabled = self
+            .enabled_pipelines
+            .as_ref()
+            .is_none_or(|e| e.contains(H::NAME));
+        if self.task.is_some() && enabled {
             bail!(
                 "Sequential pipelines do not support pipeline tasks. \
                 These pipelines guarantee that each checkpoint is committed exactly once and in order. \
@@ -610,7 +622,6 @@ mod tests {
     use crate::pipeline::concurrent::ConcurrentConfig;
     use crate::store::CommitterWatermark;
     use crate::store::ConcurrentConnection as _;
-    use crate::store::Connection as _;
 
     use super::*;
 
@@ -755,7 +766,7 @@ mod tests {
             let watermark_path = dir.path().join(WATERMARK_PATH);
             std::fs::create_dir_all(watermark_path.parent().unwrap()).unwrap();
             let watermark = ObjectStoreWatermark {
-                checkpoint_hi_inclusive: cp,
+                checkpoint_hi_inclusive: Some(cp),
             };
             std::fs::write(watermark_path, serde_json::to_string(&watermark).unwrap()).unwrap();
         }
@@ -1078,6 +1089,39 @@ mod tests {
         assert_eq!(indexer.latest_checkpoint, 0);
         assert_eq!(indexer.next_checkpoint, 0);
         assert_eq!(indexer.next_sequential_checkpoint, Some(0));
+    }
+
+    /// `pipelines()` reports every registered pipeline without `--pipeline`, and exactly the
+    /// registered pipelines that `--pipeline` names with it.
+    #[tokio::test]
+    async fn test_pipelines_reports_enabled_pipelines() {
+        test_pipeline!(A, "concurrent_a");
+        test_pipeline!(B, "concurrent_b");
+        test_pipeline!(C, "sequential_c");
+        test_pipeline!(D, "sequential_d");
+
+        let cases = [
+            (vec![], vec![A::NAME, B::NAME, C::NAME, D::NAME]),
+            (vec![A::NAME, C::NAME], vec![A::NAME, C::NAME]),
+        ];
+
+        for (filter, expected) in cases {
+            let args = IndexerArgs {
+                pipeline: filter.into_iter().map(String::from).collect(),
+                ..Default::default()
+            };
+            let (mut indexer, _temp_dir) =
+                create_test_indexer(FallibleMockStore::default(), args, &Registry::new(), None)
+                    .await;
+
+            add_concurrent(&mut indexer, A).await;
+            add_concurrent(&mut indexer, B).await;
+            add_sequential(&mut indexer, C).await;
+            add_sequential(&mut indexer, D).await;
+
+            let pipelines: BTreeSet<_> = indexer.pipelines().collect();
+            assert_eq!(pipelines, BTreeSet::from_iter(expected));
+        }
     }
 
     /// next_checkpoint is 1 when smallest committer watermark is 0.
@@ -1612,6 +1656,52 @@ mod tests {
         }
     }
 
+    /// A sequential pipeline that `--pipeline` excludes does not stop a tasked indexer from
+    /// running its concurrent pipelines, but a tasked indexer still rejects a sequential pipeline
+    /// that is enabled, whether by name or by an empty `--pipeline` list.
+    #[tokio::test]
+    async fn test_tasked_indexer_skips_excluded_sequential_pipeline() {
+        let store = FallibleMockStore::default();
+        let tasked = |pipeline: Vec<&str>| IndexerArgs {
+            first_checkpoint: Some(0),
+            last_checkpoint: Some(4),
+            pipeline: pipeline.into_iter().map(String::from).collect(),
+            task: TaskArgs::tasked("task".to_string(), 10),
+        };
+
+        let (mut indexer, _temp_dir) = create_test_indexer(
+            store.clone(),
+            tasked(vec![MockCheckpointSequenceNumberHandler::NAME]),
+            &Registry::new(),
+            Some((5, 1)),
+        )
+        .await;
+        add_sequential(&mut indexer, SequentialHandler).await;
+        add_concurrent(&mut indexer, MockCheckpointSequenceNumberHandler).await;
+        indexer.run().await.unwrap().join().await.unwrap();
+
+        let tasked_watermark = store.watermark("test@task").unwrap();
+        assert_eq!(tasked_watermark.checkpoint_hi_inclusive, Some(4));
+        assert!(
+            store.watermark(SequentialHandler::NAME).is_none(),
+            "the excluded sequential pipeline ran"
+        );
+
+        for pipeline in [vec![SequentialHandler::NAME], vec![]] {
+            let (mut indexer, _temp_dir) =
+                create_test_indexer(store.clone(), tasked(pipeline), &Registry::new(), None).await;
+            let err = indexer
+                .sequential_pipeline(SequentialHandler, SequentialConfig::default())
+                .await
+                .unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("Sequential pipelines do not support pipeline tasks"),
+                "unexpected error: {err:#}"
+            );
+        }
+    }
+
     /// Tasked pipelines can run ahead of the main pipeline's committer watermark.
     #[tokio::test]
     async fn test_tasked_pipelines_surpass_main_pipeline_committer_hi() {
@@ -1701,7 +1791,6 @@ mod tests {
                 controllable_handler,
                 ConcurrentConfig {
                     committer: CommitterConfig {
-                        collect_interval_ms: 10,
                         watermark_interval_ms: 10,
                         ..Default::default()
                     },
@@ -1900,6 +1989,7 @@ mod tests {
             },
             ingestion_client,
             None,
+            None,
             IngestionConfig::default(),
             None,
             &registry,
@@ -1997,14 +2087,13 @@ mod tests {
         .await
         .unwrap();
 
-        // Near-tip pipeline: commit promptly so its watermark advances without waiting on the
-        // default collector/watermark intervals.
+        // Near-tip pipeline: write watermarks promptly so it advances without waiting on the
+        // default watermark interval.
         indexer
             .concurrent_pipeline(
                 A,
                 ConcurrentConfig {
                     committer: CommitterConfig {
-                        collect_interval_ms: 10,
                         watermark_interval_ms: 10,
                         ..Default::default()
                     },

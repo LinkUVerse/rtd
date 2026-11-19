@@ -10,8 +10,8 @@ use move_vm_types::{
     pop_arg,
     values::{Struct, Value, Vector, VectorRef, VectorSpecialization},
 };
-use rtd_types::nitro_attestation::{parse_nitro_attestation, verify_nitro_attestation};
 use std::collections::{BTreeMap, VecDeque};
+use rtd_types::nitro_attestation::{parse_nitro_attestation, verify_nitro_attestation};
 
 use crate::{NativesCostTable, get_extension, object_runtime::ObjectRuntime};
 use move_vm_runtime::native_charge_gas_early_exit;
@@ -93,7 +93,7 @@ pub fn load_nitro_attestation_internal(
         context,
         cost_params.parse_base_cost.and_then(|base_cost| cost_params
             .parse_cost_per_byte
-            .map(|per_byte| base_cost + per_byte * (attestation_bytes.len() as u64).into()))
+            .map(|per_byte| base_cost + per_byte.saturating_mul(attestation_bytes.len() as u64)))
     );
 
     match parse_nitro_attestation(
@@ -101,6 +101,9 @@ pub fn load_nitro_attestation_internal(
         is_upgraded(context)?,
         is_all_nonzero_pcrs_included(context)?,
         is_always_include_required_pcrs(context)?,
+        // This frozen execution version predates the unprotected-header flag and
+        // must keep parsing the unprotected header.
+        false,
     ) {
         Ok((signature, signed_message, payload)) => {
             let cert_chain_length = payload.get_cert_chain_length();
@@ -110,7 +113,8 @@ pub fn load_nitro_attestation_internal(
                     .verify_base_cost
                     .and_then(|base_cost| cost_params
                         .verify_cost_per_cert
-                        .map(|per_cert| base_cost + per_cert * (cert_chain_length as u64).into()))
+                        .map(|per_cert| base_cost
+                            + per_cert.saturating_mul(cert_chain_length as u64)))
             );
             match verify_nitro_attestation(&signature, &signed_message, &payload, current_timestamp)
             {

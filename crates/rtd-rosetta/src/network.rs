@@ -5,10 +5,10 @@ use axum::extract::State;
 use axum::{Extension, Json};
 use axum_extra::extract::WithRejection;
 use prost_types::FieldMask;
-use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2::{GetCheckpointRequest, GetEpochRequest};
 use serde_json::json;
 use strum::IntoEnumIterator;
+use rtd_rpc::field::FieldMaskUtil;
+use rtd_rpc::proto::sui::rpc::v2::{GetCheckpointRequest, GetEpochRequest};
 
 use fastcrypto::encoding::Hex;
 use rtd_types::base_types::{ObjectID, RtdAddress};
@@ -65,7 +65,7 @@ pub async fn status(
                 .parse::<RtdAddress>()
                 .map_err(|e| Error::DataError(format!("Invalid validator address: {}", e)))?;
             let public_key = validator.protocol_public_key();
-            let stake_amount = validator.staking_pool().rtd_balance();
+            let stake_amount = validator.staking_pool().sui_balance();
             Ok(Peer {
                 peer_id: ObjectID::from(address).into(),
                 metadata: Some(json!({

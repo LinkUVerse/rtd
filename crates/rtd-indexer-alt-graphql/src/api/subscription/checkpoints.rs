@@ -16,7 +16,7 @@ use async_graphql::connection::Edge;
 use async_graphql::connection::EmptyFields;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::AlphaLedgerGrpcReader;
 use rtd_indexer_alt_reader::alpha_ledger_grpc_reader::StreamPage;
-use rtd_rpc::proto::rtd::rpc::v2;
+use rtd_rpc::proto::sui::rpc::v2;
 use rtd_rpc_cursor::CursorToken;
 
 use crate::api::types::checkpoint::CCheckpoint;

@@ -6,7 +6,7 @@ use prost_types::Struct;
 use rtd_rpc::{
     field::FieldMaskTree,
     merge::Merge,
-    proto::rtd::rpc::v2::{Bcs, Display, Event, Object, TransactionEffects, TransactionEvents},
+    proto::sui::rpc::v2::{Bcs, Display, Event, Object, TransactionEffects, TransactionEvents},
 };
 use rtd_types::full_checkpoint_content::ObjectSet;
 
@@ -219,10 +219,10 @@ impl RpcService {
 
     // Renders clever error information in-place
     pub fn render_clever_error(&self, effects: &mut TransactionEffects) {
-        use rtd_rpc::proto::rtd::rpc::v2::CleverError;
-        use rtd_rpc::proto::rtd::rpc::v2::MoveAbort;
-        use rtd_rpc::proto::rtd::rpc::v2::clever_error;
-        use rtd_rpc::proto::rtd::rpc::v2::execution_error::ErrorDetails;
+        use rtd_rpc::proto::sui::rpc::v2::CleverError;
+        use rtd_rpc::proto::sui::rpc::v2::MoveAbort;
+        use rtd_rpc::proto::sui::rpc::v2::clever_error;
+        use rtd_rpc::proto::sui::rpc::v2::execution_error::ErrorDetails;
 
         let Some(move_abort) = effects
             .status

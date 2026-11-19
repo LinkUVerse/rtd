@@ -8,6 +8,8 @@ use move_bytecode_utils::module_cache::GetModule;
 use move_core_types::account_address::AccountAddress;
 use move_core_types::resolver::SerializedPackage;
 use move_core_types::{language_storage::ModuleId, resolver::ModuleResolver};
+use simulacrum::Simulacrum;
+use std::num::NonZeroUsize;
 use rtd_config::genesis;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_swarm_config::genesis_config::AccountConfig;
@@ -15,7 +17,7 @@ use rtd_swarm_config::network_config_builder::{ConfigBuilder, KeyPairWrapper};
 use rtd_types::error::RtdErrorKind;
 use rtd_types::storage::{ReadStore, RpcStateReader};
 use rtd_types::{
-    base_types::{ObjectID, RtdAddress, SequenceNumber, VersionNumber},
+    base_types::{ObjectID, SequenceNumber, RtdAddress, VersionNumber},
     committee::{Committee, EpochId},
     digests::{ObjectDigest, TransactionDigest},
     effects::{TransactionEffects, TransactionEffectsAPI, TransactionEvents},
@@ -31,8 +33,6 @@ use rtd_types::{
     },
     transaction::VerifiedTransaction,
 };
-use simulacrum::Simulacrum;
-use std::num::NonZeroUsize;
 use tempfile::tempdir;
 use typed_store::DBMapUtils;
 use typed_store::Map;
@@ -745,15 +745,6 @@ impl RpcStateReader for PersistedStoreInnerReadOnlyWrapper {
 
     fn indexes(&self) -> Option<&dyn rtd_types::storage::RpcIndexes> {
         None
-    }
-
-    fn get_struct_layout_with_overlay(
-        &self,
-        _: &move_core_types::language_storage::StructTag,
-        _overlay: &rtd_types::full_checkpoint_content::ObjectSet,
-    ) -> rtd_types::storage::error::Result<Option<move_core_types::annotated_value::MoveTypeLayout>>
-    {
-        Ok(None)
     }
 }
 

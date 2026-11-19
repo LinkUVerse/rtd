@@ -15,7 +15,7 @@ use rtd_indexer_alt_reader::error::is_grpc_dependency_unavailable;
 use rtd_indexer_alt_reader::fullnode_client::Error::GrpcExecutionError;
 use rtd_indexer_alt_reader::fullnode_client::FullnodeClient;
 use rtd_rpc::field::FieldMaskUtil;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 use rtd_types::dynamic_field::DynamicFieldType;
 use tonic::Code;
 

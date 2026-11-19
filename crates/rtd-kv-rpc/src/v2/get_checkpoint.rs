@@ -3,8 +3,8 @@
 
 use rtd_kvstore::{BigTableClient, CheckpointData, KeyValueStoreReader};
 use rtd_rpc::field::{FieldMask, FieldMaskTree, FieldMaskUtil};
-use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
-use rtd_rpc::proto::rtd::rpc::v2::{Checkpoint, GetCheckpointRequest, GetCheckpointResponse};
+use rtd_rpc::proto::sui::rpc::v2::get_checkpoint_request::CheckpointId;
+use rtd_rpc::proto::sui::rpc::v2::{Checkpoint, GetCheckpointRequest, GetCheckpointResponse};
 use rtd_rpc_api::{
     CheckpointNotFoundError, ErrorReason, RpcError, proto::google::rpc::bad_request::FieldViolation,
 };

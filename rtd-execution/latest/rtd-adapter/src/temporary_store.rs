@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::execution_mode::ExecutionMode;
-use crate::gas_charger::GasCharger;
+use crate::metering::gas_charger::ChargedGas;
+use crate::metering::gas_state::{StorageCharge, StorageRates};
+use move_vm_runtime::runtime::MoveRuntime;
 use linku_common::{ZipDebugEqIteratorExt, debug_fatal};
 use linku_metrics::monitored_scope;
-use move_vm_runtime::runtime::MoveRuntime;
 use parking_lot::RwLock;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::sync::Arc;
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::accumulator_event::AccumulatorEvent;
 use rtd_types::accumulator_root::{
@@ -28,12 +32,14 @@ use rtd_types::execution::{
 use rtd_types::execution_status::{ExecutionErrorKind, ExecutionStatus};
 use rtd_types::inner_temporary_store::InnerTemporaryStore;
 use rtd_types::object::Data;
+use rtd_types::storage::{
+    BackingStore, DenyListResult, ImplicitSystemObjectResolver, PackageObject,
+};
 use rtd_types::rtd_system_state::{AdvanceEpochParams, get_rtd_system_state_wrapper};
-use rtd_types::storage::{BackingStore, DenyListResult, ObjectFundsResolver, PackageObject};
 use rtd_types::transaction::{Command, GasData, TransactionKind, is_gasless_transaction};
 use rtd_types::{
-    RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
-    base_types::{ObjectID, ObjectRef, RtdAddress, SequenceNumber, TransactionDigest},
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_CLOCK_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
+    base_types::{ObjectID, ObjectRef, SequenceNumber, RtdAddress, TransactionDigest},
     digests::ObjectDigest,
     effects::EffectsObjectChange,
     error::{ExecutionError, RtdResult},
@@ -44,9 +50,6 @@ use rtd_types::{
     transaction::InputObjects,
 };
 use rtd_types::{RTD_SYSTEM_STATE_OBJECT_ID, TypeTag, is_system_package};
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::sync::Arc;
 
 pub(crate) mod invariants;
 use invariants::InvariantChecker;
@@ -73,14 +76,10 @@ struct PostExecutionCheckInputs {
 }
 
 impl PostExecutionCheckInputs {
-    fn new(transaction: (&TransactionKind, &GasData, RtdAddress), enable_gasless: bool) -> Self {
+    fn new(transaction: (&TransactionKind, &GasData, RtdAddress)) -> Self {
         let (transaction_kind, gas_data, transaction_signer) = transaction;
-        let (input_reservations, allowance_ids) = compute_input_reservations(
-            transaction_kind,
-            gas_data,
-            transaction_signer,
-            enable_gasless,
-        );
+        let (input_reservations, allowance_ids) =
+            compute_input_reservations(transaction_kind, gas_data, transaction_signer);
         Self {
             input_reservations,
             allowance_ids,
@@ -164,8 +163,7 @@ impl<'backing> TemporaryStore<'backing> {
         transaction: (&TransactionKind, &GasData, RtdAddress),
         unsettled_object_funds: &'backing dyn UnsettledObjectFundsRead,
     ) -> Self {
-        let post_execution_check_inputs =
-            PostExecutionCheckInputs::new(transaction, protocol_config.enable_gasless());
+        let post_execution_check_inputs = PostExecutionCheckInputs::new(transaction);
         Self::new_with_input_objects(
             store,
             input_objects,
@@ -275,11 +273,27 @@ impl<'backing> TemporaryStore<'backing> {
                 return None;
             }
         };
-        let object = self
-            .store
-            // If this transaction needs to read an implicit system object,
-            // the version must be assigned before execution.
-            .load_implicitly_read_system_object(object_id, version)?;
+        let object = match self.input_objects.get(object_id) {
+            // A declared input is the object this transaction was sequenced against, so it is
+            // the same object the implicit read must see.
+            Some(object) => {
+                if object.version() != version.version {
+                    debug_fatal!(
+                        "declared input {object_id} at version {:?} disagrees with its implicit \
+                         read version {:?}",
+                        object.version(),
+                        version.version
+                    );
+                    return None;
+                }
+                object.clone()
+            }
+            None => self
+                .store
+                // If this transaction needs to read an implicit system object,
+                // the version must be assigned before execution.
+                .load_implicitly_read_system_object(object_id, version)?,
+        };
         // Record the read version so it can be emitted into effects as a read-only consensus object and
         // reproduced on replay.
         self.loaded_system_objects
@@ -525,7 +539,6 @@ impl<'backing> TemporaryStore<'backing> {
         mut self,
         shared_object_refs: Vec<SharedInput>,
         transaction_digest: &TransactionDigest,
-        mut transaction_dependencies: BTreeSet<TransactionDigest>,
         gas_cost_summary: GasCostSummary,
         status: ExecutionStatus,
         gas_coin: Option<ObjectID>,
@@ -544,22 +557,6 @@ impl<'backing> TemporaryStore<'backing> {
         // This must happens before merge_accumulator_events.
         let accumulator_running_max_withdraws = self.calculate_accumulator_running_max_withdraws();
         self.merge_accumulator_events();
-
-        if !self.protocol_config.disable_effects_tx_dependencies() {
-            // Even on abort, successfully receiving an object creates a dependency.
-            for (id, expected_version, expected_digest) in &self.receiving_objects {
-                if let Some(obj_meta) = self.loaded_runtime_objects.get(id) {
-                    // A dynamic-field load can spoof a receiving input, so authenticate the
-                    // version, digest and owner before registering its dependency.
-                    let loaded_via_receive = obj_meta.version == *expected_version
-                        && obj_meta.digest == *expected_digest
-                        && obj_meta.owner.is_address_owned();
-                    if loaded_via_receive {
-                        transaction_dependencies.insert(obj_meta.previous_transaction);
-                    }
-                }
-            }
-        }
 
         assert!(self.protocol_config.enable_effects_v2());
 
@@ -591,7 +588,7 @@ impl<'backing> TemporaryStore<'backing> {
             } else {
                 Some(inner.events.digest())
             },
-            transaction_dependencies.into_iter().collect(),
+            vec![],
         );
 
         (inner, effects)
@@ -714,8 +711,7 @@ impl<'backing> TemporaryStore<'backing> {
 
     /// Consume this (post-execution) store and return the store used by a `BumpOnly` exit: keep
     /// the input-derived state as well as information about the execution needed for replay,
-    /// discard everything related to the execution results, then bump the mutable
-    /// inputs. Dependencies are retained only when enabled by the protocol.
+    /// discard everything related to the execution results, then bump the mutable inputs.
     pub(crate) fn into_bump_only(self) -> Self {
         let Self {
             // Input-derived - reused verbatim.
@@ -811,11 +807,58 @@ impl<'backing> TemporaryStore<'backing> {
     }
 
     pub fn estimate_effects_size_upperbound(&self) -> usize {
+        let complete_effects_size_estimate = self.protocol_config.complete_effects_size_estimate();
+
+        let (num_id_only_changes, num_unchanged_consensus_objects) =
+            if complete_effects_size_estimate {
+                (
+                    self.count_id_only_changes(),
+                    self.count_unchanged_consensus_objects_upperbound(),
+                )
+            } else {
+                (0, 0)
+            };
+
         TransactionEffects::estimate_effects_size_upperbound_v2(
             self.execution_results.written_objects.len(),
             self.execution_results.modified_objects.len(),
             self.input_objects.len(),
+            num_id_only_changes,
+            num_unchanged_consensus_objects,
+            &self.execution_results.accumulator_events,
+            complete_effects_size_estimate,
         )
+    }
+
+    /// Counts the IDs that `get_object_changes` records without a written or modified object:
+    /// objects created then wrapped, and objects unwrapped then deleted.
+    fn count_id_only_changes(&self) -> usize {
+        let results = &self.execution_results;
+        results
+            .created_object_ids
+            .iter()
+            .chain(&results.deleted_object_ids)
+            .filter(|id| {
+                !results.written_objects.contains_key(id) && !results.modified_objects.contains(id)
+            })
+            .count()
+    }
+
+    /// Upper bound on the entries that `compute_unchanged_consensus_objects` records: read-only
+    /// consensus inputs, inputs whose consensus stream ended, per-epoch config objects and system
+    /// objects loaded during execution. Cancelled inputs are left out because a cancelled
+    /// transaction runs no commands, so its effects stay small.
+    fn count_unchanged_consensus_objects_upperbound(&self) -> usize {
+        let results = &self.execution_results;
+        let read_only_consensus_inputs = self
+            .input_objects
+            .iter()
+            .filter(|(id, obj)| obj.owner.is_consensus() && !results.modified_objects.contains(id))
+            .count();
+        read_only_consensus_inputs
+            .saturating_add(self.stream_ended_consensus_objects.len())
+            .saturating_add(self.loaded_per_epoch_config_objects.read().len())
+            .saturating_add(self.loaded_system_objects.borrow().len())
     }
 
     pub fn written_objects_size(&self) -> usize {
@@ -825,39 +868,14 @@ impl<'backing> TemporaryStore<'backing> {
             .fold(0, |sum, obj| sum + obj.object_size_for_gas_metering())
     }
 
-    /// Validates gasless post-execution requirements using the reservations cached when the store
-    /// is constructed.
-    pub(crate) fn check_gasless_execution_requirements(&self) -> Result<(), String> {
-        use rtd_types::balance::Balance;
-
-        // Gasless requirements are expressed in coin types `T`, while the shared input reservation
-        // budget is keyed by accumulator types `Balance<T>`.
-        let withdrawal_reservations = self
-            .post_execution_check_inputs
-            .input_reservations
-            .iter()
-            .filter_map(|((owner, ty), amount)| {
-                Balance::maybe_get_balance_type_param(ty)
-                    .map(|coin_type| ((*owner, coin_type), *amount))
-            })
-            .collect();
-        self.check_gasless_execution_requirements_with_reservations(Some(&withdrawal_reservations))
-    }
-
     /// Validates gasless post-execution requirements:
     /// - No new objects were created or existing objects mutated (written_objects is empty)
     /// - The set of deleted objects exactly equals the set of input Coin objects
     /// - Each recipient receives at least the minimum transfer amount per token type
     /// - Unused withdrawal reservation (reservation - actual split) is 0 or >= min_amount
-    ///
-    /// Parameterized entry for the legacy path, which computes its (flag-gated) reservations
-    /// out-of-band. Deleted with legacy at the next execution cut.
-    // TODO: This is kept as pub due to legacy callers. Once the legacy path is deleted in a
-    // newer executor, we can fold this into `check_gasless_execution_requirements`.
-    pub(crate) fn check_gasless_execution_requirements_with_reservations(
-        &self,
-        withdrawal_reservations: Option<&BTreeMap<(RtdAddress, TypeTag), u64>>,
-    ) -> Result<(), String> {
+    pub(crate) fn check_gasless_execution_requirements(&self) -> Result<(), String> {
+        use rtd_types::balance::Balance;
+
         if !self.execution_results.written_objects.is_empty() {
             return Err("Gasless transactions cannot create or mutate objects".to_string());
         }
@@ -906,23 +924,32 @@ impl<'backing> TemporaryStore<'backing> {
             }
         }
 
-        if let Some(reservations) = withdrawal_reservations {
-            for ((owner, token_type), &reserved) in reservations {
-                let net = net_totals
-                    .get(&(*owner, token_type.clone()))
-                    .copied()
-                    .unwrap_or(0);
-                let remaining = (reserved as i128).saturating_add(net);
-                if remaining > 0
-                    && let Some(&min_balance_remaining) = allowed_types.get(token_type)
-                    && min_balance_remaining > 0
-                    && remaining < min_balance_remaining as i128
-                {
-                    return Err(format!(
-                        "Gasless withdrawal leaves {remaining} unused for {owner}, \
-                         below minimum {min_balance_remaining} for token type {token_type}"
-                    ));
-                }
+        // Gasless requirements are expressed in coin types `T`, while the shared input reservation
+        // budget is keyed by accumulator types `Balance<T>`.
+        let withdrawal_reservations: BTreeMap<(RtdAddress, TypeTag), u64> = self
+            .post_execution_check_inputs
+            .input_reservations
+            .iter()
+            .filter_map(|((owner, ty), amount)| {
+                Balance::maybe_get_balance_type_param(ty)
+                    .map(|coin_type| ((*owner, coin_type), *amount))
+            })
+            .collect();
+        for ((owner, token_type), &reserved) in &withdrawal_reservations {
+            let net = net_totals
+                .get(&(*owner, token_type.clone()))
+                .copied()
+                .unwrap_or(0);
+            let remaining = (reserved as i128).saturating_add(net);
+            if remaining > 0
+                && let Some(&min_balance_remaining) = allowed_types.get(token_type)
+                && min_balance_remaining > 0
+                && remaining < min_balance_remaining as i128
+            {
+                return Err(format!(
+                    "Gasless withdrawal leaves {remaining} unused for {owner}, \
+                     below minimum {min_balance_remaining} for token type {token_type}"
+                ));
             }
         }
 
@@ -1035,30 +1062,27 @@ impl<'backing> TemporaryStore<'backing> {
         &self,
         sender: &RtdAddress,
         sponsor: &Option<RtdAddress>,
-        gas_charger: &GasCharger,
+        charged_gas: &ChargedGas,
         is_epoch_change: bool,
     ) -> RtdResult<()> {
         self.invariants.check_ownership_invariants(
             self,
             sender,
             sponsor,
-            gas_charger,
+            charged_gas,
             is_epoch_change,
         )
     }
 }
 
 impl TemporaryStore<'_> {
-    /// Track storage gas for each mutable input object (including the gas coin)
-    /// and each created object. Compute storage refunds for each deleted object.
-    /// Will *not* charge anything, gas status keeps track of storage cost and rebate.
-    /// All objects will be updated with their new (current) storage rebate/cost.
-    /// `RtdGasStatus` `storage_rebate` and `storage_gas_units` track the transaction
-    /// overall storage rebate and cost.
+    // The storage cost of each written object and the rebate of each deleted object. Each
+    // written object gets its new storage rebate.
     pub(crate) fn collect_storage_and_rebate(
         &mut self,
-        gas_charger: &mut GasCharger,
-    ) -> Result<(), ExecutionError> {
+        rates: &StorageRates,
+    ) -> Result<StorageCharge, ExecutionError> {
+        let mut charge = StorageCharge::default();
         // Use two loops because we cannot mut iterate written while calling get_object_modified_at.
         let old_storage_rebates: Vec<_> = self
             .execution_results
@@ -1079,18 +1103,29 @@ impl TemporaryStore<'_> {
             // new object size
             let new_object_size = object.object_size_for_gas_metering();
             // track changes and compute the new object `storage_rebate`
-            let new_storage_rebate = gas_charger
-                .track_storage_mutation(object.id(), new_object_size, old_storage_rebate)
+            let new_storage_rebate = charge
+                .track_mutation(rates, object.id(), new_object_size, old_storage_rebate)
                 .ok_or_else(|| ExecutionError::from_kind(ExecutionErrorKind::InvariantViolation))?;
             object.storage_rebate = new_storage_rebate;
         }
-
-        self.collect_rebate(gas_charger)
+        self.track_deleted(rates, &mut charge)?;
+        Ok(charge)
     }
 
-    pub(crate) fn collect_rebate(
+    // The rebates of the deleted objects only.
+    pub(crate) fn collect_rebate_only(
         &self,
-        gas_charger: &mut GasCharger,
+        rates: &StorageRates,
+    ) -> Result<StorageCharge, ExecutionError> {
+        let mut charge = StorageCharge::default();
+        self.track_deleted(rates, &mut charge)?;
+        Ok(charge)
+    }
+
+    fn track_deleted(
+        &self,
+        rates: &StorageRates,
+        charge: &mut StorageCharge,
     ) -> Result<(), ExecutionError> {
         for object_id in &self.execution_results.modified_objects {
             if self
@@ -1106,8 +1141,8 @@ impl TemporaryStore<'_> {
                 // Unwrap is safe because this loop iterates through all modified objects.
                 .unwrap()
                 .storage_rebate;
-            gas_charger
-                .track_storage_mutation(*object_id, 0, storage_rebate)
+            charge
+                .track_mutation(rates, *object_id, 0, storage_rebate)
                 .ok_or_else(|| ExecutionError::from_kind(ExecutionErrorKind::InvariantViolation))?;
         }
         Ok(())
@@ -1200,7 +1235,7 @@ impl RuntimeObjectResolver for TemporaryStore<'_> {
     }
 }
 
-impl ObjectFundsResolver for TemporaryStore<'_> {
+impl ImplicitSystemObjectResolver for TemporaryStore<'_> {
     /// Loads the object balance at the required version and subtracts withdrawals from the same
     /// checkpoint that have not settled yet.
     /// This function is expected never to fail; an error indicates an invariant violation.
@@ -1222,6 +1257,12 @@ impl ObjectFundsResolver for TemporaryStore<'_> {
             .checked_sub(unsettled)
             .ok_or_else(|| RtdErrorKind::ExecutionInvariantViolation.into())
     }
+
+    /// This function is expected never to fail; an error indicates an invariant violation.
+    fn clock(&self) -> RtdResult<Object> {
+        self.load_implicitly_read_system_object(&RTD_CLOCK_OBJECT_ID)
+            .ok_or_else(|| RtdErrorKind::ExecutionInvariantViolation.into())
+    }
 }
 
 /// Compute the per-`(address, type)` funds-accumulator reservation budget authorized by the
@@ -1236,13 +1277,12 @@ fn compute_input_reservations(
     transaction_kind: &TransactionKind,
     gas_data: &GasData,
     transaction_signer: RtdAddress,
-    enable_gasless: bool,
 ) -> (BTreeMap<(RtdAddress, TypeTag), u64>, AllowanceIds) {
     use rtd_types::balance::Balance;
     use rtd_types::gas_coin::GAS;
     use rtd_types::transaction::{Reservation, WithdrawFrom, is_gas_paid_from_address_balance};
 
-    let is_gasless = enable_gasless && is_gasless_transaction(gas_data, transaction_kind);
+    let is_gasless = is_gasless_transaction(gas_data, transaction_kind);
     let mut reservations: BTreeMap<(RtdAddress, TypeTag), u64> = BTreeMap::new();
     let mut allowance_ids = AllowanceIds::new();
     let rtd_balance_type = Balance::type_tag(GAS::type_tag());

@@ -12,11 +12,11 @@ task 1, lines 8-17:
 //# publish
 created: object(1,0)
 mutated: object(0,2)
-gas summary: computation_cost: 1000000, storage_cost: 4826000,  storage_rebate: 0, non_refundable_storage_fee: 0
+gas summary: computation_cost: 1031000000, storage_cost: 4826000,  storage_rebate: 0, non_refundable_storage_fee: 0
 
 task 2, lines 19-20:
 //# programmable --sender A --inputs struct(@empty,1) --dev-inspect
 //> 0: test::m::transfer_back(Input(0));
 mutated: object(_)
-unwrapped: object(2,0)
+unwrapped: object(_)
 gas summary: computation_cost: 500000, storage_cost: 1976000,  storage_rebate: 0, non_refundable_storage_fee: 0

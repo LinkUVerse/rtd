@@ -99,7 +99,10 @@ impl CommitterLayer {
     pub fn finish(self, base: CommitterConfig) -> CommitterConfig {
         CommitterConfig {
             write_concurrency: self.write_concurrency.unwrap_or(base.write_concurrency),
-            collect_interval_ms: self.collect_interval_ms.unwrap_or(base.collect_interval_ms),
+            min_batch_rows: base.min_batch_rows,
+            max_batch_delay_ms: self
+                .collect_interval_ms
+                .unwrap_or(base.max_batch_delay_ms),
             watermark_interval_ms: self
                 .watermark_interval_ms
                 .unwrap_or(base.watermark_interval_ms),
@@ -113,7 +116,6 @@ pub struct SequentialLayer {
     pub committer: Option<CommitterLayer>,
     pub ingestion: Option<PipelineIngestionLayer>,
     pub fanout: Option<ConcurrencyConfig>,
-    pub min_eager_rows: Option<usize>,
     pub max_pending_rows: Option<usize>,
     pub max_batch_checkpoints: Option<usize>,
     pub processor_channel_size: Option<usize>,
@@ -185,7 +187,6 @@ impl SequentialLayer {
                 base.ingestion
             },
             fanout: self.fanout.or(base.fanout),
-            min_eager_rows: self.min_eager_rows.or(base.min_eager_rows),
             max_pending_rows: self.max_pending_rows.or(base.max_pending_rows),
             max_batch_checkpoints: self.max_batch_checkpoints.or(base.max_batch_checkpoints),
             processor_channel_size: self.processor_channel_size.or(base.processor_channel_size),

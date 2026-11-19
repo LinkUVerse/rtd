@@ -3,21 +3,17 @@
 
 // tests invalid writes of mut references using coin operations
 
-//# init --addresses test=0x0 --accounts A --enable-feature-flags allow_references_in_ptbs
+//# init --addresses test=0x0 --accounts A
 
 //# publish
-module test::m {
+module test::m;
 
-    public fun borrow_mut(
-        c: &mut rtd::coin::Coin<rtd::rtd::RTD>,
-    ): &mut rtd::coin::Coin<rtd::rtd::RTD> {
-        c
-    }
+public fun borrow_mut(c: &mut rtd::coin::Coin<rtd::rtd::RTD>): &mut rtd::coin::Coin<rtd::rtd::RTD> {
+    c
+}
 
-    public fun new_mut(): &mut rtd::coin::Coin<rtd::rtd::RTD> {
-        abort 0
-    }
-
+public fun new_mut(): &mut rtd::coin::Coin<rtd::rtd::RTD> {
+    abort 0
 }
 
 //# programmable --inputs 10 @A

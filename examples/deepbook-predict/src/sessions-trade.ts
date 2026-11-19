@@ -26,6 +26,12 @@ const PREDICT = getConfig(NETWORK);
 const GENERATED = toGeneratedConfig(PREDICT);
 const FEEDS = PREDICT.underlyings[UNDERLYING];
 
+// These wrappers are the immediate path, before the delayed-execution cutover
+// only. From Predict protocol version 4 the mint and live-close wrappers always
+// abort through Predict, and Sessions protocol version 3 adds queued wrappers:
+// see `sessions-queue.ts`. `claimSettledAsSession` keeps working for positions
+// held in the account.
+//
 // Mint a directional position as the session key.
 //
 // Three things differ from the owner-signed `/predict` flow:
@@ -169,7 +175,8 @@ export async function closeAsSession(params: {
 
 // Claim a settled position as the session key. No pricer, because the settlement
 // price is fixed, and no quantity, because a settled claim closes the order in
-// full.
+// full. Predict protocol version 5 retires `redeem_settled`, so the wrapper aborts
+// through Predict on both networks once Sessions links that version.
 export function claimSettledAsSession(params: {
 	owner: string;
 	session: string;

@@ -9,11 +9,17 @@ use fastcrypto::encoding::Base64;
 use fastcrypto::encoding::Encoding;
 use insta::assert_debug_snapshot;
 use prometheus::Registry;
+use serde::Deserialize;
+use serde_json::json;
+use shared_crypto::intent::Intent;
+use shared_crypto::intent::IntentMessage;
+use shared_crypto::intent::PersonalMessage;
 use rtd_indexer_alt_framework::ingestion::ClientArgs;
 use rtd_indexer_alt_framework::ingestion::ingestion_client::IngestionClientArgs;
 use rtd_indexer_alt_graphql::config::RpcConfig as GraphQlConfig;
 use rtd_indexer_alt_graphql::config::ZkLoginConfig;
 use rtd_indexer_alt_graphql::config::ZkLoginEnv;
+use rtd_protocol_config::ProtocolConfig;
 use rtd_swarm_config::genesis_config::AccountConfig;
 use rtd_test_transaction_builder::TestTransactionBuilder;
 use rtd_types::base_types::RtdAddress;
@@ -21,11 +27,6 @@ use rtd_types::crypto::Signature;
 use rtd_types::signature::GenericSignature;
 use rtd_types::utils::load_test_vectors;
 use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
-use serde::Deserialize;
-use serde_json::json;
-use shared_crypto::intent::Intent;
-use shared_crypto::intent::IntentMessage;
-use shared_crypto::intent::PersonalMessage;
 use tempfile::TempDir;
 use test_cluster::TestCluster;
 use test_cluster::TestClusterBuilder;
@@ -238,6 +239,83 @@ async fn test_verify_personal_message() {
         .unwrap();
 
     assert_eq!(result, ZkLoginResult { success: true });
+}
+
+#[tokio::test]
+async fn test_verify_v1_signature_when_network_requires_v2() {
+    let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+        config.set_zklogin_circuit_mode_for_testing(2);
+        config
+    });
+    let cluster = FullCluster::new().await.unwrap();
+
+    assert_eq!(
+        cluster
+            .onchain
+            .fullnode_handle
+            .rtd_node
+            .state()
+            .epoch_store_for_testing()
+            .protocol_config()
+            .zklogin_circuit_mode(),
+        2,
+    );
+
+    // These fixtures contain v1 proofs. RPC verification should remain independent of
+    // the network's circuit activation rules, including after v1 is retired on-chain.
+    let (kp, pk, inputs) =
+        &load_test_vectors("../rtd-types/src/unit_tests/zklogin_test_vectors.json")[1];
+    let author: RtdAddress = pk.into();
+    let personal = b"Verify a v1 proof after the network retires v1".to_vec();
+    let message = IntentMessage::new(
+        Intent::personal_message(),
+        PersonalMessage {
+            message: personal.clone(),
+        },
+    );
+    let signature = GenericSignature::ZkLoginAuthenticator(ZkLoginAuthenticator::new(
+        inputs.clone(),
+        2,
+        Signature::new_secure(&message, kp),
+    ));
+
+    let response: serde_json::Value = reqwest::Client::new()
+        .post(cluster.offchain.graphql_url().as_str())
+        .json(&json!({
+            "query": r#"
+                query ($message: Base64!, $signature: Base64!, $author: RtdAddress!) {
+                    verifySignature(
+                        message: $message, signature: $signature,
+                        intentScope: PERSONAL_MESSAGE, author: $author,
+                    ) { success }
+                    verifyZkLoginSignature(
+                        bytes: $message, signature: $signature,
+                        intentScope: PERSONAL_MESSAGE, author: $author,
+                    ) { success }
+                }
+            "#,
+            "variables": {
+                "message": Base64::encode(personal),
+                "signature": Base64::encode(signature.as_ref()),
+                "author": author.to_string(),
+            },
+        }))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response,
+        json!({
+            "data": {
+                "verifySignature": { "success": true },
+                "verifyZkLoginSignature": { "success": true },
+            },
+        }),
+    );
 }
 
 #[tokio::test]

@@ -9,12 +9,12 @@ use futures::stream::BoxStream;
 use linku_common::ZipDebugEqIteratorExt;
 use rtd_inverted_index::BitmapQuery;
 use rtd_rpc::field::FieldMaskTree;
-use rtd_rpc::proto::rtd::rpc::v2::ExecutedTransaction;
-use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsRequest;
-use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsResponse;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
-use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
-use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::sui::rpc::v2::ExecutedTransaction;
+use rtd_rpc::proto::sui::rpc::v2::ListTransactionsRequest;
+use rtd_rpc::proto::sui::rpc::v2::ListTransactionsResponse;
+use rtd_rpc::proto::sui::rpc::v2::QueryEnd;
+use rtd_rpc::proto::sui::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::sui::rpc::v2::Watermark;
 use rtd_rpc_cursor::Position;
 use rtd_sdk_types::Digest;
 use rtd_types::storage::LedgerTxSeqDigest;
@@ -679,8 +679,8 @@ fn end_response(watermark: Watermark, reason: QueryEndReason) -> ListTransaction
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rtd_rpc::proto::rtd::rpc::v2::Ordering;
-    use rtd_rpc::proto::rtd::rpc::v2::QueryOptions as ProtoQueryOptions;
+    use rtd_rpc::proto::sui::rpc::v2::Ordering;
+    use rtd_rpc::proto::sui::rpc::v2::QueryOptions as ProtoQueryOptions;
     use rtd_rpc_cursor::CursorToken;
 
     fn options(ascending: bool) -> QueryOptions {

@@ -48,8 +48,8 @@ use std::process::Command;
 
 use fs_extra::dir::CopyOptions;
 use insta_cmd::get_cargo_bin;
-use move_package_alt::read_publication;
-use move_package_alt::schema::Environment;
+use move_package::read_publication;
+use move_package::schema::Environment;
 use rtd_config::RTD_CLIENT_CONFIG;
 use rtd_package_alt::RtdFlavor;
 use rtd_sdk::wallet_context::WalletContext;
@@ -244,7 +244,7 @@ fn publish_fixture(
         .args(["publish", "."]);
     if !modern {
         // Legacy releases require an explicit budget.
-        publish.args(["--gas-budget", "500000000"]);
+        publish.args(["--gas-budget", "2000000000"]);
     }
     match publish.current_dir(sandbox).output() {
         Ok(out) if out.status.success() => Ok(()),

@@ -26,14 +26,14 @@ use move_core_types::{
     account_address::AccountAddress,
     language_storage::{ModuleId, StructTag},
 };
-use move_package_alt::{MoveFlavor, RootPackage, schema::Environment};
-use move_package_alt_compilation::compiled_package::CompiledPackage as MoveCompiledPackage;
-use move_package_alt_compilation::{
+use move_package::{MoveFlavor, RootPackage, schema::Environment};
+use move_package_compilation::compiled_package::CompiledPackage as MoveCompiledPackage;
+use move_package_compilation::{
     build_config::BuildConfig as MoveBuildConfig, build_plan::BuildPlan,
 };
 use move_symbol_pool::Symbol;
 
-use rtd_package_alt::{RtdFlavor, local_test_environment};
+use rtd_package_alt::{RtdFlavor, testnet_environment};
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
 use rtd_types::{
     BRIDGE_ADDRESS, DEEPBOOK_ADDRESS, MOVE_STDLIB_ADDRESS, RTD_FRAMEWORK_ADDRESS,
@@ -104,15 +104,15 @@ impl BuildConfig {
             default_flavor: Some(move_compiler::editions::Flavor::Rtd),
             install_dir: Some(install_dir),
             silence_warnings: true,
-            lint_flag: move_package_alt_compilation::lint_flag::LintFlag::LEVEL_NONE,
+            lint_flag: move_package_compilation::lint_flag::LintFlag::LEVEL_NONE,
             ..MoveBuildConfig::default()
         };
         BuildConfig {
             config,
             run_bytecode_verifier: true,
             print_diags_to_stderr: false,
-            environment: local_test_environment(),
-            flavor: RtdFlavor::for_testing(),
+            environment: testnet_environment(),
+            flavor: RtdFlavor::new(),
         }
     }
 
@@ -264,7 +264,7 @@ pub fn decorate_warnings(warning_diags: Diagnostics, files: Option<&MappedFiles>
         report_warnings(f, warning_diags);
     }
     if any_linter_warnings {
-        eprintln!("Please report feedback on the linter warnings to the RTD maintainers.\n");
+        eprintln!("Please report feedback on the linter warnings at https://forums.rtd.io\n");
     }
     if filtered_diags_num > 0 {
         eprintln!(
@@ -287,7 +287,7 @@ fn verify_bytecode(package: &MoveCompiledPackage, fn_info: &FnInfoMap) -> RtdRes
         })?;
         rtd_bytecode_verifier::rtd_verify_module_unmetered(m, fn_info, &verifier_config)?;
     }
-    // TODO: Run Move linker
+    // TODO(https://github.com/LinkUVerse/rtd/issues/69): Run Move linker
 
     Ok(())
 }

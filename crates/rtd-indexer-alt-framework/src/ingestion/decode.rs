@@ -3,7 +3,7 @@
 
 use prost::Message;
 use rtd_rpc::proto::TryFromProtoError;
-use rtd_rpc::proto::rtd::rpc::v2 as proto;
+use rtd_rpc::proto::sui::rpc::v2 as proto;
 
 use crate::types::full_checkpoint_content::Checkpoint;
 

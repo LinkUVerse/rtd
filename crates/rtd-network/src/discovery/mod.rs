@@ -17,12 +17,12 @@ use std::{
 };
 
 use crate::endpoint_manager::{AddressSource, EndpointId, EndpointManager};
+use store::{load_stored_peers, save_stored_peers};
 use rtd_config::p2p::{AccessType, DiscoveryConfig, P2pConfig};
 use rtd_types::crypto::{NetworkKeyPair, NetworkPublicKey, Signer, ToFromBytes, VerifyingKey};
 use rtd_types::digests::Digest;
 use rtd_types::message_envelope::{Envelope, Message, VerifiedEnvelope};
 use rtd_types::multiaddr::Multiaddr;
-use store::{load_stored_peers, save_stored_peers};
 use tap::{Pipe, TapFallible};
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc;
@@ -38,6 +38,7 @@ const MAX_ADDRESS_LENGTH: usize = 300;
 const MAX_PEERS_TO_SEND: usize = 200;
 const MAX_ADDRESSES_PER_PEER: usize = 2;
 
+#[allow(clippy::result_large_err)]
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/rtd.Discovery.rs"));
 }

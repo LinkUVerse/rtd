@@ -1,31 +1,33 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::gas_charger::GasCharger;
-use crate::static_programmable_transactions::loading::ast::{DeserializedPackage, PackagePayload};
+use crate::{
+    metering::gas_charger::GasMeter,
+    static_programmable_transactions::linkage::resolution::LinkageMeter,
+};
 use rtd_protocol_config::ProtocolConfig;
 use rtd_types::error::ExecutionErrorTrait;
 use rtd_types::execution_status::ExecutionErrorKind;
 
 /// The [`TranslationMeter`] is responsible for metering gas usage for various operations
 /// during the translation of a transaction. It interacts with and exposes interfaces to the
-/// [`GasCharger`] it holds in order to deduct gas based on the operations performed.
+/// `GasMeter` it holds in order to deduct gas based on the operations performed.
 ///
 /// It holds a reference to the `ProtocolConfig` to access protocol-specific configuration
 /// parameters that may influence gas costs and limits.
 pub struct TranslationMeter<'pc, 'gas> {
     protocol_config: &'pc ProtocolConfig,
-    charger: &'gas mut GasCharger,
+    gas_meter: &'gas mut GasMeter,
 }
 
 impl<'pc, 'gas> TranslationMeter<'pc, 'gas> {
-    pub fn new(
+    pub(crate) fn new(
         protocol_config: &'pc ProtocolConfig,
-        gas_charger: &'gas mut GasCharger,
+        gas_meter: &'gas mut GasMeter,
     ) -> TranslationMeter<'pc, 'gas> {
         TranslationMeter {
             protocol_config,
-            charger: gas_charger,
+            gas_meter,
         }
     }
 
@@ -111,18 +113,10 @@ impl<'pc, 'gas> TranslationMeter<'pc, 'gas> {
 
     pub fn charge_package_load<E: ExecutionErrorTrait>(
         &mut self,
-        payload: &PackagePayload,
+        total_bytes: usize,
     ) -> Result<(), E> {
-        match payload {
-            PackagePayload::Serialized(_) => {
-                // Payload stays serialized; deserialization (and charge) happen at execution time.
-                Ok(())
-            }
-            PackagePayload::Deserialized(DeserializedPackage { total_bytes, .. }) => {
-                self.charger.charge_publish_package(*total_bytes)?;
-                Ok(())
-            }
-        }
+        self.gas_meter.charge_publish_package(total_bytes)?;
+        Ok(())
     }
 
     // We use a non-linear cost function for type references to account for the increased
@@ -153,7 +147,7 @@ impl<'pc, 'gas> TranslationMeter<'pc, 'gas> {
     // far.
     fn charge<E: ExecutionErrorTrait>(&mut self, amount: u64) -> Result<(), E> {
         debug_assert!(amount > 0);
-        self.charger
+        self.gas_meter
             .move_gas_status_mut()
             .deduct_gas(amount.into())
             .map_err(Self::gas_error)
@@ -165,5 +159,15 @@ impl<'pc, 'gas> TranslationMeter<'pc, 'gas> {
         E: ExecutionErrorTrait,
     {
         E::new_with_source(ExecutionErrorKind::InsufficientGas, e)
+    }
+}
+
+impl<E: ExecutionErrorTrait> LinkageMeter<E> for TranslationMeter<'_, '_> {
+    fn charge_linkage(&mut self) -> Result<(), E> {
+        self.charge_num_linkage_entries::<E>(1)
+    }
+
+    fn charge_package_load(&mut self, total_bytes: usize) -> Result<(), E> {
+        TranslationMeter::charge_package_load::<E>(self, total_bytes)
     }
 }

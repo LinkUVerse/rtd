@@ -41,7 +41,7 @@ COPY --from=builder /rtd/target/${PROFILE}/stress /usr/local/bin/stress
 COPY docker/stress/entrypoint.sh /docker/stress/entrypoint.sh
 RUN chmod +x /docker/stress/entrypoint.sh
 
-# rtd-benchmark workloads (composite/adversarial/party/slow/max_package) read
+# rtd-benchmark workloads (composite/adversarial/slow/max_package) read
 # their Move source packages at runtime via BENCHMARK_MOVE_BASE_DIR (or the
 # env!("CARGO_MANIFEST_DIR") fallback in crates/rtd-benchmark/src/workloads/
 # mod.rs). The previous runtime `git clone` made these visible incidentally;

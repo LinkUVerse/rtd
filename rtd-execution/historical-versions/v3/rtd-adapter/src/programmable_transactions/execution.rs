@@ -39,6 +39,15 @@ mod checked {
         session::{LoadedFunctionInstantiation, SerializedReturnValues},
     };
     use move_vm_types::loaded_data::runtime_types::{CachedDatatype, Type};
+    use serde::{Deserialize, de::DeserializeSeed};
+    use std::{
+        cell::{OnceCell, RefCell},
+        collections::{BTreeMap, BTreeSet},
+        fmt,
+        rc::Rc,
+        sync::Arc,
+        time::Instant,
+    };
     use rtd_move_natives::object_runtime::ObjectRuntime;
     use rtd_protocol_config::ProtocolConfig;
     use rtd_types::storage::StorageView;
@@ -70,15 +79,6 @@ mod checked {
         INIT_FN_NAME,
         private_generics::{EVENT_MODULE, PRIVATE_TRANSFER_FUNCTIONS, TRANSFER_MODULE},
         private_generics_verifier_v2,
-    };
-    use serde::{Deserialize, de::DeserializeSeed};
-    use std::{
-        cell::{OnceCell, RefCell},
-        collections::{BTreeMap, BTreeSet},
-        fmt,
-        rc::Rc,
-        sync::Arc,
-        time::Instant,
     };
     use tracing::instrument;
 
@@ -1050,7 +1050,7 @@ mod checked {
         package_id: ObjectID,
         modules: &[CompiledModule],
     ) -> Result<(), ExecutionError> {
-        // TODO: avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
+        // TODO(https://github.com/LinkUVerse/rtd/issues/69): avoid this redundant serialization by exposing VM API that allows us to run the linker directly on `Vec<CompiledModule>`
         let binary_version = context.protocol_config.move_binary_format_version();
         let new_module_bytes: Vec<_> = modules
             .iter()
@@ -1202,7 +1202,7 @@ mod checked {
                 ExecutionErrorKind::FunctionNotFound,
                 format!(
                     "Could not resolve function '{}' in module {}",
-                    function, &module_id,
+                    function, module_id,
                 ),
             ));
         };

@@ -3,10 +3,15 @@
 
 use chrono::{DateTime, Utc};
 use config::{DownloadFeedConfigs, UploadFeedConfig, UploadParameters};
-use linku_metrics::monitored_scope;
 use metrics::OracleMetrics;
+use linku_metrics::monitored_scope;
 use once_cell::sync::OnceCell;
 use prometheus::Registry;
+use std::ops::Add;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
+use std::{collections::HashMap, time::Instant};
 use rtd_rpc_api::Client;
 use rtd_rpc_api::client::ExecutedTransaction;
 use rtd_types::Identifier;
@@ -22,11 +27,6 @@ use rtd_types::{
     base_types::RtdAddress,
     transaction::{CallArg, TransactionData},
 };
-use std::ops::Add;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use std::{collections::HashMap, time::Instant};
 use tap::tap::TapFallible;
 
 use rtd_sdk::wallet_context::WalletContext;
@@ -565,7 +565,8 @@ impl OnChainDataUploader {
             {
                 Ok(response) => return Ok(response),
                 Err(err) => {
-                    // jsonrpsee translate every RtdError into jsonrpsee::core::Error, so we need to further distinguish
+                    // The client flattens every RtdError into an opaque error, so the
+                    // message is all there is to distinguish the causes by.
                     if err.to_string().contains(NON_RECOVERABLE_ERROR_MSG) {
                         let stale_obj_error = STALE_OBJ_ERROR.get_or_init(|| {
                             String::from(

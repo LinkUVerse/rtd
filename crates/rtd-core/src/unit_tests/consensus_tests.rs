@@ -37,7 +37,10 @@ use rtd_types::utils::{make_committee_key_num, to_sender_signed_transaction};
 use rtd_types::{
     base_types::{ExecutionDigests, ObjectID, RtdAddress},
     object::Object,
-    transaction::{CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS, TransactionData},
+    transaction::{
+        CallArg, ObjectArg, TEST_ONLY_GAS_UNIT_FOR_OBJECT_BASICS, TransactionData,
+        TransactionDataAPI, TransactionExpiration,
+    },
 };
 use tokio::time::sleep;
 
@@ -126,6 +129,26 @@ pub async fn test_user_transaction(
     gas_object: Object,
     input_objects: Vec<Object>,
 ) -> VerifiedTransactionWithAliases {
+    test_user_transaction_with_expiration(
+        authority,
+        sender,
+        keypair,
+        gas_object,
+        input_objects,
+        TransactionExpiration::None,
+    )
+    .await
+}
+
+/// Fixture: like `test_user_transaction`, but with the given expiration.
+pub async fn test_user_transaction_with_expiration(
+    authority: &AuthorityState,
+    sender: RtdAddress,
+    keypair: &AccountKeyPair,
+    gas_object: Object,
+    input_objects: Vec<Object>,
+    expiration: TransactionExpiration,
+) -> VerifiedTransactionWithAliases {
     let epoch_store = authority.load_epoch_store_one_call_per_task();
     let rgp = epoch_store.reference_gas_price();
 
@@ -160,7 +183,7 @@ pub async fn test_user_transaction(
     let module = "object_basics";
     let function = "create";
 
-    let data = TransactionData::new_move_call(
+    let mut data = TransactionData::new_move_call(
         sender,
         RTD_FRAMEWORK_PACKAGE_ID,
         ident_str!(module).to_owned(),
@@ -172,13 +195,14 @@ pub async fn test_user_transaction(
         rgp,
     )
     .unwrap();
+    *data.expiration_mut_for_testing() = expiration;
 
     epoch_store
         .verify_transaction_with_current_aliases(to_sender_signed_transaction(data, keypair))
         .unwrap()
 }
 
-#[tokio::test]
+#[sim_test]
 async fn submit_transaction_to_consensus_adapter() {
     telemetry_subscribers::init_for_testing();
 
@@ -224,7 +248,7 @@ async fn submit_transaction_to_consensus_adapter() {
     waiter.await.unwrap();
 }
 
-#[tokio::test]
+#[sim_test]
 async fn submit_multiple_transactions_to_consensus_adapter() {
     telemetry_subscribers::init_for_testing();
 
@@ -421,7 +445,7 @@ async fn submit_checkpoint_signature_to_consensus_adapter() {
     t2.await.unwrap();
 }
 
-#[tokio::test]
+#[sim_test]
 async fn submit_empty_array_of_transactions_to_consensus_adapter() {
     telemetry_subscribers::init_for_testing();
 
@@ -461,7 +485,7 @@ async fn submit_empty_array_of_transactions_to_consensus_adapter() {
 // processed via consensus output, the adapter must NOT resubmit it. Instead it reports that
 // the transaction is already processing, so the caller can return a retriable error to the
 // client rather than a (now meaningless) consensus position.
-#[tokio::test]
+#[sim_test]
 async fn submit_already_processed_transaction_returns_processing_error() {
     telemetry_subscribers::init_for_testing();
 
@@ -591,7 +615,7 @@ async fn wait_for_condition(mut condition: impl FnMut() -> bool) {
 // recorded as consensus-processed. The adapter must settle the submission via the
 // per-position Rejected status instead of holding its inflight slot and submit
 // semaphore permit until end of epoch.
-#[tokio::test]
+#[sim_test]
 async fn adapter_settles_submission_on_rejected_position_status() {
     telemetry_subscribers::init_for_testing();
 
@@ -638,7 +662,7 @@ async fn adapter_settles_submission_on_rejected_position_status() {
 
 // A soft bundle settles once every position has a terminal status, even when the
 // outcomes are mixed and some transactions are never recorded as processed.
-#[tokio::test]
+#[sim_test]
 async fn adapter_settles_soft_bundle_on_mixed_position_statuses() {
     telemetry_subscribers::init_for_testing();
 
@@ -692,7 +716,7 @@ async fn adapter_settles_soft_bundle_on_mixed_position_statuses() {
 // resubmitting: the block was committed and its commit processed long ago, so a
 // terminal outcome existed and was merely missed. A finalized transaction needs
 // nothing further from this task, and transaction-level retries belong to the client.
-#[tokio::test]
+#[sim_test]
 async fn adapter_settles_without_retry_on_expired_position_status() {
     telemetry_subscribers::init_for_testing();
 

@@ -3,9 +3,9 @@
 
 use crate::{ExecutionEffects, workloads::ExpectedFailureType};
 use async_trait::async_trait;
+use std::{fmt::Display, num::NonZeroUsize};
 use rtd_types::digests::TransactionDigest;
 use rtd_types::transaction::Transaction;
-use std::{fmt::Display, num::NonZeroUsize};
 
 /// Results from executing a batch of transactions.
 pub struct BatchExecutionResults {
@@ -126,6 +126,12 @@ pub trait Payload: Send + Sync + std::fmt::Debug + Display {
         // TODO: we could get this from the protocol config but a) its unlikely to change
         // b) it would be very hard to do that
         NonZeroUsize::new(5).unwrap()
+    }
+
+    /// Returns true if every transaction in the batch should be submitted independently through
+    /// the normal transaction path instead of being packed into soft bundles.
+    fn use_direct_batch_submission(&self) -> bool {
+        false
     }
 
     /// Creates a batch of transactions for concurrent execution.

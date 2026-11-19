@@ -133,7 +133,7 @@ pub const fn custom(
 
 macro_rules! codes {
     ($($cat:ident: [
-        $($code:ident: { msg: $code_msg:literal, severity:$sev:ident $(,)? }),* $(,)?
+        $($(#[$attr:meta])* $code:ident: { msg: $code_msg:literal, severity:$sev:ident $(,)? }),* $(,)?
     ]),* $(,)?) => {
         #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash, PartialOrd, Ord)]
         #[repr(u8)]
@@ -156,9 +156,17 @@ macro_rules! codes {
             #[repr(u8)]
             pub enum $cat {
                 DontStartAtZeroPlaceholder,
-                $($code,)*
+                $($(#[$attr])* $code,)*
             }
 
+            impl $cat {
+                #[allow(dead_code, deprecated)]
+                pub(crate) const CODES: &'static [Self] = &[
+                    $(Self::$code,)*
+                ];
+            }
+
+            #[allow(deprecated)]
             impl DiagnosticCode for $cat {
                 const CATEGORY: Category = {
                     // hacky check that $cat_num <= 99
@@ -236,7 +244,9 @@ codes!(
         InvalidName: { msg: "invalid declaration name", severity: BlockingError },
         InvalidFriendDeclaration:
             { msg: "invalid 'friend' declaration", severity: NonblockingError },
-        InvalidAcquiresItem: { msg: "invalid 'acquires' item", severity: NonblockingError },
+        #[deprecated]
+        DeprecatedInvalidAcquiresItem:
+            { msg: "DEPRECATED. invalid 'acquires' item", severity: NonblockingError },
         InvalidPhantomUse:
             { msg: "invalid phantom type parameter usage", severity: NonblockingError },
         InvalidNonPhantomUse:
@@ -300,7 +310,9 @@ codes!(
         CyclicData: { msg: "cyclic data", severity: NonblockingError },
         CyclicInstantiation:
             { msg: "cyclic type instantiation", severity: NonblockingError },
-        MissingAcquires: { msg: "missing acquires annotation", severity: NonblockingError },
+        #[deprecated]
+        DeprecatedMissingAcquires:
+            { msg: "DEPRECATED. missing acquires annotation", severity: NonblockingError },
         InvalidNum: { msg: "numeric literal out of range", severity: NonblockingError },
         NonInvocablePublicScript: {
             msg: "script function cannot be invoked with this signature \
@@ -425,6 +437,31 @@ codes!(
         StringValue: { msg: "IDE string value", severity: Note },
     ],
 );
+
+impl UnusedItem {
+    pub(crate) const fn allowed_in_test(self) -> bool {
+        match self {
+            Self::DontStartAtZeroPlaceholder => panic!("ICE do not use placeholder error code"),
+            Self::Function
+            | Self::StructField
+            | Self::FunTypeParam
+            | Self::Constant
+            | Self::MutReference
+            | Self::MutParam => true,
+            Self::Alias
+            | Self::Variable
+            | Self::Assignment
+            | Self::TrailingSemi
+            | Self::DeadCode
+            | Self::StructTypeParam
+            | Self::Attribute
+            | Self::MutModifier => false,
+        }
+    }
+}
+
+pub(crate) const UNUSED_ITEM_CATEGORY: u8 = Category::UnusedItem as u8;
+pub(crate) const UNUSED_ITEM_CODES: &[UnusedItem] = UnusedItem::CODES;
 
 //**************************************************************************************************
 // impls

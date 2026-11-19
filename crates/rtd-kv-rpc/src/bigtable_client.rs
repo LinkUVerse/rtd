@@ -304,12 +304,11 @@ impl BigTableClient {
         &self,
         tx_sequence_numbers: &[u64],
     ) -> Result<Vec<(u64, CheckpointSequenceNumber)>, RpcError> {
-        let _permit = self.acquire(stage::TX_CP_RESOLVE).await?;
-        self.inner
-            .clone()
-            .resolve_tx_checkpoints(tx_sequence_numbers)
-            .await
-            .map_err(RpcError::from)
+        use futures::TryStreamExt as _;
+        let stream = self
+            .resolve_tx_checkpoints_stream(tx_sequence_numbers.to_vec())
+            .await?;
+        stream.try_collect().await.map_err(RpcError::from)
     }
 
     /// Streaming variant of `resolve_tx_checkpoints`. The permit is held for the

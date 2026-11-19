@@ -23,7 +23,7 @@ impl TestCaseImpl for GrpcPublishTransactionTest {
         let signer = ctx.get_wallet_address();
         // Fund a gas coin and supply it explicitly so the gRPC publish builder
         // stays on `LedgerService`.
-        let gas = ctx.get_rtd_from_faucet(Some(1)).await.swap_remove(0);
+        let gas = ctx.get_rtd(Some(1)).await.swap_remove(0);
         let gas_ref = ctx.current_object_ref(*gas.id()).await;
 
         // Compile the package and pass its module bytes + dependencies to the
@@ -40,8 +40,8 @@ impl TestCaseImpl for GrpcPublishTransactionTest {
                 compiled_modules,
                 dependencies,
                 Some(gas_ref.0),
-                // Doesn't need to be scaled by RGP since most of the cost is storage
-                500_000_000,
+                // Covers the publish charge of 1 RTD plus 0.01 RTD per module and per dependency.
+                2_000_000_000,
             )
             .await?;
 

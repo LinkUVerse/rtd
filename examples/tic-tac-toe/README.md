@@ -6,9 +6,8 @@ This is an end-to-end example for on-chain tic-tac-toe. It includes:
     tic-tac-toe. One uses shared objects and the other uses owned objects.
 -   A [React front-end](./ui), in TypeScript built on top of
     `create-react-dapp`, using the TS SDK and `dapp-kit`.
--   A [Rust CLI](./cli), using the Rust SDK.
 -   [Scripts](./scripts) to publish packages and update configs used
-    while building the front-end and CLI.
+    while building the front-end.
 
 ## Shared tic tac toe
 

@@ -3,9 +3,9 @@
 
 use rtd_keys::keystore::AccountKeystore;
 use rtd_macros::sim_test;
-use rtd_rpc::proto::rtd::rpc::v2alpha::GetCheckpointObjectProofRequest;
-use rtd_rpc::proto::rtd::rpc::v2alpha::get_checkpoint_object_proof_response;
-use rtd_rpc::proto::rtd::rpc::v2alpha::proof_service_client::ProofServiceClient;
+use rtd_rpc::proto::sui::rpc::v2alpha::GetCheckpointObjectProofRequest;
+use rtd_rpc::proto::sui::rpc::v2alpha::get_checkpoint_object_proof_response;
+use rtd_rpc::proto::sui::rpc::v2alpha::proof_service_client::ProofServiceClient;
 use rtd_types::base_types::ObjectID;
 use test_cluster::{TestCluster, TestClusterBuilder};
 

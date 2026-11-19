@@ -11,9 +11,8 @@ use crate::{
         values::ConstantValue,
     },
     natives::functions::{NativeFunction, UnboxedNativeFunction},
+    shared::type_size_formulae::ArenaTypeSizeFormula,
     shared::{
-        TypeLimits, TypeSize,
-        safe_ops::SafeArithmetic as _,
         types::{OriginalId, VersionId},
         vm_pointer::VMPointer,
     },
@@ -24,7 +23,7 @@ use move_binary_format::{
     errors::PartialVMResult,
     file_format::{
         AbilitySet, CodeOffset, DatatypeTyParameter, FunctionDefinitionIndex, LocalIndex,
-        SignatureToken, VariantTag, Visibility,
+        VariantTag, Visibility,
     },
     file_format_common::Opcodes,
     partial_vm_error,
@@ -53,6 +52,7 @@ pub struct Package {
     pub(crate) loaded_modules: IndexMap<IdentifierKey, Module>,
 
     // NB: Package functions and code are allocated into this arena.
+    // [SAFETY] Interned ArenaType pointers remain valid until the arena is collected with the package.
     pub(crate) package_arena: Arena,
     pub vtable: PackageVirtualTable,
 }
@@ -66,8 +66,6 @@ pub struct Package {
 // the arena-allocated data. It seems prudent to track them here.
 #[allow(dead_code)]
 pub(crate) struct Module {
-    pub id: ModuleId,
-
     /// Types as indexes into the package's vtable
     pub type_refs: ArenaVec<IntraPackageKey>,
 
@@ -114,9 +112,10 @@ pub(crate) struct Module {
     /// [ALLOC] This vector (and sub-definitions) are allocated in the package arena
     pub field_instantiations: ArenaVec<FieldInstantiation>,
 
-    /// a map from signatures in instantiations to the `ArenaVec<ArenaType>` that represents it.
+    /// a map from signatures in instantiations to the `ArenaVec<SizedArenaType>` that represents
+    /// it -- each entry paired with its JIT-compiled size formula.
     /// [ALLOC] This vector (and sub-definitions) are allocated in the package arena
-    pub instantiation_signatures: ArenaVec<ArenaVec<ArenaType>>,
+    pub instantiation_signatures: ArenaVec<ArenaVec<SizedArenaType>>,
 
     /// constant references carry an index into a global vector of values.
     /// [ALLOC] This vector (and sub-definitions) are allocated in the package arena
@@ -137,13 +136,9 @@ impl Drop for Module {
 #[derive(Debug)]
 pub(crate) struct Constant {
     pub(crate) value: ConstantValue,
-    pub(crate) type_: ArenaType,
-    // Size of constant -- used for gas charging. When
-    // `VMConfig::charge_ld_const_abstract_size` is set this is the abstract value size of the
-    // constant; otherwise it is the serialized byte length.
-    // TODO(Gas): Once `charge_ld_const_abstract_size` is the only behavior, rename this to
-    // `abstract_size` and charge it as an abstract size rather than as `NumBytes`.
-    pub size: u64,
+    pub(crate) type_: VMPointer<ArenaType>,
+    // Abstract value size of the constant, used for gas charging.
+    pub size: AbstractMemorySize,
 }
 
 // A runtime function
@@ -156,15 +151,15 @@ pub(crate) struct Function {
     pub visibility: Visibility,
     pub index: FunctionDefinitionIndex,
     pub code: ArenaVec<Bytecode>,
-    pub parameters: ArenaVec<ArenaType>,
-    pub locals: ArenaVec<ArenaType>,
-    pub return_: ArenaVec<ArenaType>,
+    pub parameters: ArenaVec<SizedArenaType>,
+    pub locals: ArenaVec<SizedArenaType>,
+    pub return_: ArenaVec<SizedArenaType>,
     pub type_parameters: ArenaVec<AbilitySet>,
     // NOTE: This field is manually dropped in Function::drop() to prevent Arc leaks
     // Any value holding a `Function` needs to ensure it is correctly dropped.
     pub native: Option<NativeFunction>,
     pub def_is_native: bool,
-    pub name: VirtualTableKey,
+    pub name: VMPointer<VirtualTableKey>,
     pub locals_len: usize,
     pub jump_tables: ArenaVec<VariantJumpTable>,
 }
@@ -196,7 +191,7 @@ pub(crate) type VariantJumpTable = ArenaVec<CodeOffset>;
 //   that will be filled in at a later time before execution.
 pub(crate) enum CallType {
     Direct(VMPointer<Function>),
-    Virtual(VirtualTableKey),
+    Virtual(VMPointer<VirtualTableKey>),
 }
 
 // -----------------------------------------------
@@ -205,16 +200,16 @@ pub(crate) enum CallType {
 
 #[derive(Debug)]
 pub(crate) struct StructDef {
-    pub def_vtable_key: VirtualTableKey,
+    pub def_vtable_key: VMPointer<VirtualTableKey>,
     pub abilities: AbilitySet,
     pub type_parameters: ArenaVec<DatatypeTyParameter>,
-    pub fields: ArenaVec<ArenaType>,
+    pub fields: ArenaVec<SizedArenaType>,
     pub field_names: ArenaVec<IdentifierKey>,
 }
 
 #[derive(Debug)]
 pub(crate) struct EnumDef {
-    pub def_vtable_key: VirtualTableKey,
+    pub def_vtable_key: VMPointer<VirtualTableKey>,
     pub abilities: AbilitySet,
     pub type_parameters: ArenaVec<DatatypeTyParameter>,
     #[allow(dead_code)]
@@ -226,7 +221,7 @@ pub(crate) struct EnumDef {
 pub(crate) struct VariantDef {
     pub variant_tag: VariantTag,
     pub variant_name: IdentifierKey,
-    pub fields: ArenaVec<ArenaType>,
+    pub fields: ArenaVec<SizedArenaType>,
     pub field_names: ArenaVec<IdentifierKey>,
     pub enum_def: VMPointer<EnumDef>,
 }
@@ -239,29 +234,29 @@ pub(crate) struct VariantDef {
 #[derive(Debug)]
 pub(crate) struct FunctionInstantiation {
     pub handle: CallType,
-    pub(crate) instantiation: VMPointer<ArenaVec<ArenaType>>,
+    pub(crate) instantiation: VMPointer<ArenaVec<SizedArenaType>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct StructInstantiation {
     // struct field count
     pub field_count: u16,
-    pub def_vtable_key: VirtualTableKey,
-    pub(crate) type_params: VMPointer<ArenaVec<ArenaType>>,
+    pub def_vtable_key: VMPointer<VirtualTableKey>,
+    pub(crate) type_params: VMPointer<ArenaVec<SizedArenaType>>,
 }
 
 // A field handle. The offset is the only used information when operating on a field
 #[derive(Debug)]
 pub(crate) struct FieldHandle {
     pub offset: usize,
-    pub owner: VirtualTableKey,
+    pub owner: VMPointer<VirtualTableKey>,
 }
 
 // A field instantiation. The offset is the only used information when operating on a field
 #[derive(Debug)]
 pub(crate) struct FieldInstantiation {
     pub offset: usize,
-    pub owner: VirtualTableKey,
+    pub owner: VMPointer<VirtualTableKey>,
 }
 
 #[derive(Debug)]
@@ -270,8 +265,8 @@ pub(crate) struct EnumInstantiation {
     #[allow(dead_code)]
     pub variant_count_map: ArenaVec<u16>,
     pub enum_def: VMPointer<EnumDef>,
-    pub def_vtable_key: VirtualTableKey,
-    pub type_params: VMPointer<ArenaVec<ArenaType>>,
+    pub def_vtable_key: VMPointer<VirtualTableKey>,
+    pub type_params: VMPointer<ArenaVec<SizedArenaType>>,
 }
 
 // A variant instantiation.
@@ -292,15 +287,22 @@ pub(crate) enum ArenaType {
     U128,
     Address,
     Signer,
-    Vector(ArenaBox<ArenaType>),
-    Datatype(VirtualTableKey),
-    DatatypeInstantiation(ArenaBox<(VirtualTableKey, ArenaVec<ArenaType>)>),
-    Reference(ArenaBox<ArenaType>),
-    MutableReference(ArenaBox<ArenaType>),
+    Vector(VMPointer<ArenaType>),
+    Datatype(VMPointer<VirtualTableKey>),
+    DatatypeInstantiation(VMPointer<(VMPointer<VirtualTableKey>, ArenaVec<VMPointer<ArenaType>>)>),
+    Reference(VMPointer<ArenaType>),
+    MutableReference(VMPointer<ArenaType>),
     TyParam(u16),
     U16,
     U32,
     U256,
+}
+
+/// A type *term* paired with its JIT-compiled size formula when runtime checks need it.
+#[derive(Debug)]
+pub(crate) struct SizedArenaType {
+    pub ty: VMPointer<ArenaType>,
+    pub size_formula: Option<ArenaTypeSizeFormula>,
 }
 
 #[derive(Debug)]
@@ -309,6 +311,11 @@ pub(crate) struct DatatypeDescriptor {
     pub defining_id: ModuleIdKey,
     pub original_id: ModuleIdKey,
     pub datatype_info: ArenaBox<Datatype>,
+    /// The datatype's size formula over its own type parameters, built in arena form while the
+    /// package is JIT'd. All purely local field structure is already folded into its constants;
+    /// type parameters and cross-package datatype applications remain symbolic, resolved by the
+    /// dispatch tables under a transaction's linkage view (`substitute`).
+    size_formula: ArenaTypeSizeFormula,
 }
 
 #[derive(Debug)]
@@ -343,7 +350,6 @@ pub enum Type {
     DatatypeInstantiation(Box<(VirtualTableKey, Vec<Type>)>),
     Reference(Box<Type>),
     MutableReference(Box<Type>),
-    TyParam(u16),
     U16,
     U32,
     U256,
@@ -489,7 +495,7 @@ pub(crate) enum Bytecode {
     ///
     /// The VTableKey must be resolved in the current package context to resolve it to a function
     /// that can be executed.
-    VirtualCall(VirtualTableKey),
+    VirtualCall(VMPointer<VirtualTableKey>),
     CallGeneric(VMPointer<FunctionInstantiation>),
     /// Create an instance of the type specified via `DatatypeHandleIndex` and push it on the stack.
     /// The values of the fields of the struct, in the order they appear in the struct declaration,
@@ -733,51 +739,51 @@ pub(crate) enum Bytecode {
     /// Stack transition:
     ///
     /// ```..., e1, e2, ..., eN -> ..., vec[e1, e2, ..., eN]```
-    VecPack(VMPointer<ArenaType>, u64),
+    VecPack(VMPointer<SizedArenaType>, u64),
     /// Return the length of the vector,
     ///
     /// Stack transition:
     ///
     /// ```..., vector_reference -> ..., u64_value```
-    VecLen(VMPointer<ArenaType>),
+    VecLen(VMPointer<SizedArenaType>),
     /// Acquire an immutable reference to the element at a given index of the vector. Abort the
     /// execution if the index is out of bounds.
     ///
     /// Stack transition:
     ///
     /// ```..., vector_reference, u64_value -> .., element_reference```
-    VecImmBorrow(VMPointer<ArenaType>),
+    VecImmBorrow(VMPointer<SizedArenaType>),
     /// Acquire a mutable reference to the element at a given index of the vector. Abort the
     /// execution if the index is out of bounds.
     ///
     /// Stack transition:
     ///
     /// ```..., vector_reference, u64_value -> .., element_reference```
-    VecMutBorrow(VMPointer<ArenaType>),
+    VecMutBorrow(VMPointer<SizedArenaType>),
     /// Add an element to the end of the vector.
     ///
     /// Stack transition:
     ///
     /// ```..., vector_reference, element -> ...```
-    VecPushBack(VMPointer<ArenaType>),
+    VecPushBack(VMPointer<SizedArenaType>),
     /// Pop an element from the end of vector. Aborts if the vector is empty.
     ///
     /// Stack transition:
     ///
     /// ```..., vector_reference -> ..., element```
-    VecPopBack(VMPointer<ArenaType>),
+    VecPopBack(VMPointer<SizedArenaType>),
     /// Destroy the vector and unpack a statically known number of elements onto the stack. Aborts
     /// if the vector does not have a length N.
     ///
     /// Stack transition:
     ///
     /// ```..., vec[e1, e2, ..., eN] -> ..., e1, e2, ..., eN```
-    VecUnpack(VMPointer<ArenaType>, u64),
+    VecUnpack(VMPointer<SizedArenaType>, u64),
     /// Swaps the elements at two indices in the vector. Abort the execution if any of the indices
     /// is out of bounds.
     ///
     /// ```..., vector_reference, u64_value(1), u64_value(2) -> ...```
-    VecSwap(VMPointer<ArenaType>),
+    VecSwap(VMPointer<SizedArenaType>),
     /// Push a U16 constant onto the stack.
     ///
     /// Stack transition:
@@ -889,13 +895,8 @@ impl Function {
         self.return_.len()
     }
 
-    #[allow(dead_code)]
-    pub fn name_str(&self, interner: &IdentifierInterner) -> String {
-        self.name(interner).to_string()
-    }
-
-    pub fn name(&self, interner: &IdentifierInterner) -> Identifier {
-        self.name.member_name(interner)
+    pub fn name_str<'a>(&self, interner: &'a IdentifierInterner) -> &'a str {
+        self.name.member_name_str(interner)
     }
 
     pub fn code(&self) -> &[Bytecode] {
@@ -985,43 +986,41 @@ impl VariantInstantiation {
 }
 
 impl ArenaType {
-    /// Convert to a runtime type by performing a deep copy
+    /// Convert to a runtime type by performing a deep copy. Runtime types are always fully
+    /// instantiated (`Type` has no ty-param variant), so `self` must be concrete; a
+    /// `TyParam` here is an invariant violation. Size checking is the dispatch tables'
+    /// concern (the interpreter over types), so this is a straight structural conversion --
+    /// the traversal (and recursion depth) is bounded by the size of `self`, which was
+    /// already bounded when the arena type was built at translation time.
     pub fn to_type(&self) -> PartialVMResult<Type> {
-        self.to_type_with_limits(&TypeLimits::VM_DEFAULT)
-    }
-
-    pub fn to_type_with_limits(&self, limits: &TypeLimits) -> PartialVMResult<Type> {
-        self.to_type_impl(&mut limits.traversal())
-    }
-
-    fn to_type_impl(&self, type_size: &mut TypeSize) -> PartialVMResult<Type> {
-        type_size.enter_type(|type_size| {
-            Ok(match self {
-                ArenaType::TyParam(idx) => Type::TyParam(*idx),
-                ArenaType::Bool => Type::Bool,
-                ArenaType::U8 => Type::U8,
-                ArenaType::U16 => Type::U16,
-                ArenaType::U32 => Type::U32,
-                ArenaType::U64 => Type::U64,
-                ArenaType::U128 => Type::U128,
-                ArenaType::U256 => Type::U256,
-                ArenaType::Address => Type::Address,
-                ArenaType::Signer => Type::Signer,
-                ArenaType::Vector(ty) => Type::Vector(Box::new(ty.to_type_impl(type_size)?)),
-                ArenaType::Reference(ty) => Type::Reference(Box::new(ty.to_type_impl(type_size)?)),
-                ArenaType::MutableReference(ty) => {
-                    Type::MutableReference(Box::new(ty.to_type_impl(type_size)?))
-                }
-                ArenaType::Datatype(def_idx) => Type::Datatype(def_idx.clone()),
-                ArenaType::DatatypeInstantiation(def_inst) => {
-                    let (def_idx, instantiation) = &**def_inst;
-                    let inst = instantiation
-                        .iter()
-                        .map(|ty| ty.to_type_impl(type_size))
-                        .collect::<PartialVMResult<Vec<_>>>()?;
-                    Type::DatatypeInstantiation(Box::new((def_idx.clone(), inst)))
-                }
-            })
+        Ok(match self {
+            ArenaType::TyParam(idx) => {
+                return Err(partial_vm_error!(
+                    UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                    "cannot convert uninstantiated type parameter T{idx} to a runtime type"
+                ));
+            }
+            ArenaType::Bool => Type::Bool,
+            ArenaType::U8 => Type::U8,
+            ArenaType::U16 => Type::U16,
+            ArenaType::U32 => Type::U32,
+            ArenaType::U64 => Type::U64,
+            ArenaType::U128 => Type::U128,
+            ArenaType::U256 => Type::U256,
+            ArenaType::Address => Type::Address,
+            ArenaType::Signer => Type::Signer,
+            ArenaType::Vector(ty) => Type::Vector(Box::new(ty.to_type()?)),
+            ArenaType::Reference(ty) => Type::Reference(Box::new(ty.to_type()?)),
+            ArenaType::MutableReference(ty) => Type::MutableReference(Box::new(ty.to_type()?)),
+            ArenaType::Datatype(def_idx) => Type::Datatype(def_idx.to_ref().clone()),
+            ArenaType::DatatypeInstantiation(def_inst) => {
+                let (def_idx, instantiation) = &**def_inst;
+                let inst = instantiation
+                    .iter()
+                    .map(|ty| ty.to_type())
+                    .collect::<PartialVMResult<Vec<_>>>()?;
+                Type::DatatypeInstantiation(Box::new((def_idx.to_ref().clone(), inst)))
+            }
         })
     }
 }
@@ -1052,13 +1051,21 @@ impl DatatypeDescriptor {
         defining_id: ModuleIdKey,
         original_id: ModuleIdKey,
         datatype_info: ArenaBox<Datatype>,
+        size_formula: ArenaTypeSizeFormula,
     ) -> Self {
         Self {
             name,
             defining_id,
             original_id,
             datatype_info,
+            size_formula,
         }
+    }
+
+    /// The datatype's arena-form size formula over its own type parameters (see
+    /// [`ArenaTypeSizeFormula`]).
+    pub(crate) fn size_formula(&self) -> &ArenaTypeSizeFormula {
+        &self.size_formula
     }
 
     pub fn type_parameters(&self) -> &[DatatypeTyParameter] {
@@ -1092,84 +1099,11 @@ impl DatatypeDescriptor {
 }
 
 impl Type {
-    const LEGACY_BASE_MEMORY_SIZE: AbstractMemorySize = AbstractMemorySize::new(1);
-
-    /// Returns the abstract memory size the data structure occupies.
-    ///
-    /// This kept only for legacy reasons.
-    /// New applications should not use this.
+    /// The abstract memory size of this type -- one unit per syntactic node. Kept only for
+    /// legacy gas metering; new applications should not use this. (Fallible for call-site
+    /// compatibility; the syntactic size saturates and never errors.)
     pub fn size(&self) -> PartialVMResult<AbstractMemorySize> {
-        self.size_impl(&mut TypeSize::for_type_traversal())
-    }
-
-    /// SAFETY: Addition over `AbstractMemorySize` is saturating and so this is safe against
-    /// overflow. See the implementation of [`Add`] for [`AbstractMemorySize`] in the
-    /// [`move_core_types::gas_algebra`] module for more details on this and why this is safe.
-    #[allow(clippy::arithmetic_side_effects)]
-    fn size_impl(&self, type_size: &mut TypeSize) -> PartialVMResult<AbstractMemorySize> {
-        use Type::*;
-
-        type_size.enter_type(|type_size| {
-            Ok(match self {
-                TyParam(_) | Bool | U8 | U16 | U32 | U64 | U128 | U256 | Address | Signer => {
-                    Self::LEGACY_BASE_MEMORY_SIZE
-                }
-                Vector(ty) | Reference(ty) | MutableReference(ty) => {
-                    Self::LEGACY_BASE_MEMORY_SIZE + ty.size_impl(type_size)?
-                }
-                Datatype(_) => Self::LEGACY_BASE_MEMORY_SIZE,
-                DatatypeInstantiation(inst) => {
-                    let (_, tys) = &**inst;
-                    let mut acc = Self::LEGACY_BASE_MEMORY_SIZE;
-                    for ty in tys {
-                        acc += ty.size_impl(type_size)?;
-                    }
-                    acc
-                }
-            })
-        })
-    }
-
-    pub fn from_const_signature(constant_signature: &SignatureToken) -> PartialVMResult<Self> {
-        Self::from_const_signature_impl(constant_signature, &mut TypeSize::for_type_traversal())
-    }
-
-    fn from_const_signature_impl(
-        constant_signature: &SignatureToken,
-        type_size: &mut TypeSize,
-    ) -> PartialVMResult<Self> {
-        use SignatureToken as S;
-        use Type as L;
-
-        type_size.enter_type(|type_size| {
-            Ok(match constant_signature {
-                S::Bool => L::Bool,
-                S::U8 => L::U8,
-                S::U16 => L::U16,
-                S::U32 => L::U32,
-                S::U64 => L::U64,
-                S::U128 => L::U128,
-                S::U256 => L::U256,
-                S::Address => L::Address,
-                S::Vector(inner) => {
-                    L::Vector(Box::new(Self::from_const_signature_impl(inner, type_size)?))
-                }
-                // Not yet supported
-                S::Datatype(_) | S::DatatypeInstantiation(_) => {
-                    return Err(partial_vm_error!(
-                        UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                        "Unable to load const type signature"
-                    ));
-                }
-                // Not allowed/Not meaningful
-                S::TypeParameter(_) | S::Reference(_) | S::MutableReference(_) | S::Signer => {
-                    return Err(partial_vm_error!(
-                        UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                        "Unable to load const type signature"
-                    ));
-                }
-            })
-        })
+        Ok(AbstractMemorySize::new(self.syntactic_sizes().0))
     }
 
     pub fn check_vec_ref(&self, inner_ty: &Type, is_mut: bool) -> PartialVMResult<Type> {
@@ -1245,142 +1179,89 @@ impl DatatypeDescriptor {
 }
 
 // -------------------------------------------------------------------------------------------------
-// Type Substitution
+// Syntactic Sizes and Substitution
 // -------------------------------------------------------------------------------------------------
 
-pub trait TypeSubst {
-    fn clone_impl(&self, type_size: &mut TypeSize) -> PartialVMResult<Type>;
-    fn apply_subst<F>(&self, subst: F, type_size: &mut TypeSize) -> PartialVMResult<Type>
-    where
-        F: Fn(u16, &mut TypeSize) -> PartialVMResult<Type> + Copy;
-    fn subst(&self, ty_args: &[Type]) -> PartialVMResult<Type>;
-    fn subst_with_limits(&self, limits: &TypeLimits, ty_args: &[Type]) -> PartialVMResult<Type>;
-}
-
-// Macro that generates the implementations.
-macro_rules! impl_deep_subst {
-    ($ty:ident) => {
-        impl TypeSubst for $ty {
-            fn clone_impl(
-                &self,
-                type_size: &mut $crate::shared::TypeSize,
-            ) -> PartialVMResult<Type> {
-                self.apply_subst(|idx, _| Ok(Type::TyParam(idx)), type_size)
+impl Type {
+    /// The syntactic `(type_size, type_depth)` of this term, counting every node (datatype
+    /// heads are single nodes; fields are not traversed). Kept only for legacy gas metering via
+    /// [`Type::size`]; new size and limit decisions flow through the dispatch tables
+    /// (`VMDispatchTables::type_size_of`).
+    pub(crate) fn syntactic_sizes(&self) -> (u64, u64) {
+        match self {
+            Type::Vector(ty) | Type::Reference(ty) | Type::MutableReference(ty) => {
+                let (size, depth) = ty.syntactic_sizes();
+                (size.saturating_add(1), depth.saturating_add(1))
             }
-
-            fn apply_subst<F>(
-                &self,
-                subst: F,
-                type_size: &mut $crate::shared::TypeSize,
-            ) -> PartialVMResult<Type>
-            where
-                F: Fn(u16, &mut $crate::shared::TypeSize) -> PartialVMResult<Type> + Copy,
-            {
-                type_size.enter_type(|type_size| {
-                    let res = match self {
-                        $ty::TyParam(idx) => subst(*idx, type_size)?,
-                        $ty::Bool => Type::Bool,
-                        $ty::U8 => Type::U8,
-                        $ty::U16 => Type::U16,
-                        $ty::U32 => Type::U32,
-                        $ty::U64 => Type::U64,
-                        $ty::U128 => Type::U128,
-                        $ty::U256 => Type::U256,
-                        $ty::Address => Type::Address,
-                        $ty::Signer => Type::Signer,
-                        $ty::Vector(ty) => {
-                            Type::Vector(Box::new(ty.apply_subst(subst, type_size)?))
-                        }
-                        $ty::Reference(ty) => {
-                            Type::Reference(Box::new(ty.apply_subst(subst, type_size)?))
-                        }
-                        $ty::MutableReference(ty) => {
-                            Type::MutableReference(Box::new(ty.apply_subst(subst, type_size)?))
-                        }
-                        $ty::Datatype(def_idx) => Type::Datatype(def_idx.clone()),
-                        $ty::DatatypeInstantiation(def_inst) => {
-                            let (def_idx, instantiation) = &**def_inst;
-                            let inst = instantiation
-                                .iter()
-                                .map(|ty| ty.apply_subst(subst, type_size))
-                                .collect::<PartialVMResult<Vec<_>>>()?;
-                            Type::DatatypeInstantiation(Box::new((def_idx.clone(), inst)))
-                        }
-                    };
-                    Ok(res)
-                })
-            }
-
-            fn subst(&self, ty_args: &[Type]) -> PartialVMResult<Type> {
-                self.subst_with_limits(&$crate::shared::TypeLimits::VM_DEFAULT, ty_args)
-            }
-
-            fn subst_with_limits(
-                &self,
-                limits: &$crate::shared::TypeLimits,
-                ty_args: &[Type],
-            ) -> PartialVMResult<Type> {
-                self.apply_subst(
-                    |idx, type_size| match ty_args.get(idx as usize) {
-                        Some(ty) => ty.clone_impl(type_size),
-                        None => Err(move_binary_format::partial_vm_error!(
-                            UNKNOWN_INVARIANT_VIOLATION_ERROR,
-                            "type substitution failed: index out of bounds -- len {} got {}",
-                            ty_args.len(),
-                            idx
-                        )),
-                    },
-                    &mut limits.traversal(),
-                )
-            }
-        }
-    };
-}
-
-// Generated implementations.
-impl_deep_subst!(Type);
-impl_deep_subst!(ArenaType);
-
-// -------------------------------------------------------------------------------------------------
-// Type Node Count
-// -------------------------------------------------------------------------------------------------
-
-// Macro that generates the implementations.
-macro_rules! impl_count_type_nodes {
-    ($ty:ident) => {
-        impl TypeNodeCount for $ty {
-            fn count_type_nodes(&self) -> PartialVMResult<u64> {
-                let mut todo = vec![self];
-                let mut result = 0u64;
-                while let Some(ty) = todo.pop() {
-                    match ty {
-                        $ty::Vector(ty) | $ty::Reference(ty) | $ty::MutableReference(ty) => {
-                            result = result.safe_add(1)?;
-                            todo.push(ty);
-                        }
-                        $ty::DatatypeInstantiation(struct_inst) => {
-                            let (_, ty_args) = &**struct_inst;
-                            result = result.safe_add(1)?;
-                            todo.extend(ty_args.iter());
-                        }
-                        _ => {
-                            result = result.safe_add(1)?;
-                        }
-                    }
+            Type::DatatypeInstantiation(inst) => {
+                let (_, ty_args) = &**inst;
+                let mut size = 1u64;
+                let mut depth = 1u64;
+                for ty in ty_args.iter() {
+                    let (arg_size, arg_depth) = ty.syntactic_sizes();
+                    size = size.saturating_add(arg_size);
+                    depth = depth.max(arg_depth.saturating_add(1));
                 }
-                Ok(result)
+                (size, depth)
             }
+            Type::Bool
+            | Type::U8
+            | Type::U16
+            | Type::U32
+            | Type::U64
+            | Type::U128
+            | Type::U256
+            | Type::Address
+            | Type::Signer
+            | Type::Datatype(_) => (1, 1),
         }
-    };
+    }
 }
 
-pub trait TypeNodeCount {
-    fn count_type_nodes(&self) -> PartialVMResult<u64>;
+impl ArenaType {
+    /// Substitute `ty_args` into this term WITHOUT enforcing size or depth limits.
+    /// Crate-private by design: every route to a substituted type (the dispatch tables'
+    /// `subst_type` and `instantiate_generic_function`) checks a predicted size against the
+    /// limits before calling this.
+    pub(crate) fn subst_unchecked(&self, ty_args: &[Type]) -> PartialVMResult<Type> {
+        Ok(match self {
+            ArenaType::TyParam(idx) => match ty_args.get(*idx as usize) {
+                Some(ty) => ty.clone(),
+                None => {
+                    return Err(partial_vm_error!(
+                        UNKNOWN_INVARIANT_VIOLATION_ERROR,
+                        "type substitution failed: index out of bounds -- len {} got {}",
+                        ty_args.len(),
+                        idx
+                    ));
+                }
+            },
+            ArenaType::Bool => Type::Bool,
+            ArenaType::U8 => Type::U8,
+            ArenaType::U16 => Type::U16,
+            ArenaType::U32 => Type::U32,
+            ArenaType::U64 => Type::U64,
+            ArenaType::U128 => Type::U128,
+            ArenaType::U256 => Type::U256,
+            ArenaType::Address => Type::Address,
+            ArenaType::Signer => Type::Signer,
+            ArenaType::Vector(ty) => Type::Vector(Box::new(ty.subst_unchecked(ty_args)?)),
+            ArenaType::Reference(ty) => Type::Reference(Box::new(ty.subst_unchecked(ty_args)?)),
+            ArenaType::MutableReference(ty) => {
+                Type::MutableReference(Box::new(ty.subst_unchecked(ty_args)?))
+            }
+            ArenaType::Datatype(def_idx) => Type::Datatype(def_idx.to_ref().clone()),
+            ArenaType::DatatypeInstantiation(def_inst) => {
+                let (def_idx, instantiation) = &**def_inst;
+                let inst = instantiation
+                    .iter()
+                    .map(|ty| ty.subst_unchecked(ty_args))
+                    .collect::<PartialVMResult<Vec<_>>>()?;
+                Type::DatatypeInstantiation(Box::new((def_idx.to_ref().clone(), inst)))
+            }
+        })
+    }
 }
-
-// Generated implementations.
-impl_count_type_nodes!(Type);
-impl_count_type_nodes!(ArenaType);
 
 // -------------------------------------------------------------------------------------------------
 // Into
@@ -1610,20 +1491,19 @@ impl std::fmt::Debug for ArenaType {
             ArenaType::U128 => write!(f, "u128"),
             ArenaType::Address => write!(f, "address"),
             ArenaType::Signer => write!(f, "signer"),
-            ArenaType::Vector(inner) => write!(f, "vector<{:?}>", inner.inner_ref()),
-            ArenaType::Datatype(key) => write!(f, "{:?}", key),
+            ArenaType::Vector(inner) => write!(f, "vector<{:?}>", inner.to_ref()),
+            ArenaType::Datatype(key) => write!(f, "{:?}", key.to_ref()),
             ArenaType::DatatypeInstantiation(inst) => {
-                // inst is an ArenaBox<(VirtualTableKey, ArenaVec<ArenaType>)>
-                let (key, types) = inst.inner_ref();
-                write!(f, "{:?}<", key)?;
+                let (key, types) = inst.to_ref();
+                write!(f, "{:?}<", key.to_ref())?;
                 let types = types
                     .iter()
                     .map(|x| format!("{:?}", x) + ",")
                     .collect::<String>();
                 write!(f, "{}>", types)
             }
-            ArenaType::Reference(inner) => write!(f, "&{:?}", inner.inner_ref()),
-            ArenaType::MutableReference(inner) => write!(f, "&mut {:?}", inner.inner_ref()),
+            ArenaType::Reference(inner) => write!(f, "&{:?}", inner.to_ref()),
+            ArenaType::MutableReference(inner) => write!(f, "&mut {:?}", inner.to_ref()),
             ArenaType::TyParam(idx) => write!(f, "T{}", idx),
             ArenaType::U16 => write!(f, "u16"),
             ArenaType::U32 => write!(f, "u32"),
@@ -1646,8 +1526,7 @@ pub trait InternedDisplay<B: std::fmt::Write> {
 
 impl<B: std::fmt::Write> InternedDisplay<B> for IdentifierKey {
     fn fmt(&self, f: &mut B, interner: &IdentifierInterner) -> ::std::fmt::Result {
-        let name = interner.resolve_ident(self, "module name");
-        write!(f, "{}", name)
+        write!(f, "{}", interner.resolve_str(self, "identifier"))
     }
 }
 
@@ -1655,6 +1534,12 @@ impl<B: std::fmt::Write> InternedDisplay<B> for VirtualTableKey {
     fn fmt(&self, f: &mut B, interner: &IdentifierInterner) -> ::std::fmt::Result {
         let str = self.to_short_string(interner);
         write!(f, "{}", str)
+    }
+}
+
+impl<B: std::fmt::Write> InternedDisplay<B> for SizedArenaType {
+    fn fmt(&self, f: &mut B, interner: &IdentifierInterner) -> ::std::fmt::Result {
+        self.ty.fmt(f, interner)
     }
 }
 

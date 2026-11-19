@@ -15,7 +15,7 @@ use consensus_config::{
     NetworkPublicKey as ConsensusNetworkPublicKey, Parameters, ProtocolKeyPair, Stake,
 };
 use consensus_core::{
-    Clock, CommitConsumerArgs, CommitConsumerMonitor, CommitIndex, ConsensusAuthority, NetworkType,
+    Clock, CommitConsumerArgs, CommitIndex, ConsensusAuthority, ConsumerMonitor, NetworkType,
     RandomnessSignatureHandler, TransactionPool, storage::rocksdb_store::RocksDBStore,
 };
 use core::panic;
@@ -28,6 +28,11 @@ use prometheus::{
     IntGauge, IntGaugeVec, Registry, register_int_gauge_vec_with_registry,
     register_int_gauge_with_registry,
 };
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use rtd_config::node::ConsensusTransactionPoolConfig;
 use rtd_config::{ConsensusConfig, NodeConfig};
 use rtd_network::endpoint_manager::{AddressSource, ConsensusAddressUpdater};
 use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
@@ -38,13 +43,9 @@ use rtd_types::node_role::NodeRole;
 use rtd_types::{
     committee::EpochId, rtd_system_state::epoch_start_rtd_system_state::EpochStartSystemStateTrait,
 };
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, broadcast};
 use tokio::time::{sleep, timeout};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 #[cfg(test)]
 #[path = "../unit_tests/consensus_manager_tests.rs"]
@@ -178,6 +179,7 @@ fn to_consensus_protocol_config(config: &ProtocolConfig) -> ConsensusProtocolCon
         /* enable_v3 */ false,
         /* leader_schedule_window_size */ 300,
         /* leader_schedule_update_interval */ 12,
+        config.shuffle_consensus_commit_blocks(),
     )
 }
 
@@ -202,10 +204,10 @@ pub struct ConsensusManager {
     consensus_handler: Mutex<Option<MysticetiConsensusHandler>>,
 
     #[cfg(test)]
-    pub(crate) consumer_monitor: ArcSwapOption<CommitConsumerMonitor>,
+    pub(crate) consumer_monitor: ArcSwapOption<ConsumerMonitor>,
     #[cfg(not(test))]
-    consumer_monitor: ArcSwapOption<CommitConsumerMonitor>,
-    consumer_monitor_sender: broadcast::Sender<Arc<CommitConsumerMonitor>>,
+    consumer_monitor: ArcSwapOption<ConsumerMonitor>,
+    consumer_monitor_sender: broadcast::Sender<Arc<ConsumerMonitor>>,
 
     running: Mutex<Running>,
 
@@ -305,13 +307,27 @@ impl ConsensusManager {
             .filter(|_| is_validator);
         let transaction_pool: Option<Arc<dyn TransactionPool>> = if let Some(context) = pool_context
         {
-            let config = node_config
-                .consensus_transaction_pool
-                .as_ref()
-                .expect("transaction pool context requires pool config");
+            let config = &node_config.consensus_transaction_pool;
+            if let Some(ttl) = config.max_queue_age()
+                && ttl < ConsensusTransactionPoolConfig::MIN_RECOMMENDED_MAX_QUEUE_AGE
+            {
+                warn!(
+                    ?ttl,
+                    "consensus-transaction-pool.max-queue-age-secs is below {:?} and can expire \
+                     staggered entries before this validator proposes them",
+                    ConsensusTransactionPoolConfig::MIN_RECOMMENDED_MAX_QUEUE_AGE
+                );
+            }
             let pool = Arc::new(ConsensusTransactionPool::new(
                 epoch_store.clone(),
+                context.cache_writer().clone(),
                 config.max_pending_transactions(&self.consensus_config),
+                config.max_user_bytes_per_second(
+                    epoch_store
+                        .protocol_config()
+                        .max_transactions_in_block_bytes(),
+                ),
+                config.max_queue_age(),
                 context.metrics().clone(),
                 context.adapter_metrics().clone(),
             ));
@@ -348,50 +364,9 @@ impl ConsensusManager {
         let replay_after_commit_index =
             last_processed_commit_index.saturating_sub(num_prior_commits);
 
-        let recovery_drain_ceiling = if is_validator {
-            let startup_consensus_head = RocksDBStore::read_last_commit_index_for_recovery(
-                parameters
-                    .db_path
-                    .to_str()
-                    .expect("consensus DB path must be valid UTF-8"),
-            )
-            .expect("reading the persisted consensus head should not fail");
-            let recovery_drain_state = epoch_store
-                .prepare_consensus_recovery_drain_state(
-                    last_processed_commit_index,
-                    startup_consensus_head,
-                )
-                .expect("persisting the consensus recovery drain state should not fail");
-            if let Some((anchor, ceiling)) = recovery_drain_state {
-                info!(
-                    target: "rtd_startup",
-                    durable_commit = last_processed_commit_index,
-                    consensus_head = startup_consensus_head,
-                    recovery_drain_anchor = anchor,
-                    recovery_drain_ceiling = ceiling,
-                    "Using the persisted, fixed recovery drain ceiling for a legacy consensus tail"
-                );
-                Some(ceiling)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let (commit_consumer, commit_receiver) = if is_validator {
-            CommitConsumerArgs::new_with_recovery_drain_ceiling(
-                replay_after_commit_index,
-                last_processed_commit_index,
-                recovery_drain_ceiling,
-            )
-        } else {
-            CommitConsumerArgs::new(replay_after_commit_index, last_processed_commit_index)
-        };
+        let (commit_consumer, commit_receiver) =
+            CommitConsumerArgs::new(replay_after_commit_index, last_processed_commit_index);
         let monitor = commit_consumer.monitor();
-        if is_validator {
-            epoch_store.set_consensus_commit_monitor(monitor.clone());
-        }
 
         // Spin up the new Mysticeti consensus handler to listen for committed sub dags, before starting authority.
         let handler = MysticetiConsensusHandler::new(
@@ -412,10 +387,6 @@ impl ConsensusManager {
             } else {
                 false
             };
-
-        // The checkpoint builder can process replayed consensus output while the authority
-        // scans its persisted commits. The consumer handler and monitor are both installed now.
-        let _ = self.consumer_monitor_sender.send(monitor.clone());
 
         // Increment the boot counter only if the consensus successfully participated in the previous run.
         // This is typical during normal epoch changes, where the node restarts as expected, and the boot counter is incremented to prevent amnesia recovery on the next start.
@@ -472,6 +443,9 @@ impl ConsensusManager {
         if let Some(client) = client {
             self.client.set(client);
         }
+
+        // Send the consumer monitor to the replay waiter.
+        let _ = self.consumer_monitor_sender.send(monitor);
 
         let elapsed = start_time.elapsed().as_secs_f64();
         self.metrics.start_latency.set(elapsed as i64);
@@ -696,19 +670,19 @@ impl ConsensusClient for UpdatableConsensusClient {
 
 /// Waits for consensus to finish replaying at consensus handler.
 pub struct ReplayWaiter {
-    consumer_monitor_receiver: broadcast::Receiver<Arc<CommitConsumerMonitor>>,
+    consumer_monitor_receiver: broadcast::Receiver<Arc<ConsumerMonitor>>,
 }
 
 impl ReplayWaiter {
     pub(crate) fn new(
-        consumer_monitor_receiver: broadcast::Receiver<Arc<CommitConsumerMonitor>>,
+        consumer_monitor_receiver: broadcast::Receiver<Arc<ConsumerMonitor>>,
     ) -> Self {
         Self {
             consumer_monitor_receiver,
         }
     }
 
-    pub(crate) async fn wait_for_replay(mut self) -> Arc<CommitConsumerMonitor> {
+    pub(crate) async fn wait_for_replay(mut self) {
         loop {
             info!("Waiting for consensus to start replaying ...");
             let Ok(monitor) = self.consumer_monitor_receiver.recv().await else {
@@ -718,7 +692,7 @@ impl ReplayWaiter {
             monitor
                 .replay_to_consumer_last_processed_commit_complete()
                 .await;
-            return monitor;
+            break;
         }
     }
 }

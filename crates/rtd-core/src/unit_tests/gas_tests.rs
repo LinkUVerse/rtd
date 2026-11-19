@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use rtd_macros::sim_test;
 
 use super::authority_tests::{init_state_with_ids, submit_and_execute};
 use super::move_integration_tests::build_and_try_publish_test_package;
@@ -31,6 +32,8 @@ static MAX_GAS_BUDGET: Lazy<u64> =
 static MIN_GAS_BUDGET_PRE_RGP: Lazy<u64> =
     Lazy::new(|| ProtocolConfig::get_for_max_version_UNSAFE().base_tx_cost_fixed());
 
+const TEST_PUBLISH_BUDGET: u64 = 2_000_000_000;
+
 #[test]
 fn test_gas_invariants() {
     let max_tx_gas = ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
@@ -52,7 +55,7 @@ fn test_gas_invariants() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_tx_less_than_minimum_gas_budget() {
     // This test creates a transaction that sets a gas_budget less than the minimum
     // transaction requirement. It's expected to fail early during transaction
@@ -69,7 +72,7 @@ async fn test_tx_less_than_minimum_gas_budget() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_tx_more_than_maximum_gas_budget() {
     // This test creates a transaction that sets a gas_budget more than the maximum
     // budget (which could lead to overflow). It's expected to fail early during transaction
@@ -115,7 +118,6 @@ async fn publish_move_random_package(
     sender_key: &AccountKeyPair,
     gas_object_id: &ObjectID,
 ) -> ObjectID {
-    const PUBLISH_BUDGET: u64 = 10_000_000;
     let rgp = authority_state.reference_gas_price_for_testing().unwrap();
 
     let response = build_and_try_publish_test_package(
@@ -124,7 +126,7 @@ async fn publish_move_random_package(
         sender_key,
         gas_object_id,
         "move_random",
-        PUBLISH_BUDGET,
+        TEST_PUBLISH_BUDGET,
         rgp,
         /* with_unpublished_deps */ false,
     )
@@ -299,7 +301,7 @@ async fn touch_gas_coins(
 }
 
 // - OOG computation, storage ok
-#[tokio::test]
+#[sim_test]
 async fn test_oog_computation_storage_ok_one_coin() -> RtdResult {
     const GAS_PRICE: u64 = 1_000;
     let budget: u64 = ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
@@ -327,7 +329,7 @@ async fn test_oog_computation_storage_ok_one_coin() -> RtdResult {
     .await
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_oog_computation_storage_ok_multi_coins() -> RtdResult {
     const GAS_PRICE: u64 = 1_000;
     let budget: u64 = ProtocolConfig::get_for_max_version_UNSAFE().max_tx_gas();
@@ -356,7 +358,7 @@ async fn test_oog_computation_storage_ok_multi_coins() -> RtdResult {
 }
 
 // OOG for computation, OOG for minimal storage (e.g. computation is entire budget)
-#[tokio::test]
+#[sim_test]
 async fn test_oog_computation_oog_storage_final_one_coin() -> RtdResult {
     const GAS_PRICE: u64 = 1000;
     const MAX_UNIT_BUDGET: u64 = 5_000_000;
@@ -385,7 +387,7 @@ async fn test_oog_computation_oog_storage_final_one_coin() -> RtdResult {
 }
 
 // - computation ok, OOG for storage, minimal storage ok
-#[tokio::test]
+#[sim_test]
 async fn test_computation_ok_oog_storage_minimal_ok_one_coin() -> RtdResult {
     const GAS_PRICE: u64 = 1001;
     const BUDGET: u64 = 1_100_000;
@@ -417,7 +419,7 @@ async fn test_computation_ok_oog_storage_minimal_ok_one_coin() -> RtdResult {
 }
 
 // - computation ok, OOG for storage, minimal storage ok
-#[tokio::test]
+#[sim_test]
 async fn test_computation_ok_oog_storage_minimal_ok_multi_coins() -> RtdResult {
     const GAS_PRICE: u64 = 1001;
     const BUDGET: u64 = 1_100_000;
@@ -449,8 +451,14 @@ async fn test_computation_ok_oog_storage_minimal_ok_multi_coins() -> RtdResult {
 }
 
 // - computation ok, OOG for storage, OOG for minimal storage (e.g. computation is entire budget)
-#[tokio::test]
+#[sim_test]
 async fn test_computation_ok_oog_storage_final_one_coin() -> RtdResult {
+    // Pin the rebate rate so the gas-coin-only storage charge exceeds the budget left after
+    // computation.
+    let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+        config.set_storage_rebate_rate_for_testing(9900);
+        config
+    });
     const GAS_PRICE: u64 = 1001;
     const BUDGET: u64 = 1_002_000;
     let (sender, sender_key) = get_key_pair();
@@ -479,7 +487,7 @@ async fn test_computation_ok_oog_storage_final_one_coin() -> RtdResult {
     .await
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_tx_gas_balance_less_than_budget() {
     // This test creates a transaction that uses a gas object whose balance
     // is not even enough to pay for the gas budget. This should fail early
@@ -493,7 +501,7 @@ async fn test_tx_gas_balance_less_than_budget() {
     ));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_native_transfer_sufficient_gas() -> RtdResult {
     // This test does a native transfer with sufficient gas budget and balance.
     // It's expected to succeed. We check that gas was charged properly.
@@ -517,7 +525,7 @@ async fn test_native_transfer_sufficient_gas() -> RtdResult {
     Ok(())
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_native_transfer_gas_price_is_used() {
     let result =
         execute_transfer_with_price(*MAX_GAS_BUDGET, *MAX_GAS_BUDGET, 1, true, false).await;
@@ -544,7 +552,7 @@ async fn test_native_transfer_gas_price_is_used() {
     ));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_transfer_rtd_insufficient_gas() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let recipient = dbg_addr(2);
@@ -592,7 +600,7 @@ async fn test_transfer_rtd_insufficient_gas() {
 
 /// - All gas coins should be owned by an address (not shared or immutable)
 /// - All gas coins should be owned by the sender, or the sponsor
-#[tokio::test]
+#[sim_test]
 async fn test_invalid_gas_owners() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let authority_state = TestAuthorityBuilder::new().build().await;
@@ -699,7 +707,7 @@ async fn test_invalid_gas_owners() {
     ))
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_native_transfer_insufficient_gas_reading_objects() {
     // This test creates a transfer transaction with a gas budget, that's more than
     // the minimum budget requirement, but not enough to even read the objects from db.
@@ -714,7 +722,7 @@ async fn test_native_transfer_insufficient_gas_reading_objects() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_native_transfer_insufficient_gas_execution() {
     // This test creates a transfer transaction with a gas budget that's insufficient
     // to finalize the transfer object mutation effects. It will fail during
@@ -751,7 +759,7 @@ async fn test_native_transfer_insufficient_gas_execution() {
     );
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_publish_gas() -> anyhow::Result<()> {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas_object_id = ObjectID::random();
@@ -822,7 +830,7 @@ async fn test_publish_gas() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_move_call_gas() -> RtdResult {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let gas_object_id = ObjectID::random();
@@ -901,7 +909,7 @@ async fn test_move_call_gas() -> RtdResult {
     Ok(())
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_tx_gas_price_less_than_reference_gas_price() {
     let gas_balance = *MAX_GAS_BUDGET;
     let budget = *MIN_GAS_BUDGET_PRE_RGP;
@@ -912,7 +920,7 @@ async fn test_tx_gas_price_less_than_reference_gas_price() {
     ));
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_tx_gas_coins_input_coins() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let authority_state = TestAuthorityBuilder::new().build().await;
@@ -1065,7 +1073,7 @@ async fn execute_transfer_with_price(
     }
 }
 
-#[tokio::test]
+#[sim_test]
 async fn test_gas_price_capping_for_aborted_transactions() {
     let (sender, sender_key): (_, AccountKeyPair) = get_key_pair();
     let authority_state = TestAuthorityBuilder::new().build().await;
@@ -1081,7 +1089,8 @@ async fn test_gas_price_capping_for_aborted_transactions() {
     let budget = high_gas_price * 1000; // Sufficient budget
 
     // Create gas coins
-    let gas_amount = budget * 10;
+    // The coin pays the fixture's package publish before this test's transaction runs.
+    let gas_amount = TEST_PUBLISH_BUDGET + budget * 10;
     let gas_object_id = ObjectID::random();
     let gas_coin = Object::with_id_owner_gas_for_testing(gas_object_id, sender, gas_amount);
     authority_state.insert_genesis_object(gas_coin);

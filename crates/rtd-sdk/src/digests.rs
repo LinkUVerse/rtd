@@ -4,11 +4,11 @@
 //! Utilities for working with chain identifier strings.
 //!
 //! A chain identifier can appear in two formats:
-//! - the legacy short form: the first 4 bytes of the digest, hex-encoded. This is
+//! - the legacy short form: the first 4 bytes of the digest, hex-encoded, e.g. `35834a8a`. This is
 //!   the format returned by JSON-RPC, the format rendered by `ChainIdentifier`'s `Display`, and the
 //!   only format this tooling ever *writes* — into `Move.toml` and `client.yaml`.
 //! - the full Base58 form: the full genesis checkpoint digest, Base58-encoded (the format returned
-//!   by the gRPC and GraphQL APIs).
+//!   by the gRPC and GraphQL APIs), e.g. `4btiuiMPvEENsttpZC7CZ53DruC3MAgfznDbASZ7DR6S`.
 //!
 //! We never write the Base58 form, but a user may paste it (e.g. copied from a gRPC/GraphQL
 //! response or an explorer) into a `Move.toml` `[environments]` entry, while the CLI environment
@@ -60,55 +60,71 @@ fn decode_chain_id(s: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    use rtd_types::digests::{
+        MAINNET_CHAIN_IDENTIFIER_BASE58, TESTNET_CHAIN_IDENTIFIER_BASE58,
+        get_mainnet_chain_identifier, get_testnet_chain_identifier,
+    };
+
     use super::*;
 
-    const FIRST_SHORT: &str = "12121212";
-    const SECOND_SHORT: &str = "34343434";
-
-    fn sample_chain_ids() -> (String, String) {
-        (
-            chain_id_base58(&ChainIdentifier::from(CheckpointDigest::new([0x12; 32]))),
-            chain_id_base58(&ChainIdentifier::from(CheckpointDigest::new([0x34; 32]))),
-        )
-    }
+    const MAINNET_SHORT: &str = "35834a8a";
+    const TESTNET_SHORT: &str = "4c78adac";
 
     #[test]
-    fn base58_form_of_sample_chain() {
-        let (first, _) = sample_chain_ids();
+    fn base58_form_of_known_chains() {
         assert_eq!(
-            CheckpointDigest::from_str(&first).unwrap(),
-            CheckpointDigest::new([0x12; 32])
+            chain_id_base58(&get_mainnet_chain_identifier()),
+            MAINNET_CHAIN_IDENTIFIER_BASE58
+        );
+        assert_eq!(
+            chain_id_base58(&get_testnet_chain_identifier()),
+            TESTNET_CHAIN_IDENTIFIER_BASE58
         );
     }
 
     #[test]
     fn full_matches_full() {
-        let (first, second) = sample_chain_ids();
-        assert!(chain_ids_match(&first, &first));
-        assert!(!chain_ids_match(&first, &second));
+        assert!(chain_ids_match(
+            MAINNET_CHAIN_IDENTIFIER_BASE58,
+            MAINNET_CHAIN_IDENTIFIER_BASE58
+        ));
+        assert!(!chain_ids_match(
+            MAINNET_CHAIN_IDENTIFIER_BASE58,
+            TESTNET_CHAIN_IDENTIFIER_BASE58
+        ));
     }
 
     #[test]
     fn short_matches_full_in_either_order() {
-        let (first, _) = sample_chain_ids();
-        assert!(chain_ids_match(FIRST_SHORT, &first));
-        assert!(chain_ids_match(&first, FIRST_SHORT));
-        assert!(!chain_ids_match(SECOND_SHORT, &first));
+        assert!(chain_ids_match(
+            MAINNET_SHORT,
+            MAINNET_CHAIN_IDENTIFIER_BASE58
+        ));
+        assert!(chain_ids_match(
+            MAINNET_CHAIN_IDENTIFIER_BASE58,
+            MAINNET_SHORT
+        ));
+        assert!(!chain_ids_match(
+            TESTNET_SHORT,
+            MAINNET_CHAIN_IDENTIFIER_BASE58
+        ));
     }
 
     #[test]
     fn short_matches_short() {
-        assert!(chain_ids_match(FIRST_SHORT, FIRST_SHORT));
-        assert!(chain_ids_match(FIRST_SHORT, "12121212"));
-        assert!(chain_ids_match("0x12121212", FIRST_SHORT));
-        assert!(!chain_ids_match(FIRST_SHORT, SECOND_SHORT));
+        assert!(chain_ids_match(MAINNET_SHORT, MAINNET_SHORT));
+        assert!(chain_ids_match(MAINNET_SHORT, "35834A8A"));
+        assert!(chain_ids_match("0x35834a8a", MAINNET_SHORT));
+        assert!(!chain_ids_match(MAINNET_SHORT, TESTNET_SHORT));
     }
 
     #[test]
     fn opaque_ids_match_exactly() {
         assert!(chain_ids_match("localnet", "localnet"));
         assert!(!chain_ids_match("localnet", "Localnet"));
-        let (first, _) = sample_chain_ids();
-        assert!(!chain_ids_match("localnet", &first));
+        assert!(!chain_ids_match(
+            "localnet",
+            MAINNET_CHAIN_IDENTIFIER_BASE58
+        ));
     }
 }

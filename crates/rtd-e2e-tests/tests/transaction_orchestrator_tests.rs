@@ -1,13 +1,12 @@
 // Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::time::Duration;
 use rtd_core::authority_client::NetworkAuthorityClient;
 use rtd_core::test_utils::wait_for_tx;
 use rtd_core::transaction_driver::SubmitTransactionOptions;
 use rtd_core::transaction_orchestrator::TransactionOrchestrator;
 use rtd_macros::sim_test;
-use rtd_storage::key_value_store::TransactionKeyValueStore;
-use rtd_storage::key_value_store_metrics::KeyValueStoreMetrics;
 use rtd_test_transaction_builder::{
     batch_make_transfer_transactions, make_staking_transaction, make_transfer_rtd_transaction,
 };
@@ -20,8 +19,6 @@ use rtd_types::transaction_driver_types::{
     ExecuteTransactionRequestType, ExecuteTransactionRequestV3, ExecuteTransactionResponseV3,
     FinalizedEffects, IsTransactionExecutedLocally, TransactionSubmissionError,
 };
-use std::sync::Arc;
-use std::time::Duration;
 use test_cluster::TestClusterBuilder;
 use tokio::time::timeout;
 use tracing::info;
@@ -32,7 +29,10 @@ fn make_socket_addr() -> std::net::SocketAddr {
 
 #[sim_test]
 async fn test_blocking_execution() -> Result<(), anyhow::Error> {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let context = &mut test_cluster.wallet;
     let handle = &test_cluster.fullnode_handle.rtd_node;
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
@@ -81,18 +81,10 @@ async fn test_blocking_execution() -> Result<(), anyhow::Error> {
 
     assert!(executed_locally);
 
-    let metrics = KeyValueStoreMetrics::new_for_tests();
-    let kv_store = Arc::new(TransactionKeyValueStore::new(
-        "rocksdb",
-        metrics,
-        handle.state(),
-    ));
-
     assert!(
         handle
             .state()
-            .get_executed_transaction_and_effects(digest, kv_store)
-            .await
+            .get_executed_transaction_and_effects(digest)
             .is_ok()
     );
 
@@ -111,6 +103,7 @@ async fn test_fullnode_wal_log() -> Result<(), anyhow::Error> {
     }
     telemetry_subscribers::init_for_testing();
     let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
         .with_epoch_duration_ms(600000)
         .build()
         .await;
@@ -192,7 +185,10 @@ async fn test_fullnode_wal_log() -> Result<(), anyhow::Error> {
 #[sim_test]
 async fn test_transaction_orchestrator_reconfig() {
     telemetry_subscribers::init_for_testing();
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let epoch = test_cluster.fullnode_handle.rtd_node.with(|node| {
         node.transaction_orchestrator()
             .unwrap()
@@ -241,7 +237,10 @@ async fn test_tx_across_epoch_boundaries() {
     let total_tx_cnt = 1;
     let (result_tx, mut result_rx) = tokio::sync::mpsc::channel::<FinalizedEffects>(total_tx_cnt);
 
-    let test_cluster = TestClusterBuilder::new().build().await;
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let tx = make_transfer_rtd_transaction(&test_cluster.wallet, None, None).await;
     let authorities = test_cluster.swarm.validator_node_handles();
 
@@ -322,7 +321,10 @@ async fn execute_with_orchestrator(
 
 #[sim_test]
 async fn execute_transaction_v3() -> Result<(), anyhow::Error> {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let context = &mut test_cluster.wallet;
     let handle = &test_cluster.fullnode_handle.rtd_node;
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
@@ -380,7 +382,10 @@ async fn execute_transaction_v3() -> Result<(), anyhow::Error> {
 
 #[sim_test]
 async fn execute_transaction_v3_staking_transaction() -> Result<(), anyhow::Error> {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let context = &mut test_cluster.wallet;
     let handle = &test_cluster.fullnode_handle.rtd_node;
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
@@ -444,7 +449,10 @@ async fn test_early_validation_with_old_object_version() -> Result<(), anyhow::E
     // transaction's requested version, catching ObjectVersionUnavailableForConsumption errors
     // before submission to consensus.
 
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let context = &mut test_cluster.wallet;
     let handle = &test_cluster.fullnode_handle.rtd_node;
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
@@ -535,7 +543,10 @@ async fn test_early_validation_with_old_object_version() -> Result<(), anyhow::E
 
 #[sim_test]
 async fn test_early_validation_no_side_effects() -> Result<(), anyhow::Error> {
-    let mut test_cluster = TestClusterBuilder::new().build().await;
+    let mut test_cluster = TestClusterBuilder::new()
+        .with_num_validators(4)
+        .build()
+        .await;
     let context = &mut test_cluster.wallet;
     let handle = &test_cluster.fullnode_handle.rtd_node;
     let orchestrator = handle.with(|n| n.transaction_orchestrator().as_ref().unwrap().clone());
