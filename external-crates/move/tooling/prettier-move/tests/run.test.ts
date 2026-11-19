@@ -46,14 +46,14 @@ fs.readdirSync(__dirname).forEach((dir) => {
 // this test makes such a change loud and deliberate.
 describe('plugin defaults', () => {
     it('groups imports by package and uses the module label form', async () => {
-        const src = 'module a::m;\n\nuse sui::b::B;\nuse sui::a::A;\n\nfun f(_: A, _: B) {}\n';
+        const src = 'module a::m;\n\nuse rtd::b::B;\nuse rtd::a::A;\n\nfun f(_: A, _: B) {}\n';
         const result = await prettier.format(src, {
             // @ts-ignore
             plugins: [plugin],
             parser: 'move',
         });
         assert.ok(result.startsWith('module a::m;'), 'default useModuleLabel=true keeps the label');
-        assert.ok(result.includes('use sui::{a::A, b::B};'), 'default autoGroupImports=package');
+        assert.ok(result.includes('use rtd::{a::A, b::B};'), 'default autoGroupImports=package');
     });
 
     it('converts a single braces module to the label form by default', async () => {

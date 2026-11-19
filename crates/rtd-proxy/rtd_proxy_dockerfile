@@ -1,0 +1,3 @@
+FROM gcr.io/distroless/cc-debian12
+
+COPY --chmod=755 rtd-proxy /opt/rtd/bin/rtd-proxy

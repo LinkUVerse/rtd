@@ -6,7 +6,7 @@ later work — the hands-on order workflow). The docs pull each chunk in with
 that type-checks.
 
 Standalone package (excluded from the root pnpm workspace because it pins
-`@mysten/sui` 2.x). Build it on its own:
+`@linku/rtd` 2.x). Build it on its own:
 
 ```sh
 npm install
@@ -22,6 +22,6 @@ commit. It reads a Testnet key from `DEEPBOOK_DOCS_TESTNET_KEY` (env only, never
 logged) and prints digests for maintainer verification:
 
 ```sh
-export DEEPBOOK_DOCS_TESTNET_KEY='suiprivkey1...'   # same shell
+export DEEPBOOK_DOCS_TESTNET_KEY='rtdprivkey1...'   # same shell
 npm install && npx tsx run.mts
 ```

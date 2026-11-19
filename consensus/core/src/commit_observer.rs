@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::Duration};
@@ -33,8 +33,8 @@ use crate::{
 /// acknowledgements during recovery.
 ///
 /// Commit is persisted in store before the CommittedSubDag is sent to the commit handler.
-/// When Sui recovers, it blocks until the commits it knows about are recovered. So consensus
-/// must be able to quickly recover the commits it has sent to Sui.
+/// When Rtd recovers, it blocks until the commits it knows about are recovered. So consensus
+/// must be able to quickly recover the commits it has sent to Rtd.
 pub(crate) struct CommitObserver {
     context: Arc<Context>,
     dag_state: Arc<RwLock<DagState>>,
@@ -389,7 +389,7 @@ impl CommitObserver {
 #[cfg(test)]
 mod tests {
     use consensus_types::block::BlockRef;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
     use parking_lot::RwLock;
     use rstest::rstest;
     use tokio::time::timeout;

@@ -1,0 +1,1338 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::collections::VecDeque;
+use std::ops::Range;
+use std::time::Instant;
+
+use futures::StreamExt;
+use futures::stream::BoxStream;
+use rtd_inverted_index::BitmapQuery;
+use rtd_inverted_index::ScanDirection;
+use rtd_rpc::field::FieldMaskTree;
+use rtd_rpc::proto::rtd::rpc::v2::Checkpoint;
+use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsResponse;
+use rtd_rpc::proto::rtd::rpc::v2::QueryEnd;
+use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use tracing::info;
+
+use crate::RpcError;
+use crate::RpcService;
+use crate::grpc::v2::ledger_service::get_checkpoint::get_checkpoint;
+use crate::ledger_history::cursor::LedgerPoint;
+use crate::ledger_history::cursor::Position;
+use crate::ledger_history::filter::transaction_filter_to_query;
+use crate::ledger_history::query_options::LedgerWindow;
+use crate::ledger_history::query_options::QueryOptions;
+use crate::ledger_history::query_options::RangeExhaustion;
+use crate::ledger_history::query_options::ResolvedCheckpointRange;
+use crate::ledger_history::query_options::ResolvedScan;
+use crate::ledger_history::query_options::ScanWindow;
+use crate::ledger_history::query_options::below_serving_floor;
+use crate::ledger_history::query_options::validate_checkpoint_bounds;
+use crate::ledger_history::row_placement::RowPlacement;
+use crate::ledger_history::watermark::RangeEnd;
+use crate::metrics::ListRequestMetrics;
+use crate::metrics::ListStreamMetrics;
+use crate::read_mask_defaults;
+
+use super::bitmap_scan::DrainedBitmapHits;
+use super::bitmap_scan::LedgerBitmapKind;
+use super::bitmap_scan::PendingBitmapBucket;
+use super::bitmap_scan::TX_BITMAP_BUCKET_SIZE;
+use super::bitmap_scan::drain_bitmap_hits_with_budget;
+use super::chunked_scan::ChunkArgs;
+use super::chunked_scan::ChunkedScan;
+use super::chunked_scan::ScanChunkDone;
+use super::chunked_scan::cancelled;
+use super::chunked_scan::scan_limit_or_range;
+use super::chunked_scan::spawn_list_chunk;
+use super::ledger_read::checkpoint_hi_exclusive;
+use super::ledger_read::checkpoint_to_tx_range;
+use super::ledger_read::clamp_checkpoints_to_serving_floor;
+use super::ledger_read::clamp_to_serving_floor;
+use super::ledger_read::get_tx_seq_digest_multi;
+use super::ledger_read::place_frontier;
+use super::ledger_read::reject_window_below_serving_floor;
+use super::ledger_read::remaining_range_after;
+use super::ledger_read::serving_floor_error_or;
+use crate::ledger_history::watermark::advance_covered_bound_before_checkpoint;
+use crate::ledger_history::watermark::boundary_cursor_cp;
+use crate::ledger_history::watermark::boundary_watermark;
+use crate::ledger_history::watermark::item_watermark;
+use crate::ledger_history::watermark::merge_covered_checkpoint_bound;
+
+const METHOD: &str = "list_checkpoints";
+
+fn resolution(read_mask: &FieldMaskTree) -> &'static str {
+    if read_mask.contains(Checkpoint::OBJECTS_FIELD.name) {
+        "objects"
+    } else if read_mask.contains(Checkpoint::CONTENTS_FIELD.name)
+        || read_mask.contains(Checkpoint::TRANSACTIONS_FIELD.name)
+    {
+        "transactions"
+    } else {
+        "summary"
+    }
+}
+
+pub(crate) type ListCheckpointsStream =
+    BoxStream<'static, Result<ListCheckpointsResponse, RpcError>>;
+
+pub(crate) async fn list_checkpoints(
+    service: RpcService,
+    request: ListCheckpointsRequest,
+) -> Result<ListCheckpointsStream, RpcError> {
+    let started = Instant::now();
+    let start_checkpoint = request.start_checkpoint;
+    let end_checkpoint = request.end_checkpoint;
+    let filter = request.filter;
+    let request_options = request.options;
+    let filtered = filter.is_some();
+    validate_checkpoint_bounds(start_checkpoint, end_checkpoint)?;
+    let read_mask = read_mask_defaults::validate_read_mask::<Checkpoint>(
+        request.read_mask,
+        read_mask_defaults::CHECKPOINT,
+    )?;
+    let mut request_metrics = ListRequestMetrics::new(
+        service
+            .list_metrics
+            .as_ref()
+            .map(|metrics| metrics.stream_metrics(METHOD, resolution(&read_mask))),
+        started,
+    );
+    let ledger_history = service.config.ledger_history();
+    let endpoint = ledger_history.list_checkpoints();
+    let bitmap_bucket_scan_budget = ledger_history.bitmap_bucket_scan_budget();
+    let chunk_bucket_scan_budget = ledger_history.chunk_bucket_scan_budget();
+    let max_bitmap_filter_literals = ledger_history.max_bitmap_filter_literals();
+    let options = QueryOptions::checkpoints_from_proto(
+        request_options.as_ref(),
+        endpoint.default_limit_items,
+        endpoint.max_limit_items,
+    )?;
+    let limit_items = options.limit_items;
+    let ordering = options.ordering;
+    let filter_query = filter
+        .as_ref()
+        .map(|filter| transaction_filter_to_query(filter, max_bitmap_filter_literals))
+        .transpose()?;
+
+    let initial_state = CheckpointScanState::Init {
+        start_checkpoint,
+        end_checkpoint,
+        filter_query,
+    };
+
+    Ok(async_stream::try_stream! {
+        let chunk_metrics = request_metrics.chunk_metrics();
+        let mut scan = ChunkedScan::new(
+            initial_state,
+            limit_items,
+            endpoint.chunk_max,
+            bitmap_bucket_scan_budget,
+            move |state, args: ChunkArgs| {
+                spawn_checkpoint_chunk(
+                    service.clone(),
+                    state,
+                    read_mask.clone(),
+                    options.clone(),
+                    args.scan_budget,
+                    chunk_bucket_scan_budget,
+                    args.chunk_item_limit,
+                    args.remaining_request_item_limit,
+                    args.cancel,
+                    chunk_metrics.clone(),
+                )
+            },
+        );
+
+        let mut covered_checkpoint_bound = None;
+        while let Some(mut response) = scan.next_item().await? {
+            if let Some(checkpoint) = response
+                .watermark
+                .as_ref()
+                .and_then(|watermark| watermark.checkpoint)
+            {
+                covered_checkpoint_bound = Some(checkpoint);
+            }
+            let is_data = response.checkpoint.is_some();
+            let item_limit_reached =
+                is_data && scan.produced() == limit_items && scan.exhausted();
+            if item_limit_reached {
+                let mut end = QueryEnd::default();
+                end.reason = Some(QueryEndReason::ItemLimit as i32);
+                response.end = Some(end);
+                request_metrics.finish_success(
+                    QueryEndReason::ItemLimit,
+                    filtered.then(|| scan.bitmap_buckets_evaluated()),
+                );
+            }
+            request_metrics.observe_frame(&response, is_data);
+            let yield_started = request_metrics.yield_clock();
+            yield response;
+            request_metrics.observe_yield_wait(yield_started);
+        }
+
+        let bitmap_buckets_evaluated = filtered.then(|| scan.bitmap_buckets_evaluated());
+        let produced = scan.produced();
+        let chunk_terminal = scan.into_terminal().expect("query emits terminal state");
+        let terminal_reason = match super::query_end::effective_terminal_reason(
+            produced,
+            limit_items,
+            chunk_terminal.reason(),
+        ) {
+            Ok(terminal_reason) => terminal_reason,
+            Err(error) => {
+                // Below its item limit, the scan reached this server's serving floor: hand back
+                // the watermark at the floor, then fail, since everything below it is pruned.
+                let response =
+                    watermark_response(chunk_terminal.into_watermark(covered_checkpoint_bound));
+                request_metrics.observe_frame(&response, false);
+                let yield_started = request_metrics.yield_clock();
+                yield response;
+                request_metrics.observe_yield_wait(yield_started);
+                Err::<(), _>(error)?;
+                return;
+            }
+        };
+        if terminal_reason != QueryEndReason::ItemLimit {
+            let terminal_watermark = chunk_terminal.into_watermark(covered_checkpoint_bound);
+            let response = end_response(terminal_watermark, terminal_reason);
+            request_metrics.observe_frame(&response, false);
+            request_metrics.finish_success(terminal_reason, bitmap_buckets_evaluated);
+            let yield_started = request_metrics.yield_clock();
+            yield response;
+            request_metrics.observe_yield_wait(yield_started);
+        }
+        info!(
+            filtered,
+            limit_items,
+            ?ordering,
+            emitted = produced,
+            ?terminal_reason,
+            elapsed_ms = started.elapsed().as_millis(),
+            "list_checkpoints: done"
+        );
+    }
+    .boxed())
+}
+
+fn spawn_checkpoint_chunk(
+    service: RpcService,
+    state: CheckpointScanState,
+    read_mask: FieldMaskTree,
+    options: QueryOptions,
+    scan_budget: usize,
+    chunk_scan_budget: usize,
+    chunk_item_limit: usize,
+    remaining_request_item_limit: usize,
+    cancel: CancellationToken,
+    metrics: Option<ListStreamMetrics>,
+) -> JoinHandle<Result<CheckpointChunkDone, RpcError>> {
+    spawn_list_chunk(metrics, move |metrics| {
+        next_checkpoint_chunk(
+            service,
+            state,
+            read_mask,
+            options,
+            scan_budget,
+            chunk_scan_budget,
+            chunk_item_limit,
+            remaining_request_item_limit,
+            &cancel,
+            metrics,
+        )
+    })
+}
+
+#[derive(Clone)]
+enum CheckpointScanState {
+    Init {
+        start_checkpoint: Option<u64>,
+        end_checkpoint: Option<u64>,
+        filter_query: Option<BitmapQuery>,
+    },
+    Unfiltered {
+        range: Range<u64>,
+        range_end: RangeEnd,
+    },
+    Filtered {
+        query: BitmapQuery,
+        tx_range: Option<Range<u64>>,
+        pending_bucket: Option<PendingBitmapBucket>,
+        buffered_cp_seqs: VecDeque<u64>,
+        last_cp_seq: Option<u64>,
+        covered_checkpoint_bound: Option<u64>,
+        /// The window's first checkpoint in scan direction; no coverage claim passes it.
+        entry_checkpoint: u64,
+        range_end: RangeEnd,
+    },
+}
+
+type CheckpointChunkDone = ScanChunkDone<CheckpointScanState, ListCheckpointsResponse>;
+
+fn next_checkpoint_chunk(
+    service: RpcService,
+    state: CheckpointScanState,
+    read_mask: FieldMaskTree,
+    options: QueryOptions,
+    scan_budget: usize,
+    chunk_scan_budget: usize,
+    chunk_item_limit: usize,
+    remaining_request_item_limit: usize,
+    cancel: &CancellationToken,
+    metrics: Option<&ListStreamMetrics>,
+) -> Result<CheckpointChunkDone, RpcError> {
+    match state {
+        CheckpointScanState::Init {
+            start_checkpoint,
+            end_checkpoint,
+            filter_query,
+        } => {
+            let checkpoint_range = ResolvedCheckpointRange::from_request(
+                start_checkpoint,
+                end_checkpoint,
+                checkpoint_hi_exclusive(&service)?,
+                &options,
+            )?;
+            reject_window_below_serving_floor(
+                &service,
+                &checkpoint_range.range,
+                start_checkpoint,
+                &options,
+            )?;
+            let (mut cp_range, window) =
+                resolve_cp_range(checkpoint_range, start_checkpoint, end_checkpoint, &options)
+                    .map_err(|error| {
+                        serving_floor_error_or(&service, start_checkpoint, &options, error)
+                    })?;
+            if cancel.is_cancelled() {
+                return Err(cancelled());
+            }
+            // Clamp the resolved window's low end to the serving floor
+            // before either scan shape consumes it: checkpoints below
+            // the floor are pruned, and rendering one would fail the
+            // whole stream. An open-ended low end is raised to the
+            // floor; an explicit sub-floor `start_checkpoint` or
+            // `after` cursor is `OutOfRange`, matching the tx and
+            // event scans. `cp_range` is in checkpoint units, so the
+            // floor checkpoint serves as both the position and the
+            // checkpoint argument of the reconciliation. (The filtered
+            // arm's tx-space clamp below derives from the same floor
+            // and becomes a no-op backstop.)
+            if !cp_range.is_empty()
+                && let Some(floor) = clamp_checkpoints_to_serving_floor(
+                    &service,
+                    cp_range.range().start,
+                    start_checkpoint,
+                    &options,
+                )?
+            {
+                cp_range.apply_serving_floor(floor, floor, &options)?;
+            }
+            let range = cp_range.range();
+            let range_end = |cp_range: &ResolvedScan<u64>| {
+                cp_range.range_end(&window, &options, |checkpoint, _| Position::Checkpoints {
+                    checkpoint,
+                })
+            };
+            let mut terminal = range_end(&cp_range).terminal();
+            if range.is_empty() {
+                return Ok(CheckpointChunkDone {
+                    items: Vec::new(),
+                    produced: 0,
+                    next_state: None,
+                    terminal,
+                    remaining_scan_budget: scan_budget,
+                });
+            }
+            let state = if let Some(query) = filter_query {
+                let mut tx_range = checkpoint_to_tx_range(&service, range)?;
+                if !tx_range.is_empty()
+                    && let Some(floor) = clamp_to_serving_floor(
+                        &service,
+                        tx_range.start,
+                        start_checkpoint,
+                        &options,
+                    )?
+                {
+                    apply_serving_floor_to_filtered_window(
+                        &mut tx_range,
+                        &mut cp_range,
+                        floor.tx_seq,
+                        floor.checkpoint,
+                        &options,
+                    )?;
+                    terminal = range_end(&cp_range).terminal();
+                }
+                if tx_range.is_empty() {
+                    return Ok(CheckpointChunkDone {
+                        items: Vec::new(),
+                        produced: 0,
+                        next_state: None,
+                        terminal,
+                        remaining_scan_budget: scan_budget,
+                    });
+                }
+                CheckpointScanState::Filtered {
+                    query,
+                    tx_range: Some(tx_range),
+                    pending_bucket: None,
+                    buffered_cp_seqs: VecDeque::new(),
+                    last_cp_seq: None,
+                    covered_checkpoint_bound: None,
+                    entry_checkpoint: cp_range.entry_checkpoint,
+                    range_end: range_end(&cp_range),
+                }
+            } else {
+                CheckpointScanState::Unfiltered {
+                    range,
+                    range_end: range_end(&cp_range),
+                }
+            };
+            next_checkpoint_chunk(
+                service,
+                state,
+                read_mask,
+                options,
+                scan_budget,
+                chunk_scan_budget,
+                chunk_item_limit,
+                remaining_request_item_limit,
+                cancel,
+                metrics,
+            )
+        }
+        CheckpointScanState::Unfiltered { range, range_end } => next_unfiltered_checkpoint_chunk(
+            service,
+            range,
+            range_end,
+            read_mask,
+            options,
+            scan_budget,
+            chunk_item_limit,
+            cancel,
+            metrics,
+        ),
+        CheckpointScanState::Filtered {
+            query,
+            tx_range,
+            pending_bucket,
+            buffered_cp_seqs,
+            last_cp_seq,
+            covered_checkpoint_bound,
+            entry_checkpoint,
+            range_end,
+        } => next_filtered_checkpoint_chunk(
+            service,
+            query,
+            tx_range,
+            pending_bucket,
+            buffered_cp_seqs,
+            last_cp_seq,
+            covered_checkpoint_bound,
+            entry_checkpoint,
+            range_end,
+            read_mask,
+            options,
+            scan_budget,
+            chunk_scan_budget,
+            chunk_item_limit,
+            remaining_request_item_limit,
+            cancel,
+            metrics,
+        ),
+    }
+}
+
+fn next_unfiltered_checkpoint_chunk(
+    service: RpcService,
+    range: Range<u64>,
+    range_end: RangeEnd,
+    read_mask: FieldMaskTree,
+    options: QueryOptions,
+    scan_budget: usize,
+    chunk_item_limit: usize,
+    cancel: &CancellationToken,
+    metrics: Option<&ListStreamMetrics>,
+) -> Result<CheckpointChunkDone, RpcError> {
+    let ascending = options.is_ascending();
+    let seqs = checkpoint_seqs_for_range(range.clone(), ascending, chunk_item_limit);
+    let next_state = seqs
+        .last()
+        .and_then(|cp_seq| remaining_range_after(range, *cp_seq, ascending))
+        .map(|range| CheckpointScanState::Unfiltered { range, range_end });
+    if cancel.is_cancelled() {
+        return Err(cancelled());
+    }
+    let items = render_checkpoint_seqs(&service, seqs, &read_mask, &options, cancel, metrics)?;
+    let produced = items.len();
+    Ok(CheckpointChunkDone {
+        items,
+        produced,
+        next_state,
+        terminal: range_end.terminal(),
+        remaining_scan_budget: scan_budget,
+    })
+}
+
+fn next_filtered_checkpoint_chunk(
+    service: RpcService,
+    query: BitmapQuery,
+    mut tx_range: Option<Range<u64>>,
+    mut pending_bucket: Option<PendingBitmapBucket>,
+    mut buffered_cp_seqs: VecDeque<u64>,
+    mut last_cp_seq: Option<u64>,
+    mut covered_checkpoint_bound: Option<u64>,
+    entry_checkpoint: u64,
+    range_end: RangeEnd,
+    read_mask: FieldMaskTree,
+    options: QueryOptions,
+    scan_budget: usize,
+    chunk_scan_budget: usize,
+    chunk_item_limit: usize,
+    remaining_request_item_limit: usize,
+    cancel: &CancellationToken,
+    metrics: Option<&ListStreamMetrics>,
+) -> Result<CheckpointChunkDone, RpcError> {
+    let item_limit = chunk_item_limit.min(remaining_request_item_limit);
+    let mut remaining_scan_budget = scan_budget;
+    let mut cp_seqs = buffered_cp_seqs
+        .drain(..item_limit.min(buffered_cp_seqs.len()))
+        .collect::<Vec<_>>();
+    let mut scan_limit_frontier: Option<u64> = None;
+    // Per-chunk bucket cap, bounding this chunk's total scan across all drain
+    // iterations so a sparse scan yields incremental scan watermarks instead of
+    // one at the per-request limit. Stays <= remaining_scan_budget (both shrink
+    // by the same amount each iteration).
+    let mut chunk_scan_budget = remaining_scan_budget.min(chunk_scan_budget);
+
+    while cp_seqs.len() < item_limit
+        && (pending_bucket.is_some() || tx_range.is_some())
+        && chunk_scan_budget > 0
+    {
+        if cancel.is_cancelled() {
+            return Err(cancelled());
+        }
+        let tx_hit_limit =
+            remaining_request_item_limit.saturating_sub(cp_seqs.len() + buffered_cp_seqs.len());
+        if tx_hit_limit == 0 {
+            break;
+        }
+        let hits = drain_bitmap_hits_with_budget(
+            service.clone(),
+            LedgerBitmapKind::Transaction,
+            TX_BITMAP_BUCKET_SIZE,
+            query.clone(),
+            pending_bucket,
+            tx_range,
+            options.scan_direction(),
+            tx_hit_limit,
+            chunk_scan_budget,
+            cancel,
+        )?;
+        if cancel.is_cancelled() {
+            return Err(cancelled());
+        }
+        let drain_control = absorb_drained_checkpoint_hits(
+            &hits,
+            &mut cp_seqs,
+            &mut buffered_cp_seqs,
+            &mut last_cp_seq,
+            item_limit,
+            remaining_request_item_limit,
+            |tx_seqs| {
+                Ok(get_tx_seq_digest_multi(&service, tx_seqs)?
+                    .into_iter()
+                    .map(|row| row.checkpoint_number)
+                    .collect())
+            },
+        )?;
+        remaining_scan_budget -= hits.buckets_scanned;
+        chunk_scan_budget -= hits.buckets_scanned;
+        pending_bucket = hits.pending_bucket;
+        tx_range = hits.next_range;
+        if let CheckpointDrainControl::ScanLimit(frontier) = drain_control {
+            scan_limit_frontier = Some(frontier);
+            break;
+        }
+        if hits.items.is_empty() {
+            break;
+        }
+    }
+
+    if cp_seqs.len() + buffered_cp_seqs.len() == remaining_request_item_limit {
+        pending_bucket = None;
+        tx_range = None;
+    }
+
+    if let Some(&checkpoint) = cp_seqs.last() {
+        covered_checkpoint_bound =
+            merge_covered_checkpoint_bound(covered_checkpoint_bound, checkpoint, &options);
+    }
+
+    // A chunk scan-limit only ends the request when the request budget is also
+    // exhausted, or when there is no continuation state. Otherwise the next
+    // chunk resumes from the frontier carried below.
+    let request_scan_limit_reached = scan_limit_frontier.is_some()
+        && (remaining_scan_budget == 0
+            || (tx_range.is_none() && pending_bucket.is_none() && buffered_cp_seqs.is_empty()));
+    let frontier_watermark = match scan_limit_frontier {
+        Some(frontier) if request_scan_limit_reached || cp_seqs.is_empty() => {
+            Some(scan_checkpoint_watermark(
+                &service,
+                &options,
+                frontier,
+                covered_checkpoint_bound,
+                entry_checkpoint,
+            )?)
+        }
+        _ => None,
+    };
+    if let Some(checkpoint) = frontier_watermark
+        .as_ref()
+        .and_then(|watermark| watermark.checkpoint)
+    {
+        covered_checkpoint_bound =
+            merge_covered_checkpoint_bound(covered_checkpoint_bound, checkpoint, &options);
+    }
+    let next_state = if request_scan_limit_reached {
+        None
+    } else {
+        (!buffered_cp_seqs.is_empty() || pending_bucket.is_some() || tx_range.is_some()).then_some(
+            CheckpointScanState::Filtered {
+                query,
+                tx_range,
+                pending_bucket,
+                buffered_cp_seqs,
+                last_cp_seq,
+                covered_checkpoint_bound,
+                entry_checkpoint,
+                range_end,
+            },
+        )
+    };
+    let scan_watermark = if !request_scan_limit_reached && cp_seqs.is_empty() {
+        frontier_watermark.clone().map(watermark_response)
+    } else {
+        None
+    };
+
+    if cancel.is_cancelled() {
+        return Err(cancelled());
+    }
+    let mut items =
+        render_checkpoint_seqs(&service, cp_seqs, &read_mask, &options, cancel, metrics)?;
+    let produced = items.len();
+    if let Some(watermark) = scan_watermark {
+        items.push(watermark);
+    }
+    let terminal = scan_limit_or_range(request_scan_limit_reached, range_end, || {
+        frontier_watermark.ok_or_else(|| {
+            RpcError::new(
+                tonic::Code::Internal,
+                "request scan limit missing checkpoint frontier watermark",
+            )
+        })
+    })?;
+    Ok(CheckpointChunkDone {
+        items,
+        produced,
+        next_state,
+        terminal,
+        remaining_scan_budget,
+    })
+}
+
+enum CheckpointDrainControl {
+    Continue,
+    ScanLimit(u64),
+}
+
+fn absorb_drained_checkpoint_hits(
+    hits: &DrainedBitmapHits,
+    cp_seqs: &mut Vec<u64>,
+    buffered_cp_seqs: &mut VecDeque<u64>,
+    last_cp_seq: &mut Option<u64>,
+    item_limit: usize,
+    remaining_request_item_limit: usize,
+    checkpoint_seqs_for: impl FnOnce(&[u64]) -> Result<Vec<u64>, RpcError>,
+) -> Result<CheckpointDrainControl, RpcError> {
+    if !hits.items.is_empty() {
+        merge_checkpoint_seqs(
+            checkpoint_seqs_for(&hits.items)?,
+            cp_seqs,
+            buffered_cp_seqs,
+            last_cp_seq,
+            item_limit,
+            remaining_request_item_limit,
+        );
+    }
+
+    if let Some(frontier) = hits.scan_limit_frontier {
+        // Hits were earned before this authoritative first-unscanned frontier.
+        // Keep every mapped checkpoint ahead of the terminal, even when doing
+        // so temporarily exceeds the internal chunk target.
+        cp_seqs.extend(buffered_cp_seqs.drain(..));
+        Ok(CheckpointDrainControl::ScanLimit(frontier))
+    } else {
+        Ok(CheckpointDrainControl::Continue)
+    }
+}
+
+fn merge_checkpoint_seqs(
+    checkpoint_seqs: impl IntoIterator<Item = u64>,
+    cp_seqs: &mut Vec<u64>,
+    buffered_cp_seqs: &mut VecDeque<u64>,
+    last_cp_seq: &mut Option<u64>,
+    item_limit: usize,
+    remaining_request_item_limit: usize,
+) {
+    for cp_seq in checkpoint_seqs {
+        if *last_cp_seq == Some(cp_seq) {
+            continue;
+        }
+
+        *last_cp_seq = Some(cp_seq);
+        if cp_seqs.len() < item_limit {
+            cp_seqs.push(cp_seq);
+        } else if cp_seqs.len() + buffered_cp_seqs.len() < remaining_request_item_limit {
+            buffered_cp_seqs.push_back(cp_seq);
+        } else {
+            break;
+        }
+    }
+}
+
+/// Scan watermark for a filtered checkpoint chunk whose scan budget ran out.
+/// The filter scans the transaction bitmap, so the frontier is a
+/// `tx_sequence_number`; resolve it to checkpoint space. The ascending genesis
+/// frontier is placed in checkpoint 0 without a read: no checkpoint is fully
+/// covered, and checkpoint coordinate zero is a safe resume cursor.
+fn scan_checkpoint_watermark(
+    service: &RpcService,
+    options: &QueryOptions,
+    frontier: u64,
+    covered_checkpoint_bound: Option<u64>,
+    entry_checkpoint: u64,
+) -> Result<Watermark, RpcError> {
+    let placed = place_frontier(
+        service,
+        RowPlacement::transaction_boundary(frontier, options.scan_direction()),
+    )?;
+    Ok(checkpoint_frontier_watermark(
+        options,
+        placed.checkpoint,
+        covered_checkpoint_bound,
+        entry_checkpoint,
+    ))
+}
+
+fn checkpoint_frontier_watermark(
+    options: &QueryOptions,
+    checkpoint: u64,
+    covered_checkpoint_bound: Option<u64>,
+    entry_checkpoint: u64,
+) -> Watermark {
+    // The frontier lands partway through its checkpoint, so that checkpoint is
+    // not proven complete. Preserve any stronger proof already established by
+    // emitted checkpoints.
+    let boundary = advance_covered_bound_before_checkpoint(
+        covered_checkpoint_bound,
+        checkpoint,
+        entry_checkpoint,
+        options,
+    );
+    let cursor_cp = boundary_cursor_cp(checkpoint, options.scan_direction());
+    boundary_watermark(
+        Position::Checkpoints {
+            checkpoint: clamp_checkpoint_frontier_past_covered(
+                cursor_cp,
+                covered_checkpoint_bound,
+                options,
+            ),
+        },
+        boundary,
+    )
+}
+
+fn clamp_checkpoint_frontier_past_covered(
+    frontier: u64,
+    covered_checkpoint_bound: Option<u64>,
+    options: &QueryOptions,
+) -> u64 {
+    match covered_checkpoint_bound {
+        Some(covered) if options.is_ascending() => frontier.max(covered.saturating_add(1)),
+        Some(covered) => frontier.min(covered),
+        None => frontier,
+    }
+}
+
+fn checkpoint_seqs_for_range(
+    range: Range<u64>,
+    ascending: bool,
+    checkpoint_limit: usize,
+) -> Vec<u64> {
+    if ascending {
+        range.take(checkpoint_limit).collect()
+    } else {
+        range.rev().take(checkpoint_limit).collect()
+    }
+}
+
+fn render_checkpoint_seqs(
+    service: &RpcService,
+    seqs: Vec<u64>,
+    read_mask: &FieldMaskTree,
+    options: &QueryOptions,
+    cancel: &CancellationToken,
+    metrics: Option<&ListStreamMetrics>,
+) -> Result<Vec<ListCheckpointsResponse>, RpcError> {
+    let mut items = Vec::with_capacity(seqs.len());
+    // Per-chunk running boundary; monotonic across chunks because seqs are
+    // emitted in scan order.
+    let mut checkpoint_boundary: Option<u64> = None;
+    for cp_seq in seqs {
+        if cancel.is_cancelled() {
+            return Err(cancelled());
+        }
+        checkpoint_boundary = merge_covered_checkpoint_bound(checkpoint_boundary, cp_seq, options);
+        let render_started = metrics.map(|_| Instant::now());
+        let response = render_checkpoint_seq(
+            service,
+            cp_seq,
+            read_mask,
+            options.scan_direction(),
+            checkpoint_boundary,
+        )?;
+        if let (Some(metrics), Some(render_started)) = (metrics, render_started) {
+            metrics.observe_render(render_started.elapsed());
+        }
+        items.push(response);
+    }
+    Ok(items)
+}
+
+fn render_checkpoint_seq(
+    service: &RpcService,
+    cp_seq: u64,
+    read_mask: &FieldMaskTree,
+    direction: ScanDirection,
+    checkpoint_boundary: Option<u64>,
+) -> Result<ListCheckpointsResponse, RpcError> {
+    let read_mask = read_mask.to_field_mask();
+    let mut request = GetCheckpointRequest::default();
+    request.checkpoint_id = Some(CheckpointId::SequenceNumber(cp_seq));
+    request.read_mask = Some(read_mask);
+    let checkpoint = get_checkpoint(service, request)?
+        .checkpoint
+        .ok_or_else(|| {
+            RpcError::new(
+                tonic::Code::Internal,
+                format!("get_checkpoint returned no checkpoint for {cp_seq}"),
+            )
+        })?;
+    let watermark = item_watermark(
+        Position::Checkpoints { checkpoint: cp_seq },
+        direction,
+        checkpoint_boundary,
+    );
+    Ok(response_for(watermark, checkpoint))
+}
+
+/// [`ResolvedScan::<u64>::apply_serving_floor`]'s analogue for the filtered
+/// checkpoint scan, whose watermark metadata lives in `cp_range` (checkpoint
+/// space) beside a transaction-space scan window. A floor inside the window
+/// starts the scan there: an ascending scan's entry rises to the floor
+/// checkpoint, and a descending scan ends at the floor with
+/// [`RangeExhaustion::ServingFloor`]. A floor that consumes the whole window
+/// leaves nothing to cover and is `OutOfRange`.
+fn apply_serving_floor_to_filtered_window(
+    tx_range: &mut Range<u64>,
+    cp_range: &mut ResolvedScan<u64>,
+    floor_tx: u64,
+    floor_checkpoint: u64,
+    options: &QueryOptions,
+) -> Result<(), RpcError> {
+    if floor_tx >= tx_range.end {
+        return Err(below_serving_floor(floor_checkpoint));
+    }
+    tx_range.start = floor_tx;
+    if options.is_ascending() {
+        cp_range.entry_checkpoint = cp_range.entry_checkpoint.max(floor_checkpoint);
+    } else {
+        cp_range.end_public_position = LedgerPoint::checkpoint_start(floor_checkpoint);
+        cp_range.end_scan_position = floor_checkpoint;
+        cp_range.exhaustion = RangeExhaustion::ServingFloor { floor_checkpoint };
+    }
+    Ok(())
+}
+
+fn resolve_cp_range(
+    cp_range: ResolvedCheckpointRange,
+    start_checkpoint: Option<u64>,
+    end_checkpoint: Option<u64>,
+    options: &QueryOptions,
+) -> Result<(ResolvedScan<u64>, ScanWindow<u64>), RpcError> {
+    let range = cp_range.range.clone();
+    let ledger = LedgerWindow::checkpoints(&range, start_checkpoint, end_checkpoint);
+    let window = ScanWindow::whole_checkpoints(range, ledger);
+    let resolved = ResolvedScan::<u64>::resolve(cp_range, window.clone(), options)?;
+    Ok((resolved, window))
+}
+
+fn response_for(watermark: Watermark, message: Checkpoint) -> ListCheckpointsResponse {
+    let mut response = ListCheckpointsResponse::default();
+    response.checkpoint = Some(message);
+    response.watermark = Some(watermark);
+    response
+}
+
+fn watermark_response(watermark: Watermark) -> ListCheckpointsResponse {
+    let mut response = ListCheckpointsResponse::default();
+    response.watermark = Some(watermark);
+    response
+}
+
+fn end_response(watermark: Watermark, reason: QueryEndReason) -> ListCheckpointsResponse {
+    let mut end = QueryEnd::default();
+    end.reason = Some(reason as i32);
+
+    let mut response = ListCheckpointsResponse::default();
+    response.watermark = Some(watermark);
+    response.end = Some(end);
+    response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rtd_rpc::proto::rtd::rpc::v2::Ordering;
+    use rtd_rpc::proto::rtd::rpc::v2::QueryOptions as ProtoQueryOptions;
+
+    use crate::ledger_history::cursor::CursorToken;
+    use crate::ledger_history::watermark::ScanTerminal;
+
+    use crate::ledger_history::query_options::ScanBounds;
+    use crate::ledger_history::query_options::assert_below_serving_floor_error;
+
+    fn options(ascending: bool) -> QueryOptions {
+        let mut proto = ProtoQueryOptions::default();
+        if !ascending {
+            proto.ordering = Some(Ordering::Descending as i32);
+        }
+        QueryOptions::checkpoints_from_proto(Some(&proto), 100, 100).unwrap()
+    }
+
+    #[test]
+    fn resolution_uses_validated_read_mask() {
+        use rtd_rpc::field::FieldMask;
+        use rtd_rpc::field::FieldMaskUtil;
+
+        for (mask, expected) in [
+            ("digest", "summary"),
+            ("contents", "transactions"),
+            ("transactions", "transactions"),
+            ("objects", "objects"),
+            ("objects,transactions", "objects"),
+        ] {
+            let read_mask = read_mask_defaults::validate_read_mask::<Checkpoint>(
+                Some(FieldMask::from_str(mask)),
+                read_mask_defaults::CHECKPOINT,
+            )
+            .unwrap();
+
+            assert_eq!(resolution(&read_mask), expected, "read mask: {mask}");
+        }
+    }
+
+    /// The filtered checkpoint scan's serving-floor reconciliation mirrors
+    /// [`ResolvedScan::<u64>::apply_serving_floor`]: a floor inside the window
+    /// moves the scan start plus the direction-relevant checkpoint metadata,
+    /// and a descending scan ends at the floor with
+    /// [`RangeExhaustion::ServingFloor`]; a floor at/past the window's end
+    /// consumes it and is `OutOfRange` in both directions.
+    #[test]
+    fn filtered_window_serving_floor_matrix() {
+        // (ascending, floor_tx, floor_cp, expected: tx_range, entry, end_public_position,
+        // end_scan_position, exhaustion)
+        // Window: txs 0..40 spanning checkpoints 0..=8. A floor tx inside
+        // the window maps to a checkpoint inside the interval (tx 20 -> cp 4).
+        for (
+            ascending,
+            floor_tx,
+            floor_cp,
+            expected_range,
+            entry,
+            end_public_position,
+            end_scan_position,
+            exhaustion,
+        ) in [
+            // Floor inside: ascending raises the entry claim only.
+            (
+                true,
+                20,
+                4,
+                20..40,
+                4,
+                LedgerPoint::checkpoint_start(8),
+                40,
+                RangeExhaustion::CheckpointBound,
+            ),
+            // Floor inside: descending ends at the floor.
+            (
+                false,
+                20,
+                4,
+                20..40,
+                8,
+                LedgerPoint::checkpoint_start(4),
+                4,
+                RangeExhaustion::ServingFloor {
+                    floor_checkpoint: 4,
+                },
+            ),
+        ] {
+            let options = options(ascending);
+            let mut tx_range = 0..40u64;
+            let mut cp_range = filtered_window(ascending);
+            apply_serving_floor_to_filtered_window(
+                &mut tx_range,
+                &mut cp_range,
+                floor_tx,
+                floor_cp,
+                &options,
+            )
+            .unwrap();
+            let context = format!("floor_tx {floor_tx} asc {ascending}");
+            assert_eq!(tx_range, expected_range, "{context}");
+            assert_eq!(cp_range.entry_checkpoint, entry, "{context}");
+            assert_eq!(
+                cp_range.end_public_position, end_public_position,
+                "{context}"
+            );
+            assert_eq!(cp_range.end_scan_position, end_scan_position, "{context}");
+            assert_eq!(cp_range.exhaustion, exhaustion, "{context}");
+        }
+
+        // Floor at / past the window end: consumed in both directions.
+        for ascending in [true, false] {
+            for floor_tx in [40, 50] {
+                let options = options(ascending);
+                let mut tx_range = 0..40u64;
+                let mut cp_range = filtered_window(ascending);
+                let error = apply_serving_floor_to_filtered_window(
+                    &mut tx_range,
+                    &mut cp_range,
+                    floor_tx,
+                    10,
+                    &options,
+                )
+                .expect_err("a consumed window is OutOfRange");
+                assert_below_serving_floor_error(error, 10);
+            }
+        }
+    }
+
+    /// The checkpoint metadata of a filtered scan over checkpoints 0..=8 (txs 0..40).
+    fn filtered_window(ascending: bool) -> ResolvedScan<u64> {
+        let (entry_checkpoint, end_checkpoint, end_scan_position, window_claim) = if ascending {
+            (0, 8, 40, Some(7))
+        } else {
+            (8, 0, 0, Some(0))
+        };
+        ResolvedScan {
+            bounds: ScanBounds::from_range(0..9),
+            entry_checkpoint,
+            end_public_position: LedgerPoint::checkpoint_start(end_checkpoint),
+            end_scan_position,
+            exhaustion: RangeExhaustion::CheckpointBound,
+            window_claim,
+        }
+    }
+
+    #[test]
+    fn scan_limit_drain_hits_precede_terminal_and_resume_without_replay() {
+        for (
+            case,
+            ascending,
+            first_tx_hits,
+            first_checkpoint_hits,
+            frontier,
+            resumed_tx_hits,
+            resumed_checkpoint_hits,
+            expected_cursor,
+        ) in [
+            (
+                "ascending",
+                true,
+                vec![10, 12, 13],
+                vec![4, 5, 5],
+                14,
+                vec![14, 15, 16],
+                vec![6, 6, 7],
+                6,
+            ),
+            (
+                "descending",
+                false,
+                vec![16, 14, 13],
+                vec![7, 6, 6],
+                12,
+                vec![12, 11, 10],
+                vec![5, 5, 4],
+                6,
+            ),
+        ] {
+            let first = DrainedBitmapHits {
+                items: first_tx_hits.clone(),
+                pending_bucket: None,
+                next_range: if ascending {
+                    Some(frontier..20)
+                } else {
+                    Some(0..frontier)
+                },
+                buckets_scanned: 1,
+                scan_limit_frontier: Some(frontier),
+            };
+            let mut emitted = Vec::new();
+            let mut buffered = VecDeque::new();
+            let mut last_checkpoint = None;
+            let drain_control = absorb_drained_checkpoint_hits(
+                &first,
+                &mut emitted,
+                &mut buffered,
+                &mut last_checkpoint,
+                1,
+                100,
+                |tx_hits| {
+                    assert_eq!(tx_hits, first_tx_hits.as_slice(), "{case}");
+                    Ok(first_checkpoint_hits)
+                },
+            )
+            .unwrap();
+            assert!(
+                matches!(
+                    drain_control,
+                    CheckpointDrainControl::ScanLimit(scan_frontier)
+                        if scan_frontier == frontier
+                ),
+                "{case}",
+            );
+            assert_eq!(
+                emitted,
+                if ascending { vec![4, 5] } else { vec![7, 6] },
+                "{case}",
+            );
+            assert!(buffered.is_empty(), "{case}");
+
+            let options = options(ascending);
+            let terminal_watermark = checkpoint_frontier_watermark(
+                &options,
+                if ascending { 6 } else { 5 },
+                emitted.last().copied(),
+                if ascending { 4 } else { 7 },
+            );
+            let terminal = end_response(terminal_watermark, QueryEndReason::ScanLimit);
+            let frames = emitted
+                .iter()
+                .copied()
+                .map(|checkpoint| (Some(checkpoint), false))
+                .chain(std::iter::once((None, terminal.end.is_some())))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                frames,
+                emitted
+                    .iter()
+                    .copied()
+                    .map(|checkpoint| (Some(checkpoint), false))
+                    .chain(std::iter::once((None, true)))
+                    .collect::<Vec<_>>(),
+                "{case}: every earned checkpoint must be emitted exactly once before ScanLimit",
+            );
+            assert_eq!(
+                terminal.watermark.as_ref().and_then(|wm| wm.checkpoint),
+                emitted.last().copied(),
+                "{case}: terminal proof must cover the emitted checkpoint without skipping it",
+            );
+            assert_eq!(
+                CursorToken::decode(
+                    terminal
+                        .watermark
+                        .as_ref()
+                        .and_then(|wm| wm.cursor.as_ref())
+                        .expect("scan-limit cursor"),
+                )
+                .unwrap(),
+                CursorToken::boundary(Position::Checkpoints {
+                    checkpoint: expected_cursor,
+                }),
+                "{case}",
+            );
+
+            let resumed = DrainedBitmapHits {
+                items: resumed_tx_hits.clone(),
+                pending_bucket: None,
+                next_range: None,
+                buckets_scanned: 1,
+                scan_limit_frontier: None,
+            };
+            let mut suffix = Vec::new();
+            let resume_control = absorb_drained_checkpoint_hits(
+                &resumed,
+                &mut suffix,
+                &mut buffered,
+                &mut last_checkpoint,
+                100,
+                100,
+                |tx_hits| {
+                    assert_eq!(tx_hits, resumed_tx_hits.as_slice(), "{case}");
+                    Ok(resumed_checkpoint_hits)
+                },
+            )
+            .unwrap();
+            assert!(
+                matches!(resume_control, CheckpointDrainControl::Continue),
+                "{case}",
+            );
+            assert_eq!(
+                suffix,
+                if ascending { vec![6, 7] } else { vec![5, 4] },
+                "{case}: resuming at the terminal frontier must return the exact suffix",
+            );
+        }
+    }
+
+    #[test]
+    fn scan_limit_checkpoint_frontiers_are_clamped_past_emitted_coverage() {
+        for (case, ascending, checkpoint, covered, expected_cursor, expected_proof) in [
+            (
+                "ascending frontier maps to emitted checkpoint",
+                true,
+                10,
+                Some(10),
+                11,
+                Some(10),
+            ),
+            (
+                "ascending frontier advances to new checkpoint",
+                true,
+                12,
+                Some(10),
+                12,
+                Some(11),
+            ),
+            (
+                "ascending genesis does not fabricate proof",
+                true,
+                0,
+                None,
+                0,
+                None,
+            ),
+            (
+                "ascending genesis preserves prior proof",
+                true,
+                0,
+                Some(5),
+                6,
+                Some(5),
+            ),
+            (
+                "ascending terminal proof does not regress",
+                true,
+                8,
+                Some(10),
+                11,
+                Some(10),
+            ),
+            (
+                "descending frontier maps to emitted checkpoint",
+                false,
+                10,
+                Some(10),
+                10,
+                Some(10),
+            ),
+            (
+                "descending frontier advances to new checkpoint",
+                false,
+                8,
+                Some(10),
+                9,
+                Some(9),
+            ),
+            (
+                "descending terminal proof does not regress",
+                false,
+                12,
+                Some(10),
+                10,
+                Some(10),
+            ),
+        ] {
+            let options = options(ascending);
+            let entry_checkpoint = if ascending { 0 } else { u64::MAX - 1 };
+            let watermark =
+                checkpoint_frontier_watermark(&options, checkpoint, covered, entry_checkpoint);
+            let expected_position = Position::Checkpoints {
+                checkpoint: expected_cursor,
+            };
+            assert_eq!(
+                CursorToken::decode(
+                    watermark
+                        .cursor
+                        .as_ref()
+                        .expect("checkpoint frontier cursor")
+                )
+                .unwrap(),
+                CursorToken::boundary(expected_position),
+                "{case}",
+            );
+            assert_eq!(watermark.checkpoint, expected_proof, "{case}");
+            assert_eq!(
+                watermark.cursor_position,
+                Some(
+                    LedgerPoint::checkpoint_start(expected_cursor)
+                        .to_ledger_position(&expected_position)
+                ),
+                "{case}: a checkpoint cursor names its own ledger point",
+            );
+            if let Some(covered) = covered {
+                if ascending && covered != u64::MAX {
+                    assert!(
+                        expected_cursor > covered,
+                        "{case}: ascending resume must exclude the covered checkpoint",
+                    );
+                } else if !ascending {
+                    assert!(
+                        expected_cursor <= covered,
+                        "{case}: descending resume must exclude the covered checkpoint",
+                    );
+                }
+            }
+
+            let terminal = ScanTerminal::ScanLimit { watermark };
+            let response =
+                end_response(terminal.into_watermark(covered), QueryEndReason::ScanLimit);
+            assert!(response.checkpoint.is_none(), "{case}");
+            assert_eq!(
+                response.watermark.as_ref().and_then(|wm| wm.checkpoint),
+                expected_proof,
+                "{case}",
+            );
+            assert_eq!(
+                response.end.as_ref().map(|end| end.reason()),
+                Some(QueryEndReason::ScanLimit),
+                "{case}",
+            );
+        }
+    }
+}

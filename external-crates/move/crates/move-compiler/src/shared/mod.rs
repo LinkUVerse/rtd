@@ -26,7 +26,7 @@ use crate::{
         ide::IDEInfo,
         unique_map::UniqueMap,
     },
-    sui_mode,
+    rtd_mode,
     typing::{
         ast as T,
         visitor::{TypingVisitor, TypingVisitorObj},
@@ -267,7 +267,7 @@ impl CompilationEnv {
         default_config: Option<PackageConfig>,
         files_to_compile: Option<BTreeSet<PathBuf>>,
     ) -> Self {
-        visitors.extend([sui_mode::typing::SuiTypeChecks.visitor()]);
+        visitors.extend([rtd_mode::typing::RtdTypeChecks.visitor()]);
 
         let mut known_filters_: BTreeMap<FilterName, Vec<DiagnosticsID>> = BTreeMap::new();
         for (name, expansion) in COMPILER_KNOWN_FILTERS.iter() {

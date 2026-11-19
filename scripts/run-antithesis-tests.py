@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Script to kick off Antithesis tests via the sui-operations repo.
+Script to kick off Antithesis tests via the rtd-operations repo.
 
-Requires sui-operations repo to be locally checked out. If SUI_OPS_REPO
-environment variable is not set, it defaults to ~/dev/sui-operations.
+Requires rtd-operations repo to be locally checked out. If RTD_OPS_REPO
+environment variable is not set, it defaults to ~/dev/rtd-operations.
 """
 
 import argparse
@@ -81,7 +81,7 @@ def format_cmd_for_output(cmd, description):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run Antithesis tests via sui-operations workflow",
+        description="Run Antithesis tests via rtd-operations workflow",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -114,7 +114,7 @@ def main():
     parser.add_argument(
         "-l", "--log-level",
         type=str,
-        help="Logging filter for sui-node (no spaces allowed)",
+        help="Logging filter for rtd-node (no spaces allowed)",
     )
     parser.add_argument(
         "-T", "--tidehunter-commit",
@@ -129,7 +129,7 @@ def main():
     parser.add_argument(
         "-S", "--stress-commit",
         type=str,
-        help="Sui repo sha for stress image",
+        help="Rtd repo sha for stress image",
     )
     parser.add_argument(
         "-p", "--protocol-override",
@@ -142,14 +142,14 @@ def main():
         help="Name to group test history",
     )
     parser.add_argument(
-        "-C", "--sui-commit",
+        "-C", "--rtd-commit",
         type=str,
-        help="Sui repo sha (default: current HEAD)",
+        help="Rtd repo sha (default: current HEAD)",
     )
     parser.add_argument(
         "-r", "--workflow-ref",
         type=str,
-        help="Branch/ref in sui-operations repo to run workflow from",
+        help="Branch/ref in rtd-operations repo to run workflow from",
     )
     parser.add_argument(
         "-n", "--dry-run",
@@ -164,13 +164,13 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine sui-operations repo path
-    sui_ops_repo = os.environ.get("SUI_OPS_REPO", os.path.expanduser("~/dev/sui-operations"))
+    # Determine rtd-operations repo path
+    rtd_ops_repo = os.environ.get("RTD_OPS_REPO", os.path.expanduser("~/dev/rtd-operations"))
 
-    if not os.path.isdir(sui_ops_repo):
+    if not os.path.isdir(rtd_ops_repo):
         print(
-            f"sui-operations repo directory {sui_ops_repo} does not exist. "
-            "Please make sure you have correctly set the sui-operations repo directory.",
+            f"rtd-operations repo directory {rtd_ops_repo} does not exist. "
+            "Please make sure you have correctly set the rtd-operations repo directory.",
             file=sys.stderr,
         )
         return 1
@@ -184,10 +184,10 @@ def main():
         print("Error: LOG_LEVEL cannot contain spaces", file=sys.stderr)
         return 1
 
-    # Determine sui_commit
-    sui_commit = args.sui_commit
-    if not sui_commit:
-        sui_commit = get_git_output(["rev-parse", "HEAD"])
+    # Determine rtd_commit
+    rtd_commit = args.rtd_commit
+    if not rtd_commit:
+        rtd_commit = get_git_output(["rev-parse", "HEAD"])
 
     # Determine commit and alt_commit based on split_version mode
     if args.split_version:
@@ -195,23 +195,23 @@ def main():
             commit = args.alt_commit
         else:
             commit = get_git_output(["merge-base", "origin/main", "HEAD"])
-        alt_commit = sui_commit
+        alt_commit = rtd_commit
     else:
-        commit = sui_commit
+        commit = rtd_commit
         alt_commit = args.alt_commit
 
     # Validate commits/refs exist on remote
     if not args.skip_validation:
         valid = True
-        if not validate_commit_on_remote(commit, "MystenLabs/sui", "commit"):
+        if not validate_commit_on_remote(commit, "LinkUVerse/rtd", "commit"):
             valid = False
-        if alt_commit and not validate_commit_on_remote(alt_commit, "MystenLabs/sui", "alt_commit"):
+        if alt_commit and not validate_commit_on_remote(alt_commit, "LinkUVerse/rtd", "alt_commit"):
             valid = False
-        if args.stress_commit and not validate_commit_on_remote(args.stress_commit, "MystenLabs/sui", "stress_commit"):
+        if args.stress_commit and not validate_commit_on_remote(args.stress_commit, "LinkUVerse/rtd", "stress_commit"):
             valid = False
-        if args.cli_commit and not validate_commit_on_remote(args.cli_commit, "MystenLabs/sui", "cli_commit"):
+        if args.cli_commit and not validate_commit_on_remote(args.cli_commit, "LinkUVerse/rtd", "cli_commit"):
             valid = False
-        if args.workflow_ref and not validate_ref_on_remote(args.workflow_ref, sui_ops_repo):
+        if args.workflow_ref and not validate_ref_on_remote(args.workflow_ref, rtd_ops_repo):
             valid = False
         if not valid:
             return 1
@@ -240,13 +240,13 @@ def main():
         cmd.extend(["-r", args.workflow_ref])
 
     cmd.append(".github/workflows/run-antithesis-tests.yaml")
-    cmd.extend(["-f", f"sui_commit={commit}"])
+    cmd.extend(["-f", f"rtd_commit={commit}"])
     cmd.extend(["-f", f"test_duration={args.test_duration}"])
 
     cmd.extend(["-f", f"description={description}"])
 
     if alt_commit:
-        cmd.extend(["-f", f"sui_commit_alt={alt_commit}"])
+        cmd.extend(["-f", f"rtd_commit_alt={alt_commit}"])
 
     if args.upgrade:
         cmd.extend(["-f", "test_type=upgrade"])
@@ -258,7 +258,7 @@ def main():
         cmd.extend(["-f", f"tidehunter_commit={args.tidehunter_commit}"])
 
     if args.cli_commit:
-        cmd.extend(["-f", f"sui_cli_commit={args.cli_commit}"])
+        cmd.extend(["-f", f"rtd_cli_commit={args.cli_commit}"])
 
     # Determine stress_commit: use explicit value, or default to the newest commit being tested
     stress_commit = args.stress_commit
@@ -286,7 +286,7 @@ def main():
         return 0
 
     # Execute the workflow
-    result = subprocess.run(cmd, cwd=sui_ops_repo)
+    result = subprocess.run(cmd, cwd=rtd_ops_repo)
     if result.returncode != 0:
         return result.returncode
 
@@ -295,7 +295,7 @@ def main():
         ["gh", "api", "user"],
         capture_output=True,
         text=True,
-        cwd=sui_ops_repo,
+        cwd=rtd_ops_repo,
     )
     gh_user = json.loads(gh_user_result.stdout).get("login")
 
@@ -314,7 +314,7 @@ def main():
         ],
         capture_output=True,
         text=True,
-        cwd=sui_ops_repo,
+        cwd=rtd_ops_repo,
     )
     run_id = run_list_result.stdout.strip()
     print(f"Run ID: {run_id}")
@@ -328,7 +328,7 @@ def main():
         ],
         capture_output=True,
         text=True,
-        cwd=sui_ops_repo,
+        cwd=rtd_ops_repo,
     )
     url = run_view_result.stdout.strip()
     print(f"URL: {url}")

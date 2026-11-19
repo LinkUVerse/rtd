@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Tests for the type size formula algebra (`LinearForm`/`MaxPlusForm`, the partial and arena

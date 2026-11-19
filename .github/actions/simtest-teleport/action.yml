@@ -1,4 +1,4 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 name: Simtest Teleport session
@@ -23,9 +23,9 @@ runs:
       uses: teleport-actions/auth@d48447391aa28b202c98ae3f3358097025c32511 # pin@v2.0.4
       with:
         # Specify the publicly accessible address of your Teleport proxy.
-        proxy: mysten.teleport.sh:443
+        proxy: linku.teleport.sh:443
         # Specify the name of the join token for your bot.
-        token: sui-simtest-token
+        token: rtd-simtest-token
         # The credentials must outlive a job that waits out a full 6h phase.
         certificate-ttl: 6h
     - name: Show Teleport cert details

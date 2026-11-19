@@ -1,0 +1,1332 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use prost::Message;
+use prost_types::FieldMask;
+use shared_crypto::intent::Intent;
+use rtd_keys::keystore::AccountKeystore;
+use rtd_macros::sim_test;
+use rtd_rpc::proto::google::rpc::ErrorInfo;
+use rtd_rpc::proto::rtd::rpc::v2::Argument;
+use rtd_rpc::proto::rtd::rpc::v2::Bcs;
+use rtd_rpc::proto::rtd::rpc::v2::Command;
+use rtd_rpc::proto::rtd::rpc::v2::ErrorReason;
+use rtd_rpc::proto::rtd::rpc::v2::ExecuteTransactionRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ExecutionError;
+use rtd_rpc::proto::rtd::rpc::v2::GasPayment;
+use rtd_rpc::proto::rtd::rpc::v2::Input;
+use rtd_rpc::proto::rtd::rpc::v2::MoveCall;
+use rtd_rpc::proto::rtd::rpc::v2::ObjectReference;
+use rtd_rpc::proto::rtd::rpc::v2::ProgrammableTransaction;
+use rtd_rpc::proto::rtd::rpc::v2::SimulateTransactionRequest;
+use rtd_rpc::proto::rtd::rpc::v2::Transaction;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionExpiration as ProtoTransactionExpiration;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionKind;
+use rtd_rpc::proto::rtd::rpc::v2::TransferObjects;
+use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
+use rtd_rpc::proto::rtd::rpc::v2::execution_error::ExecutionErrorKind;
+use rtd_rpc::proto::rtd::rpc::v2::simulate_transaction_request::TransactionChecks as ProtoTransactionChecks;
+use rtd_rpc::proto::rtd::rpc::v2::transaction_execution_service_client::TransactionExecutionServiceClient;
+use rtd_rpc::proto::rtd::rpc::v2::transaction_expiration::TransactionExpirationKind;
+use rtd_rpc_api::Client;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::gas_coin::GAS;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Command as RtdCommand;
+use rtd_types::transaction::{ObjectArg, TransactionData, TransactionDataAPI};
+use test_cluster::{TestCluster, TestClusterBuilder};
+
+fn proto_to_response(
+    proto: rtd_rpc::proto::rtd::rpc::v2::SimulateTransactionResponse,
+) -> (
+    rtd_types::transaction::TransactionData,
+    rtd_types::effects::TransactionEffects,
+    Option<rtd_types::effects::TransactionEvents>,
+) {
+    let executed_transaction = proto.transaction.unwrap();
+    let transaction = executed_transaction
+        .transaction
+        .unwrap()
+        .bcs
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    let effects = executed_transaction
+        .effects
+        .unwrap()
+        .bcs
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    let events = executed_transaction
+        .events
+        .map(|events| events.bcs.unwrap().deserialize().unwrap());
+
+    (transaction, effects, events)
+}
+
+#[sim_test]
+async fn resolve_transaction_simple_transfer() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+    let recipient = RtdAddress::random_for_testing_only();
+
+    let (sender, mut gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    gas.sort_by_key(|object_ref| object_ref.0);
+    let obj_to_send = gas.first().unwrap().0;
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![
+            {
+                let mut message = Input::default();
+                message.object_id = Some(obj_to_send.to_canonical_string(true));
+                message
+            },
+            {
+                let mut message = Input::default();
+                message.literal = Some(Box::new(recipient.to_string().into()));
+                message
+            },
+        ];
+        ptb.commands = vec![Command::from({
+            let mut message = TransferObjects::default();
+            message.objects = vec![Argument::new_input(0)];
+            message.address = Some(Argument::new_input(1));
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, effects_from_simulation, _events) = proto_to_response(resolved);
+
+    let signed_transaction = test_cluster.wallet.sign_transaction(&transaction).await;
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+    assert_eq!(effects_from_simulation, effects);
+}
+
+#[sim_test]
+async fn simulate_transaction_read_mask_selects_command_outputs_without_transaction() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+    let (sender, mut gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    gas.sort_by_key(|object_ref| object_ref.0);
+
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder
+        .pay_rtd(vec![RtdAddress::random_for_testing_only()], vec![500])
+        .unwrap();
+    let transaction_data = TransactionData::new_programmable(
+        sender,
+        vec![gas[0]],
+        builder.finish(),
+        50_000_000,
+        test_cluster.wallet.get_reference_gas_price().await.unwrap(),
+    );
+
+    let mut transaction = Transaction::default();
+    transaction.bcs = Some(Bcs::serialize(&transaction_data).unwrap());
+
+    let mut request = SimulateTransactionRequest::new(transaction);
+    request.set_checks(ProtoTransactionChecks::Enabled);
+    request.read_mask = Some(FieldMask {
+        paths: vec!["command_outputs".to_owned()],
+    });
+
+    let response = alpha_client
+        .simulate_transaction(request)
+        .await
+        .unwrap()
+        .into_inner();
+
+    // This mask is intentionally narrow. The command outputs require VM execution data, but the
+    // executed transaction wrapper is expensive and should stay absent unless explicitly requested.
+    assert!(response.transaction.is_none());
+    assert_eq!(response.command_outputs.len(), 2);
+    assert!(!response.command_outputs[0].mutated_by_ref.is_empty());
+    assert!(!response.command_outputs[0].return_values.is_empty());
+    assert!(response.command_outputs[1].mutated_by_ref.is_empty());
+    assert!(response.command_outputs[1].return_values.is_empty());
+}
+
+#[sim_test]
+async fn resolve_transaction_transfer_with_sponsor() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+    let recipient = RtdAddress::random_for_testing_only();
+
+    let (sender, gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    let obj_to_send = gas.first().unwrap().0;
+    let sponsor = test_cluster.wallet.get_addresses()[1];
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![
+            {
+                let mut message = Input::default();
+                message.object_id = Some(obj_to_send.to_canonical_string(true));
+                message
+            },
+            {
+                let mut message = Input::default();
+                message.literal = Some(Box::new(recipient.to_string().into()));
+                message
+            },
+        ];
+        ptb.commands = vec![Command::from({
+            let mut message = TransferObjects::default();
+            message.objects = vec![Argument::new_input(0)];
+            message.address = Some(Argument::new_input(1));
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+    unresolved_transaction.gas_payment = Some({
+        let mut message = GasPayment::default();
+        message.owner = Some(sponsor.to_string());
+        message
+    });
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, effects_from_simulation, _events) = proto_to_response(resolved);
+
+    let sender_sig = test_cluster
+        .wallet
+        .config
+        .keystore
+        .sign_secure(&sender, &transaction, Intent::rtd_transaction())
+        .await
+        .unwrap();
+    let sponsor_sig = test_cluster
+        .wallet
+        .config
+        .keystore
+        .sign_secure(&sponsor, &transaction, Intent::rtd_transaction())
+        .await
+        .unwrap();
+
+    let signed_transaction =
+        rtd_types::transaction::Transaction::from_data(transaction, vec![sender_sig, sponsor_sig]);
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+    assert_eq!(effects_from_simulation, effects);
+}
+
+#[sim_test]
+async fn resolve_transaction_borrowed_shared_object() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    let sender = test_cluster.wallet.get_addresses()[0];
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![{
+            let mut message = Input::default();
+            message.object_id = Some("0x6".to_owned());
+            message
+        }];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x2".to_owned());
+            message.module = Some("clock".to_owned());
+            message.function = Some("timestamp_ms".to_owned());
+            message.arguments = vec![Argument::new_input(0)];
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, _effects, _events) = proto_to_response(resolved);
+
+    let signed_transaction = test_cluster.wallet.sign_transaction(&transaction).await;
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+}
+
+#[sim_test]
+async fn resolve_transaction_mutable_shared_object() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    let (sender, mut gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    gas.sort_by_key(|object_ref| object_ref.0);
+    let obj_to_stake = gas.first().unwrap().0;
+
+    let validator_address = test_cluster.swarm.config().validator_configs()[0].rtd_address();
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![
+            {
+                let mut message = Input::default();
+                message.object_id = Some("0x5".to_owned());
+                message
+            },
+            {
+                let mut message = Input::default();
+                message.object_id = Some(obj_to_stake.to_canonical_string(true));
+                message
+            },
+            {
+                let mut message = Input::default();
+                message.literal = Some(Box::new(validator_address.to_string().into()));
+                message
+            },
+        ];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x3".to_owned());
+            message.module = Some("rtd_system".to_owned());
+            message.function = Some("request_add_stake".to_owned());
+            message.arguments = vec![
+                Argument::new_input(0),
+                Argument::new_input(1),
+                Argument::new_input(2),
+            ];
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, effects_from_simulation, _events) = proto_to_response(resolved);
+
+    let signed_transaction = test_cluster.wallet.sign_transaction(&transaction).await;
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+    assert_eq!(effects_from_simulation, effects);
+}
+
+#[sim_test]
+async fn resolve_transaction_insufficient_gas() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    // Test the case where we don't have enough coins/gas for the required budget
+    let sender = RtdAddress::random_for_testing_only(); // random account with no RTD
+    let mut unresolved_transaction = read_clock_transaction();
+    unresolved_transaction.sender = Some(sender.to_string());
+
+    let error = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    assert_contains(error.message(), "Unable to perform gas selection");
+
+    // With no coins to load, the account needs the budget that an account with one coin gets.
+    let expected_budget =
+        single_coin_budget(&test_cluster, &mut alpha_client, read_clock_transaction()).await;
+    let error_info = extract_error_info(&error);
+    assert_insufficient_gas_balance_error_info(&error_info, sender, expected_budget, 0, 0);
+}
+
+#[sim_test]
+async fn resolve_transaction_insufficient_gas_for_requested_budget() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    // Fund a fresh account with a single 1 RTD coin, then request a budget its coins can't cover.
+    let sender = RtdAddress::random_for_testing_only();
+    let rgp = test_cluster.get_reference_gas_price().await;
+    test_cluster
+        .fund_address_and_return_gas(rgp, Some(1_000_000_000), sender)
+        .await;
+    let coin_balance = client
+        .get_balance(sender, &GAS::type_())
+        .await
+        .unwrap()
+        .coin_balance();
+    assert!(coin_balance > 0);
+    let requested_budget = coin_balance + 1_000_000_000;
+
+    let mut unresolved_transaction = read_clock_transaction();
+    unresolved_transaction.sender = Some(sender.to_string());
+    unresolved_transaction.gas_payment = Some({
+        let mut message = GasPayment::default();
+        message.owner = Some(sender.to_string());
+        message.budget = Some(requested_budget);
+        message
+    });
+
+    let error = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    assert_contains(
+        error.message(),
+        &format!("to satisfy required budget {requested_budget}."),
+    );
+
+    let error_info = extract_error_info(&error);
+    assert_insufficient_gas_balance_error_info(
+        &error_info,
+        sender,
+        requested_budget,
+        coin_balance,
+        0,
+    );
+}
+
+#[sim_test]
+async fn resolve_transaction_failing_transaction_without_gas() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    // `option::destroy_some` on `None` aborts, so the transaction fails regardless of the sender.
+    let mut aborting_transaction = Transaction::default();
+    aborting_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![{
+            let mut message = Input::default();
+            // BCS encoding of `Option<u64>::None`.
+            message.pure = Some(vec![0u8].into());
+            message
+        }];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x1".to_owned());
+            message.module = Some("option".to_owned());
+            message.function = Some("destroy_some".to_owned());
+            message.type_arguments = vec!["u64".to_owned()];
+            message.arguments = vec![Argument::new_input(0)];
+            message
+        })];
+        ptb
+    }));
+
+    // An unfunded sender gets the execution failure rather than an insufficient gas error.
+    let unfunded_sender = RtdAddress::random_for_testing_only();
+    let mut unfunded_transaction = aborting_transaction.clone();
+    unfunded_transaction.sender = Some(unfunded_sender.to_string());
+
+    let error = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unfunded_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    let details = rtd_rpc::proto::google::rpc::Status::decode(error.details())
+        .unwrap()
+        .details;
+    assert_eq!(details.len(), 2, "unexpected error details: {details:?}");
+
+    let error_info = details[0].to_msg::<ErrorInfo>().unwrap();
+    assert_eq!(
+        error_info.reason,
+        ErrorReason::TransactionExecutionFailed.as_str_name()
+    );
+    assert_eq!(error_info.domain, ErrorReason::DOMAIN);
+    assert_eq!(error_info.metadata.len(), 2);
+    assert_eq!(error_info.metadata["kind"], "MOVE_ABORT");
+    assert_eq!(error_info.metadata["command"], "0");
+
+    let execution_error = details[1].to_msg::<ExecutionError>().unwrap();
+    assert_eq!(execution_error.kind(), ExecutionErrorKind::MoveAbort);
+    assert_eq!(execution_error.command, Some(0));
+
+    // A funded sender still gets a simulation whose effects report the same failure.
+    let (funded_sender, _gas) = test_cluster.wallet.get_one_account().await.unwrap();
+    let mut funded_transaction = aborting_transaction;
+    funded_transaction.sender = Some(funded_sender.to_string());
+
+    let mut request =
+        SimulateTransactionRequest::new(funded_transaction).with_do_gas_selection(true);
+    request.read_mask = Some(FieldMask {
+        paths: vec!["transaction.effects.status".to_owned()],
+    });
+    let simulated = alpha_client
+        .simulate_transaction(request)
+        .await
+        .unwrap()
+        .into_inner();
+    let status = simulated
+        .transaction
+        .and_then(|transaction| transaction.effects)
+        .and_then(|effects| effects.status)
+        .expect("simulation response should carry the effects status");
+
+    assert_eq!(status.success, Some(false));
+    assert_eq!(status.error, Some(execution_error));
+}
+
+#[sim_test]
+async fn resolve_transaction_insufficient_gas_with_address_balance() {
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+        cfg.set_create_root_accumulator_object_for_testing(true);
+        cfg.enable_address_balance_gas_payments_for_testing();
+        cfg
+    });
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    // Give a fresh account one coin and an address balance, each too small to pay for gas.
+    const COIN_VALUE: u64 = 10_000;
+    const ADDRESS_BALANCE: u64 = 20_000;
+    let sender = RtdAddress::random_for_testing_only();
+    let rgp = test_cluster.get_reference_gas_price().await;
+    test_cluster
+        .fund_address_and_return_gas(rgp, Some(COIN_VALUE), sender)
+        .await;
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(sender),
+        ADDRESS_BALANCE,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    let mut unresolved_transaction = read_clock_transaction();
+    unresolved_transaction.sender = Some(sender.to_string());
+    let error = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    // The account's single coin adds no loading cost, so it needs the budget that any account with
+    // one coin gets.
+    let expected_budget =
+        single_coin_budget(&test_cluster, &mut alpha_client, read_clock_transaction()).await;
+    let error_info = extract_error_info(&error);
+    assert_insufficient_gas_balance_error_info(
+        &error_info,
+        sender,
+        expected_budget,
+        COIN_VALUE,
+        ADDRESS_BALANCE,
+    );
+}
+
+/// A transaction that reads the clock, with no sender or gas payment set.
+fn read_clock_transaction() -> Transaction {
+    let mut transaction = Transaction::default();
+    transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![{
+            let mut message = Input::default();
+            message.object_id = Some("0x6".to_owned());
+            message
+        }];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x2".to_owned());
+            message.module = Some("clock".to_owned());
+            message.function = Some("timestamp_ms".to_owned());
+            message.arguments = vec![Argument::new_input(0)];
+            message
+        })];
+        ptb
+    }));
+    transaction
+}
+
+/// The gas budget that simulate with gas selection resolves for `transaction` sent by a fresh
+/// account holding a single 1 RTD coin. Gas selection adds no loading cost for a single coin, so
+/// this is the server's budget estimate.
+async fn single_coin_budget(
+    test_cluster: &TestCluster,
+    alpha_client: &mut TransactionExecutionServiceClient<tonic::transport::Channel>,
+    mut transaction: Transaction,
+) -> u64 {
+    let sender = RtdAddress::random_for_testing_only();
+    let rgp = test_cluster.get_reference_gas_price().await;
+    test_cluster
+        .fund_address_and_return_gas(rgp, Some(1_000_000_000), sender)
+        .await;
+    transaction.sender = Some(sender.to_string());
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (resolved_transaction, effects, _events) = proto_to_response(resolved);
+    assert!(effects.status().is_ok());
+    assert_eq!(resolved_transaction.gas_data().payment.len(), 1);
+    resolved_transaction.gas_data().budget
+}
+
+/// Extracts the `ErrorInfo` detail from an error's status details.
+fn extract_error_info(status: &tonic::Status) -> ErrorInfo {
+    rtd_rpc::proto::google::rpc::Status::decode(status.details())
+        .unwrap()
+        .details
+        .iter()
+        .find_map(|detail| detail.to_msg::<ErrorInfo>().ok())
+        .expect("error status should carry an ErrorInfo detail")
+}
+
+/// Asserts that `error_info` describes an insufficient gas balance for `owner`, with the given
+/// required budget and balances.
+fn assert_insufficient_gas_balance_error_info(
+    error_info: &ErrorInfo,
+    owner: RtdAddress,
+    required_budget: u64,
+    coin_balance: u64,
+    address_balance: u64,
+) {
+    assert_eq!(
+        error_info.reason,
+        ErrorReason::InsufficientGasBalance.as_str_name()
+    );
+    assert_eq!(error_info.domain, ErrorReason::DOMAIN);
+    assert_eq!(error_info.metadata.len(), 4);
+    assert_eq!(error_info.metadata["owner"], owner.to_string());
+    assert_eq!(
+        error_info.metadata["requiredBudget"],
+        required_budget.to_string()
+    );
+    assert_eq!(error_info.metadata["coinBalance"], coin_balance.to_string());
+    assert_eq!(
+        error_info.metadata["addressBalance"],
+        address_balance.to_string()
+    );
+}
+
+fn assert_contains(haystack: &str, needle: &str) {
+    if !haystack.contains(needle) {
+        panic!("{haystack:?} does not contain {needle:?}");
+    }
+}
+
+#[sim_test]
+async fn resolve_transaction_gas_budget_clamping() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    let (sender, gas_coins) = test_cluster.wallet.get_one_account().await.unwrap();
+
+    // Use ALL gas coins - the test wallet has multiple coins that should exceed max gas budget
+    let gas_objects: Vec<_> = gas_coins
+        .iter()
+        .map(|obj_ref| {
+            let mut object_reference = ObjectReference::default();
+            object_reference.object_id = Some(obj_ref.0.to_canonical_string(true));
+            object_reference
+        })
+        .collect();
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![{
+            let mut message = Input::default();
+            message.object_id = Some("0x6".to_owned());
+            message
+        }];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x2".to_owned());
+            message.module = Some("clock".to_owned());
+            message.function = Some("timestamp_ms".to_owned());
+            message.arguments = vec![Argument::new_input(0)];
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+    unresolved_transaction.gas_payment = Some({
+        let mut message = GasPayment::default();
+        message.owner = Some(sender.to_string());
+        message.objects = gas_objects;
+        message
+    });
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, effects_from_simulation, _events) = proto_to_response(resolved);
+
+    // Budget should be populated based on the real estimated gas fee which should be far less than
+    // 1 rtd.
+    assert!(transaction.gas_data().budget > 0,);
+    assert!(transaction.gas_data().budget < 1_000_000_000,);
+
+    let signed_transaction = test_cluster.wallet.sign_transaction(&transaction).await;
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+    assert!(effects_from_simulation.status().is_ok());
+}
+
+#[sim_test]
+async fn resolve_transaction_insufficient_gas_with_payment_objects() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    let (sender, gas_coins) = test_cluster.wallet.get_one_account().await.unwrap();
+
+    // First, split a coin to create one with only 1 MIST
+    let coin_to_split = gas_coins[0];
+    let gas_for_split = gas_coins[1];
+
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let coin_arg = builder
+        .obj(ObjectArg::ImmOrOwnedObject(coin_to_split))
+        .unwrap();
+    // Split off 1M MIST (enough for min gas but not enough for actual execution)
+    let amt_arg = builder.pure(1_000_000u64).unwrap();
+    let split_result = builder.command(RtdCommand::SplitCoins(coin_arg, vec![amt_arg]));
+
+    let split_coin = match split_result {
+        rtd_types::transaction::Argument::Result(idx) => {
+            rtd_types::transaction::Argument::NestedResult(idx, 0)
+        }
+        _ => panic!("Expected Result argument"),
+    };
+    builder.transfer_arg(sender, split_coin);
+
+    let ptb = builder.finish();
+    let tx_data =
+        TransactionData::new_programmable(sender, vec![gas_for_split], ptb, 10_000_000, 1000);
+
+    let signed_tx = test_cluster.wallet.sign_transaction(&tx_data).await;
+
+    // Execute transaction and wait for checkpoint so indexes are updated
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+
+    let mut transaction = rtd_rpc::proto::rtd::rpc::v2::Transaction::default();
+    transaction.bcs = Some(Bcs::serialize(signed_tx.transaction_data()).unwrap());
+
+    let signatures = signed_tx
+        .tx_signatures()
+        .iter()
+        .map(|s| {
+            let mut message = UserSignature::default();
+            message.bcs = Some({
+                let mut message = Bcs::default();
+                message.value = Some(s.as_ref().to_owned().into());
+                message
+            });
+            message
+        })
+        .collect();
+
+    let mut request = ExecuteTransactionRequest::default();
+    request.transaction = Some(transaction);
+    request.signatures = signatures;
+    request.read_mask = Some(FieldMask {
+        paths: vec!["transaction".to_string(), "effects".to_string()],
+    });
+
+    let executed_tx = client
+        .execute_transaction_and_wait_for_checkpoint(request, std::time::Duration::from_secs(10))
+        .await
+        .unwrap()
+        .into_inner()
+        .transaction()
+        .to_owned();
+
+    // Just get the effects, the helper function already asserts success
+    let effects_proto = executed_tx.effects.unwrap();
+
+    // Convert effects to native type to find the created coin
+    let effects: rtd_types::effects::TransactionEffects =
+        effects_proto.bcs.unwrap().deserialize().unwrap();
+
+    // Find the newly created coin with 1M MIST from the effects
+    let tiny_coin = effects
+        .created()
+        .into_iter()
+        .map(|(obj_ref, _)| obj_ref)
+        .find(|obj_ref| obj_ref.0 != coin_to_split.0)
+        .expect("Should have created a new coin with 1M MIST");
+
+    // Now try to use this 1 MIST coin as gas payment for a transaction
+    let gas_objects = vec![{
+        let mut object_reference = ObjectReference::default();
+        object_reference.object_id = Some(tiny_coin.0.to_canonical_string(true));
+        object_reference
+    }];
+
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![{
+            let mut message = Input::default();
+            message.object_id = Some("0x6".to_owned());
+            message
+        }];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x2".to_owned());
+            message.module = Some("clock".to_owned());
+            message.function = Some("timestamp_ms".to_owned());
+            message.arguments = vec![Argument::new_input(0)];
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+    unresolved_transaction.gas_payment = Some({
+        let mut message = GasPayment::default();
+        message.owner = Some(sender.to_string());
+        message.objects = gas_objects;
+        // Don't specify budget - let it be estimated
+        message
+    });
+
+    // This should fail because the 1M MIST coin doesn't have enough balance
+    // to cover the estimated budget for the transaction
+    let error = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(
+        error.code(),
+        tonic::Code::InvalidArgument,
+        "Expected InvalidArgument error code"
+    );
+    assert_contains(
+        error.message(),
+        "Insufficient gas balance to cover estimated transaction cost.",
+    );
+}
+
+#[sim_test]
+async fn resolve_transaction_shared_object_with_generic_type_parameter() {
+    use rtd_test_transaction_builder::publish_basics_package_and_make_party_object;
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = Client::new(test_cluster.rpc_url()).unwrap();
+    let mut alpha_client =
+        TransactionExecutionServiceClient::connect(test_cluster.rpc_url().to_owned())
+            .await
+            .unwrap();
+
+    // Create a party object (which is a shared object with ConsensusAddressOwner)
+    let (package, party_object) =
+        publish_basics_package_and_make_party_object(&test_cluster.wallet).await;
+
+    let sender = test_cluster.wallet.get_addresses()[0];
+    let recipient = RtdAddress::random_for_testing_only();
+
+    // Create an unresolved transaction that passes the party object to public_transfer
+    // public_transfer has signature: public_transfer<T: key + store>(obj: T, recipient: address)
+    // This tests that objects passed by value to generic type parameters are marked as mutable
+    let mut unresolved_transaction = Transaction::default();
+    unresolved_transaction.kind = Some(TransactionKind::from({
+        let mut ptb = ProgrammableTransaction::default();
+        ptb.inputs = vec![
+            {
+                let mut message = Input::default();
+                message.object_id = Some(party_object.0.to_canonical_string(true));
+                message
+            },
+            {
+                let mut message = Input::default();
+                message.literal = Some(Box::new(recipient.to_string().into()));
+                message
+            },
+        ];
+        ptb.commands = vec![Command::from({
+            let mut message = MoveCall::default();
+            message.package = Some("0x2".to_owned());
+            message.module = Some("transfer".to_owned());
+            message.function = Some("public_transfer".to_owned());
+            message.type_arguments = vec![format!(
+                "{}::object_basics::Object",
+                package.0.to_canonical_string(true)
+            )];
+            message.arguments = vec![Argument::new_input(0), Argument::new_input(1)];
+            message
+        })];
+        ptb
+    }));
+    unresolved_transaction.sender = Some(sender.to_string());
+
+    let resolved = alpha_client
+        .simulate_transaction(
+            SimulateTransactionRequest::new(unresolved_transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+    let (transaction, effects_from_simulation, _events) = proto_to_response(resolved);
+
+    // Verify that the party object input was resolved and marked as mutable
+    let inputs = match transaction.kind() {
+        rtd_types::transaction::TransactionKind::ProgrammableTransaction(ptb) => &ptb.inputs,
+        _ => panic!("Expected ProgrammableTransaction"),
+    };
+    assert_eq!(inputs.len(), 2);
+
+    match &inputs[0] {
+        rtd_types::transaction::CallArg::Object(
+            rtd_types::transaction::ObjectArg::SharedObject { id, mutability, .. },
+        ) => {
+            assert_eq!(*id, party_object.0);
+            assert_eq!(
+                mutability,
+                &rtd_types::transaction::SharedObjectMutability::Mutable,
+                "Party object should be marked as mutable when passed by value to generic type parameter"
+            );
+        }
+        _ => panic!("Expected SharedObject input, got: {:?}", inputs[0]),
+    }
+
+    let signed_transaction = test_cluster.wallet.sign_transaction(&transaction).await;
+    let effects = client
+        .execute_transaction(&signed_transaction)
+        .await
+        .unwrap()
+        .effects;
+
+    assert!(effects.status().is_ok());
+    assert_eq!(effects_from_simulation, effects);
+}
+
+#[sim_test]
+async fn test_gas_selection_with_address_balance() {
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+        cfg.set_create_root_accumulator_object_for_testing(true);
+        cfg.enable_address_balance_gas_payments_for_testing();
+        cfg
+    });
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+
+    let receiver = test_cluster.get_address_1();
+
+    // Transfer some RTD to address balance, but not enough to pay for gas
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        10_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    let mut transaction = Transaction::default();
+    {
+        let ptb = transaction.kind_mut().programmable_transaction_mut();
+        ptb.set_inputs(vec![Input::default().with_object_id("0x6")]);
+        ptb.set_commands(vec![Command::from(
+            MoveCall::default()
+                .with_package("0x2")
+                .with_module("clock")
+                .with_function("timestamp_ms")
+                .with_arguments(vec![Argument::new_input(0)]),
+        )])
+    }
+    transaction.set_sender(receiver.to_string());
+
+    // First check that we still fallback to coin selection if we have a balance but not enough to
+    // pay for the required budget.
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction.clone()).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Assert that the txn simulated correctly
+    assert!(resolved.transaction().effects().status().success());
+    // Assert that gas coins is not empty which means we still used coins
+    assert!(
+        !resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+    assert!(resolved.transaction().effects().gas_object_opt().is_some());
+    // Coin-paid transactions need no validity window of their own, so the expiration is left
+    // alone unless simulate can restrict the transaction to this node's preferred proposers.
+    let kind = resolved.transaction().transaction().expiration().kind();
+    assert!(
+        matches!(
+            kind,
+            TransactionExpirationKind::None | TransactionExpirationKind::Validity
+        ),
+        "unexpected expiration kind: {kind:?}"
+    );
+
+    // Transfer some more RTD to address balance, enough to pay for gas
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        100_000_000_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    // Now check that we properly select address balance to use
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // Assert that the txn simulated correctly
+    assert!(resolved.transaction().effects().status().success());
+    // Assert that gas coins is empty which means we used address balance
+    assert!(
+        resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+    assert!(resolved.transaction().effects().gas_object_opt().is_none());
+    // There is an accumulator_write in effects
+    assert!(
+        resolved.transaction().effects().changed_objects()[0]
+            .accumulator_write_opt()
+            .is_some()
+    );
+    // Assert an epoch-scoped expiration was set: `Validity` when simulate could also name the
+    // transaction's proposers, `ValidDuring` otherwise.
+    let kind = resolved.transaction().transaction().expiration().kind();
+    assert!(
+        matches!(
+            kind,
+            TransactionExpirationKind::ValidDuring | TransactionExpirationKind::Validity
+        ),
+        "unexpected expiration kind: {kind:?}"
+    );
+}
+
+#[sim_test]
+async fn simulate_transaction_with_valid_during_expiration() {
+    let _guard = rtd_protocol_config::ProtocolConfig::apply_overrides_for_testing(|_, mut cfg| {
+        cfg.set_create_root_accumulator_object_for_testing(true);
+        cfg.enable_address_balance_gas_payments_for_testing();
+        cfg
+    });
+
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+
+    let mut client = rtd_rpc::Client::new(test_cluster.rpc_url()).unwrap();
+    let chain_id = test_cluster.get_chain_identifier();
+    let receiver = test_cluster.get_address_1();
+
+    // Fund the receiver's address balance with enough RTD to cover the gas budget.
+    let txn = rtd_test_transaction_builder::make_transfer_rtd_address_balance_transaction(
+        &test_cluster.wallet,
+        Some(receiver),
+        100_000_000_000,
+    )
+    .await;
+    super::super::execute_transaction(&mut client, &txn).await;
+
+    let current_epoch = test_cluster
+        .fullnode_handle
+        .rtd_node
+        .with(|node| node.state().epoch_store_for_testing().epoch());
+
+    let supplied_nonce: u32 = 0xdead_beef;
+    let supplied_chain_str = rtd_sdk_types::Digest::new(*chain_id.as_bytes()).to_string();
+
+    let mut transaction = Transaction::default();
+    {
+        let ptb = transaction.kind_mut().programmable_transaction_mut();
+        ptb.set_inputs(vec![Input::default().with_object_id("0x6")]);
+        ptb.set_commands(vec![Command::from(
+            MoveCall::default()
+                .with_package("0x2")
+                .with_module("clock")
+                .with_function("timestamp_ms")
+                .with_arguments(vec![Argument::new_input(0)]),
+        )])
+    }
+    transaction.set_sender(receiver.to_string());
+    transaction.set_expiration(
+        ProtoTransactionExpiration::default()
+            .with_kind(TransactionExpirationKind::ValidDuring)
+            .with_epoch(current_epoch.saturating_add(1))
+            .with_min_epoch(current_epoch)
+            .with_chain(supplied_chain_str.clone())
+            .with_nonce(supplied_nonce),
+    );
+
+    let resolved = client
+        .execution_client()
+        .simulate_transaction(
+            SimulateTransactionRequest::new(transaction).with_do_gas_selection(true),
+        )
+        .await
+        .unwrap()
+        .into_inner();
+
+    // The transaction must simulate successfully and have used the address balance for gas.
+    assert!(resolved.transaction().effects().status().success());
+    assert!(
+        resolved
+            .transaction()
+            .transaction()
+            .gas_payment()
+            .objects()
+            .is_empty()
+    );
+
+    // The supplied `ValidDuring` expiration must round-trip through the conversion unchanged.
+    let resolved_expiration = resolved.transaction().transaction().expiration();
+    assert_eq!(
+        resolved_expiration.kind(),
+        TransactionExpirationKind::ValidDuring
+    );
+    assert_eq!(resolved_expiration.epoch, Some(current_epoch + 1));
+    assert_eq!(resolved_expiration.min_epoch, Some(current_epoch));
+    assert!(resolved_expiration.min_timestamp.is_none());
+    assert!(resolved_expiration.max_timestamp.is_none());
+    assert_eq!(
+        resolved_expiration.chain.as_deref(),
+        Some(supplied_chain_str.as_str())
+    );
+    assert_eq!(resolved_expiration.nonce, Some(supplied_nonce));
+
+    // The BCS-encoded `TransactionData` must also carry the supplied `ValidDuring` expiration.
+    let (transaction_data, _, _) = proto_to_response(resolved);
+    assert!(matches!(
+        transaction_data.expiration(),
+        rtd_types::transaction::TransactionExpiration::ValidDuring {
+            min_epoch: Some(min),
+            max_epoch: Some(max),
+            min_timestamp: None,
+            max_timestamp: None,
+            chain,
+            nonce,
+        } if *min == current_epoch
+            && *max == current_epoch + 1
+            && *chain == chain_id
+            && *nonce == supplied_nonce
+    ));
+}
+
+#[test]
+fn valid_during_transaction_expiration_round_trips_through_proto() {
+    use rtd_types::transaction::TransactionExpiration;
+
+    let chain = rtd_types::digests::ChainIdentifier::from(
+        rtd_types::digests::CheckpointDigest::new([7u8; 32]),
+    );
+    let original = TransactionExpiration::ValidDuring {
+        min_epoch: Some(42),
+        max_epoch: Some(43),
+        min_timestamp: Some(1_700_000_000),
+        max_timestamp: Some(1_700_000_999),
+        chain,
+        nonce: 0xc0ffee,
+    };
+
+    let proto = ProtoTransactionExpiration::from(original.clone());
+    // Expiration timestamps are Unix seconds.
+    assert_eq!(proto.min_timestamp.unwrap().seconds, 1_700_000_000);
+    assert_eq!(proto.max_timestamp.unwrap().seconds, 1_700_000_999);
+    let round_tripped = TransactionExpiration::try_from(&proto).unwrap();
+
+    assert_eq!(round_tripped, original);
+}
+
+#[test]
+fn validity_transaction_expiration_round_trips_through_proto() {
+    use rtd_types::transaction::{AllowedProposers, TransactionExpiration};
+
+    let chain = rtd_types::digests::ChainIdentifier::from(
+        rtd_types::digests::CheckpointDigest::new([7u8; 32]),
+    );
+    let expiration = |allowed_proposers| TransactionExpiration::Validity {
+        min_epoch: Some(42),
+        max_epoch: Some(43),
+        min_timestamp: Some(1_700_000_000),
+        max_timestamp: Some(1_700_000_999),
+        chain,
+        nonce: 0xc0ffee,
+        allowed_proposers,
+    };
+
+    // The proposer set is the part that used to be dropped on the way through the proto.
+    for original in [
+        expiration(Some(AllowedProposers {
+            epoch: 42,
+            proposers: nonempty::nonempty![0, 2, 5],
+        })),
+        expiration(None),
+    ] {
+        let proto = ProtoTransactionExpiration::from(original.clone());
+        let round_tripped = TransactionExpiration::try_from(&proto).unwrap();
+        assert_eq!(round_tripped, original);
+    }
+}

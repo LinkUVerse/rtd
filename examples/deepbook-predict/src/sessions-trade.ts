@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#sessions-trade
-import type { MarketDescriptor, MintQuote, Side } from '@mysten/deepbook-v3/predict';
+import type { MarketDescriptor, MintQuote, Side } from '@linku/deepbook-v3/predict';
 import {
 	binaryRangeTicks,
 	getConfig,
@@ -11,8 +11,8 @@ import {
 	probabilityToRaw,
 	toGeneratedConfig,
 	usdcToRaw,
-} from '@mysten/deepbook-v3/predict';
-import { Transaction } from '@mysten/sui/transactions';
+} from '@linku/deepbook-v3/predict';
+import { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 import { NETWORK, UNDERLYING } from './config.js';
 import { admissibleStrike, tradeableMarket } from './markets.js';

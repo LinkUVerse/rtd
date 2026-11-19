@@ -1,1 +1,1 @@
-The runbook is now at https://docs.sui.io/operators/bridge-node-configuration
+The runbook is now at https://docs.rtd.io/operators/bridge-node-configuration

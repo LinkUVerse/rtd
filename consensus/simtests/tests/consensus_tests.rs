@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[cfg(msim)]
@@ -24,15 +24,15 @@ mod consensus_tests {
     use consensus_simtests::node::{AuthorityNode, Config};
     use consensus_types::block::{BlockRef, BlockTimestampMs, TransactionIndex};
     use fastcrypto::traits::{KeyPair as _, ToFromBytes as _};
-    use mysten_metrics::RegistryService;
-    use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-    use mysten_network::{Multiaddr, multiaddr::Protocol};
+    use linku_metrics::RegistryService;
+    use linku_metrics::monitored_mpsc::UnboundedReceiver;
+    use linku_network::{Multiaddr, multiaddr::Protocol};
     use parking_lot::Mutex;
     use prometheus::Registry;
     use rand::{Rng, SeedableRng as _, rngs::StdRng, seq::SliceRandom as _};
-    use sui_config::local_ip_utils;
-    use sui_macros::{clear_fail_point, register_fail_points, sim_test};
-    use sui_simulator::{
+    use rtd_config::local_ip_utils;
+    use rtd_macros::{clear_fail_point, register_fail_points, sim_test};
+    use rtd_simulator::{
         SimConfig,
         configs::{bimodal_latency_ms, env_config, uniform_latency_ms},
     };
@@ -335,7 +335,7 @@ mod consensus_tests {
     }
 
     #[sim_test(config = "test_config()")]
-    #[ignore = "requires the v3 timestamp and finalizer fixes in https://github.com/MystenLabs/sui/pull/27655"]
+    #[ignore = "requires the v3 timestamp and finalizer fixes in https://github.com/LinkUVerse/rtd/pull/27655"]
     async fn test_full_replay_restart_v3() {
         full_replay_restart(true, true).await;
     }
@@ -961,7 +961,7 @@ mod consensus_tests {
         let observer2_ip = local_ip_utils::get_new_ip();
 
         // Create Observer 1 - connects to validator
-        let observer1_dir = Arc::new(mysten_common::tempdir().unwrap());
+        let observer1_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer1_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([42; 32]));
 
@@ -1014,7 +1014,7 @@ mod consensus_tests {
         let observer1_monitor = observer1.consumer_monitor();
 
         // Create Observer 2 - connects to Observer 1
-        let observer2_dir = Arc::new(mysten_common::tempdir().unwrap());
+        let observer2_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer2_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([99; 32]));
 
@@ -1138,7 +1138,7 @@ mod consensus_tests {
         let mut transaction_clients = Vec::with_capacity(committee.size());
 
         for (authority_index, _) in committee.authorities() {
-            let db_dir = Arc::new(mysten_common::tempdir().unwrap());
+            let db_dir = Arc::new(linku_common::tempdir().unwrap());
             let mut parameters = default_parameters();
             parameters.db_path = db_dir.path().to_path_buf();
             parameters.observer.server_port = Some(9600 + authority_index.value() as u16);
@@ -1190,7 +1190,7 @@ mod consensus_tests {
         tracing::info!("Starting observer, catch-up target is commit {catchup_target}");
 
         // Late-start the observer against validator 0.
-        let observer_dir = Arc::new(mysten_common::tempdir().unwrap());
+        let observer_dir = Arc::new(linku_common::tempdir().unwrap());
         let observer_keypair =
             NetworkKeyPair::generate(&mut rand::rngs::StdRng::from_seed([42; 32]));
         let observer_ip = local_ip_utils::get_new_ip();
@@ -1329,7 +1329,7 @@ mod consensus_tests {
         transaction_verifier: Arc<dyn TransactionVerifier>,
         configure_params: impl FnOnce(&mut Parameters),
     ) -> AuthorityNode {
-        let db_dir = Arc::new(mysten_common::tempdir().unwrap());
+        let db_dir = Arc::new(linku_common::tempdir().unwrap());
         let mut parameters = default_parameters();
         parameters.db_path = db_dir.path().to_path_buf();
         configure_params(&mut parameters);
@@ -1446,10 +1446,10 @@ mod consensus_tests {
                     .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
                     .is_ok()
             {
-                let node_id = sui_simulator::current_simnode_id();
+                let node_id = rtd_simulator::current_simnode_id();
                 tracing::error!(%node_id, "Killing current node");
                 crash_sender.send(node_id).unwrap();
-                sui_simulator::task::shutdown_current_node();
+                rtd_simulator::task::shutdown_current_node();
             }
         });
 

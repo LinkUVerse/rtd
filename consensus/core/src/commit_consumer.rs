@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
 
 use consensus_config::Stake;
 use consensus_types::block::Round;
-use mysten_metrics::monitored_mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use linku_metrics::monitored_mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use parking_lot::Mutex;
 use tokio::sync::{SetOnce, watch};
 use tracing::debug;

@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 module coiner::coin_factory;
 
 use std::option;
 use std::vector;
-use sui::coin::{Self, Coin, TreasuryCap};
-use sui::transfer;
-use sui::tx_context::{Self, TxContext};
+use rtd::coin::{Self, Coin, TreasuryCap};
+use rtd::transfer;
+use rtd::tx_context::{Self, TxContext};
 
 public struct COIN_FACTORY has drop {}
 

@@ -45,8 +45,8 @@ gh pr view <n> --json number,title,body,author,baseRefName,headRefOid,isDraft,st
 The outcome is **Not applicable** if any of these hold:
 
 - The PR is closed, merged, or a draft.
-- The author is not a member of the MystenLabs organization. Check with
-  `gh api orgs/MystenLabs/members/<login>`, which succeeds only for members.
+- The author is not a member of the LinkUVerse organization. Check with
+  `gh api orgs/LinkUVerse/members/<login>`, which succeeds only for members.
 - The description has no `[review-tier: ...]` tag.
 
 ## Step 2 — Check eligibility

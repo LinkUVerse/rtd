@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#withdraw
-import type { Transaction } from '@mysten/sui/transactions';
+import type { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 
 // Withdrawing from the pool is queued exactly as a supply is, and it takes raw

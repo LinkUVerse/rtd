@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// ===========================================================================================
@@ -11,9 +11,9 @@
 /// ===========================================================================================
 module vesting::linear;
 
-use sui::balance::Balance;
-use sui::clock::Clock;
-use sui::coin::{Self, Coin};
+use rtd::balance::Balance;
+use rtd::clock::Clock;
+use rtd::coin::{Self, Coin};
 
 // === Errors ===
 #[error]

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Scope-based diagnostic filtering.
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn diagnostic_filter_registries_do_not_conflict() {
-        let known = known_diagnostic_filters(Flavor::Sui);
+        let known = known_diagnostic_filters(Flavor::Rtd);
         known_filter_map(&known);
     }
 }

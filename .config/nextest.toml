@@ -16,11 +16,11 @@ command = 'scripts/nextest/big-worker-stack.sh'
 # both `default` (local runs) and `ci` (CI uses `--profile ci`); a named setup
 # script runs once per test run regardless of how many rules reference it.
 [[profile.default.scripts]]
-filter = 'package(sui-indexer-alt-e2e-tests)'
+filter = 'package(rtd-indexer-alt-e2e-tests)'
 setup = 'big-worker-stack'
 
 [[profile.ci.scripts]]
-filter = 'package(sui-indexer-alt-e2e-tests)'
+filter = 'package(rtd-indexer-alt-e2e-tests)'
 setup = 'big-worker-stack'
 
 [profile.ci]
@@ -36,10 +36,10 @@ retries = 3
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [[profile.ci.overrides]]
-filter = 'package(sui-fork-e2e-tests)'
-# Every shell test spawns `sui start` (validator, fullnode, temporary PostgreSQL, indexer,
+filter = 'package(rtd-fork-e2e-tests)'
+# Every shell test spawns `rtd start` (validator, fullnode, temporary PostgreSQL, indexer,
 # consistent store, GraphQL, faucet) and then a fork, and the first test of a run may also link
-# the sui and sui-fork binaries, so allow ten minutes rather than five.
+# the rtd and rtd-fork binaries, so allow ten minutes rather than five.
 slow-timeout = { period = "120s", terminate-after = 5 }
 
 [profile.simtestnightly]

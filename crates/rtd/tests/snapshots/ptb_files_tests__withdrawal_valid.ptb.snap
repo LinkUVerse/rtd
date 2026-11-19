@@ -1,0 +1,18 @@
+---
+source: crates/rtd/tests/ptb_files_tests.rs
+expression: "&String::from_iter(normalized(results.join(\"\\n\").chars()))"
+---
+ === PREVIEW === 
+╭────────────────────────────────────────────────────────────────────────────────────╮
+│ PTB Preview                                                                        │
+├───────────┬────────────────────────────────────────────────────────────────────────┤
+│ command   │ values                                                                 │
+├───────────┼────────────────────────────────────────────────────────────────────────┤
+│ move-call │ 0x2::coin::redeem_funds<0x2::rtd::RTD> withdrawal(1000)                │
+│ move-call │ 0x2::coin::redeem_funds<0x2::rtd::RTD> withdrawal<0x2::rtd::RTD>(2000) │
+╰───────────┴────────────────────────────────────────────────────────────────────────╯
+ === BUILT PTB === 
+Input 0: FundsWithdrawal(amount: 1000, type: Balance<0x2::rtd::RTD>, source: Sender)
+Input 1: FundsWithdrawal(amount: 2000, type: Balance<0x2::rtd::RTD>, source: Sender)
+Command 0: MoveCall(0x0000000000000000000000000000000000000000000000000000000000000002::coin::redeem_funds<0x2::rtd::RTD>(Input(0)))
+Command 1: MoveCall(0x0000000000000000000000000000000000000000000000000000000000000002::coin::redeem_funds<0x2::rtd::RTD>(Input(1)))

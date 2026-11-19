@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#queue-sell
@@ -6,9 +6,9 @@ import type {
 	MarketCoordinates,
 	QueuedOrderPreview,
 	SellPlan,
-} from '@mysten/deepbook-v3/predict';
-import { cost } from '@mysten/deepbook-v3/predict';
-import type { Transaction } from '@mysten/sui/transactions';
+} from '@linku/deepbook-v3/predict';
+import { cost } from '@linku/deepbook-v3/predict';
+import type { Transaction } from '@linku/rtd/transactions';
 import { client } from './client.js';
 
 // Sell part or all of an Open record before expiry. The sell is a queued order

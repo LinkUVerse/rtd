@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{sync::Arc, time::SystemTime};
@@ -75,7 +75,7 @@ impl Context {
             unused_port,
         );
         let metrics = test_metrics();
-        let temp_dir = mysten_common::tempdir().unwrap();
+        let temp_dir = linku_common::tempdir().unwrap();
         let clock = Arc::new(Clock::default());
 
         let context = Context::new(

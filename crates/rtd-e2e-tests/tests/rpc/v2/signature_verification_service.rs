@@ -1,0 +1,538 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use fastcrypto::ed25519::Ed25519KeyPair;
+use fastcrypto::traits::KeyPair;
+use fastcrypto_pq::mldsa65::MLDSA65KeyPair;
+use fastcrypto_zkp::bn254::zk_login::ZkLoginInputs;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+use shared_crypto::intent::{Intent, IntentMessage, PersonalMessage};
+use rtd_keys::keystore::AccountKeystore;
+use rtd_macros::sim_test;
+use rtd_protocol_config::ProtocolConfig;
+use rtd_rpc::proto::rtd::rpc::v2::Bcs;
+use rtd_rpc::proto::rtd::rpc::v2::UserSignature;
+use rtd_rpc::proto::rtd::rpc::v2::VerifySignatureRequest;
+use rtd_rpc::proto::rtd::rpc::v2::VerifySignatureResponse;
+use rtd_rpc::proto::rtd::rpc::v2::signature_verification_service_client::SignatureVerificationServiceClient;
+use rtd_rpc::proto::rtd::rpc::v2::{ActiveJwk, Jwk, JwkId};
+use rtd_test_transaction_builder::TestTransactionBuilder;
+use rtd_types::address_alias::get_address_alias_state_obj_initial_shared_version;
+use rtd_types::base_types::{ObjectDigest, ObjectID, SequenceNumber, RtdAddress};
+use rtd_types::crypto::{PublicKey, Signature, RtdKeyPair, get_key_pair};
+use rtd_types::effects::{TransactionEffects, TransactionEffectsAPI};
+use rtd_types::multisig::{MultiSig, MultiSigPublicKey};
+use rtd_types::object::Owner;
+use rtd_types::signature::GenericSignature;
+use rtd_types::transaction::{CallArg, ObjectArg, SharedObjectMutability, TransactionData};
+use rtd_types::utils::{
+    PINNED_PROOF_ADDRESS_SEED, PINNED_V1_PROOF_JSON, PINNED_V2_PROOF_JSON, pinned_jwks,
+};
+use rtd_types::zk_login_authenticator::ZkLoginAuthenticator;
+use rtd_types::{RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_FRAMEWORK_PACKAGE_ID};
+use test_cluster::{TestCluster, TestClusterBuilder};
+use tonic::transport::Channel;
+
+#[sim_test]
+async fn test_verify_signature_zklogin() -> Result<(), anyhow::Error> {
+    if rtd_simulator::has_mainnet_protocol_config_override() {
+        return Ok(());
+    }
+
+    verify_signature_zklogin().await
+}
+
+#[sim_test]
+async fn test_verify_signature_zklogin_when_network_requires_v2() -> Result<(), anyhow::Error> {
+    if rtd_simulator::has_mainnet_protocol_config_override() {
+        return Ok(());
+    }
+
+    let _guard = ProtocolConfig::apply_overrides_for_testing(|_, mut config| {
+        config.set_zklogin_circuit_mode_for_testing(2);
+        config
+    });
+
+    verify_signature_zklogin().await
+}
+
+#[sim_test]
+async fn test_verify_signature_mldsa65() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut client = SignatureVerificationServiceClient::connect(test_cluster.rpc_url().to_owned())
+        .await
+        .unwrap();
+
+    let kp = RtdKeyPair::MLDSA65(MLDSA65KeyPair::generate(&mut rand::thread_rng()));
+    let address = RtdAddress::from(&kp.public());
+    let personal_message = PersonalMessage {
+        message: b"hello".to_vec(),
+    };
+    let intent_msg = IntentMessage::new(Intent::personal_message(), personal_message.clone());
+    let signature = GenericSignature::Signature(Signature::new_secure(&intent_msg, &kp));
+
+    let verify = |message: Vec<u8>, signature: &GenericSignature, address: Option<RtdAddress>| {
+        let mut request = VerifySignatureRequest::default();
+        request.message = Some(Bcs::from(message));
+        request.signature = Some({
+            let mut proto = UserSignature::default();
+            proto.bcs = Some(Bcs::from(signature.as_ref().to_owned()));
+            proto
+        });
+        request.address = address.map(|a| a.to_string());
+        request
+    };
+    let message = bcs::to_bytes(&personal_message).unwrap();
+
+    let response = client
+        .verify_signature(verify(message.clone(), &signature, Some(address)))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(true), "{:?}", response.reason);
+
+    let response = client
+        .verify_signature(verify(
+            bcs::to_bytes(&PersonalMessage {
+                message: b"other".to_vec(),
+            })
+            .unwrap(),
+            &signature,
+            None,
+        ))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(false));
+    assert!(response.reason.is_some());
+
+    // A hybrid committee: both members sign, the ML-DSA member verifies too.
+    let ed_kp = RtdKeyPair::Ed25519(get_key_pair().1);
+    let multisig_pk =
+        MultiSigPublicKey::new(vec![kp.public(), ed_kp.public()], vec![1, 1], 2).unwrap();
+    let multisig_address = RtdAddress::from(&multisig_pk);
+    let ed_signature: GenericSignature = Signature::new_secure(&intent_msg, &ed_kp).into();
+    let multisig = GenericSignature::MultiSig(
+        MultiSig::combine(vec![signature.clone(), ed_signature], multisig_pk).unwrap(),
+    );
+    let response = client
+        .verify_signature(verify(message, &multisig, Some(multisig_address)))
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(true), "{:?}", response.reason);
+}
+
+async fn verify_signature_zklogin() -> Result<(), anyhow::Error> {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .with_epoch_duration_ms(10000)
+        .with_default_jwks()
+        .build()
+        .await;
+    test_cluster.wait_for_epoch(Some(1)).await;
+    test_cluster.wait_for_authenticator_state_update().await;
+
+    let mut client = SignatureVerificationServiceClient::connect(test_cluster.rpc_url().to_owned())
+        .await
+        .unwrap();
+
+    // Construct a valid zkLogin transaction data, signature.
+    let (kp, pk_zklogin, inputs) = &rtd_types::utils::load_test_vectors(
+        "../rtd-types/src/unit_tests/zklogin_test_vectors.json",
+    )[1];
+
+    let zklogin_addr = (pk_zklogin).into();
+    let rgp = test_cluster.get_reference_gas_price().await;
+    let gas = test_cluster
+        .fund_address_and_return_gas(rgp, Some(20000000000), zklogin_addr)
+        .await;
+
+    let tx_data = TestTransactionBuilder::new(zklogin_addr, gas, rgp)
+        .transfer_rtd(None, RtdAddress::ZERO)
+        .build();
+    let msg = IntentMessage::new(Intent::rtd_transaction(), tx_data.clone());
+    let eph_sig = Signature::new_secure(&msg, kp);
+    let generic_sig = GenericSignature::ZkLoginAuthenticator(ZkLoginAuthenticator::new(
+        inputs.clone(),
+        2,
+        eph_sig.clone(),
+    ));
+
+    // construct all parameters for the query
+    let message = Bcs::from(bcs::to_bytes(&tx_data).unwrap());
+    let signature = Bcs::from(generic_sig.as_ref().to_owned());
+
+    let response = client
+        .verify_signature({
+            let mut request = VerifySignatureRequest::default();
+            request.message = Some(message.clone());
+            request.signature = Some({
+                let mut message = UserSignature::default();
+                message.bcs = Some(signature.clone());
+                message
+            });
+            request
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(true));
+    assert_eq!(response.reason, None);
+
+    // address checks pass
+    let response = client
+        .verify_signature({
+            let mut request = VerifySignatureRequest::default();
+            request.message = Some(message.clone());
+            request.signature = Some({
+                let mut message = UserSignature::default();
+                message.bcs = Some(signature.clone());
+                message
+            });
+            request.address = Some(zklogin_addr.to_string());
+            request
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(true));
+    assert_eq!(response.reason, None);
+
+    // address checks fail
+    let wrong_address = RtdAddress::random_for_testing_only();
+    let response = client
+        .verify_signature({
+            let mut request = VerifySignatureRequest::default();
+            request.message = Some(message.clone());
+            request.signature = Some({
+                let mut message = UserSignature::default();
+                message.bcs = Some(signature.clone());
+                message
+            });
+            request.address = Some(wrong_address.to_string());
+            request
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(false));
+    assert_eq!(
+        response.reason,
+        Some(format!(
+            "provided address `{}` does not match derived address `{}`",
+            wrong_address, zklogin_addr
+        ))
+    );
+
+    // Use the same signature but a different message so force verification failure
+    let response = client
+        .verify_signature({
+            let mut message = VerifySignatureRequest::default();
+            message.message = Some(Bcs::from(bcs::to_bytes("some personal message").unwrap()));
+            message.signature = Some({
+                let mut message = UserSignature::default();
+                message.bcs = Some(signature);
+                message
+            });
+            message
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(response.is_valid, Some(false));
+    assert!(response.reason.is_some());
+
+    // Verify zklogin signatures carrying the pinned v1 and v2 circuit proofs, with the
+    // matching test-issuer JWKs supplied in the request. Both proofs should verify regardless
+    // of the network's circuit activation rules.
+    let jwks: Vec<ActiveJwk> = pinned_jwks()
+        .into_iter()
+        .map(|(id, jwk)| {
+            let mut active = ActiveJwk::default();
+            active.id = Some({
+                let mut proto = JwkId::default();
+                proto.iss = Some(id.iss);
+                proto.kid = Some(id.kid);
+                proto
+            });
+            active.jwk = Some({
+                let mut proto = Jwk::default();
+                proto.kty = Some(jwk.kty);
+                proto.e = Some(jwk.e);
+                proto.n = Some(jwk.n);
+                proto.alg = Some(jwk.alg);
+                proto
+            });
+            active.epoch = Some(0);
+            active
+        })
+        .collect();
+
+    for proof_json in [PINNED_V1_PROOF_JSON, PINNED_V2_PROOF_JSON] {
+        // Both pinned proofs use ephemeral key seed [0; 32] and max_epoch 10.
+        let inputs = ZkLoginInputs::from_json(proof_json, PINNED_PROOF_ADDRESS_SEED)?;
+        let eph_kp = RtdKeyPair::Ed25519(Ed25519KeyPair::generate(&mut StdRng::from_seed([0; 32])));
+        let zklogin_addr = RtdAddress::from(&PublicKey::from_zklogin_inputs(&inputs)?);
+
+        let gas_ref = (ObjectID::random(), 1.into(), ObjectDigest::random());
+        let tx_data = TransactionData::new_transfer_rtd(
+            RtdAddress::ZERO,
+            zklogin_addr,
+            Some(1),
+            gas_ref,
+            5_000_000,
+            1000,
+        );
+        let msg = IntentMessage::new(Intent::rtd_transaction(), tx_data.clone());
+        let eph_sig = Signature::new_secure(&msg, &eph_kp);
+        let generic_sig =
+            GenericSignature::ZkLoginAuthenticator(ZkLoginAuthenticator::new(inputs, 10, eph_sig));
+
+        let message = {
+            let mut bcs = Bcs::from(bcs::to_bytes(&tx_data)?);
+            bcs.name = Some("TransactionData".to_string());
+            bcs
+        };
+        let signature = {
+            let mut signature = UserSignature::default();
+            signature.bcs = Some(Bcs::from(generic_sig.as_ref().to_owned()));
+            signature
+        };
+
+        let response = client
+            .verify_signature({
+                let mut request = VerifySignatureRequest::default();
+                request.message = Some(message);
+                request.signature = Some(signature.clone());
+                request.address = Some(zklogin_addr.to_string());
+                request.jwks = jwks.clone();
+                request
+            })
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(response.reason, None);
+        assert_eq!(response.is_valid, Some(true));
+
+        // The same signature over a different message must not verify.
+        let response = client
+            .verify_signature({
+                let mut request = VerifySignatureRequest::default();
+                request.message = Some(Bcs::from(bcs::to_bytes("some personal message")?));
+                request.signature = Some(signature);
+                request.jwks = jwks.clone();
+                request
+            })
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(response.is_valid, Some(false));
+        assert!(response.reason.is_some());
+    }
+
+    Ok(())
+}
+
+async fn verify_with_aliases(
+    client: &mut SignatureVerificationServiceClient<Channel>,
+    message: &[u8],
+    signature: &GenericSignature,
+    address: Option<RtdAddress>,
+    check_address_aliases: Option<bool>,
+) -> Result<VerifySignatureResponse, tonic::Status> {
+    let mut request = VerifySignatureRequest::default();
+    request.message = Some(Bcs::from(message.to_vec()));
+    request.signature = Some({
+        let mut proto = UserSignature::default();
+        proto.bcs = Some(Bcs::from(signature.as_ref().to_owned()));
+        proto
+    });
+    request.address = address.map(|a| a.to_string());
+    request.check_address_aliases = check_address_aliases;
+    client
+        .verify_signature(request)
+        .await
+        .map(tonic::Response::into_inner)
+}
+
+async fn call_address_alias(
+    test_cluster: &TestCluster,
+    sender: RtdAddress,
+    function: &'static str,
+    object: (ObjectID, SequenceNumber),
+    args: Vec<CallArg>,
+) -> TransactionEffects {
+    let mut call_args = vec![CallArg::Object(ObjectArg::SharedObject {
+        id: object.0,
+        initial_shared_version: object.1,
+        mutability: SharedObjectMutability::Mutable,
+    })];
+    call_args.extend(args);
+
+    let tx_data = test_cluster
+        .test_transaction_builder_with_sender(sender)
+        .await
+        .move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            "address_alias",
+            function,
+            call_args,
+        )
+        .build();
+    test_cluster
+        .sign_and_execute_transaction(&tx_data)
+        .await
+        .effects
+}
+
+#[sim_test]
+async fn test_verify_signature_address_aliases() {
+    let test_cluster = TestClusterBuilder::new()
+        .with_num_validators(1)
+        .build()
+        .await;
+    let mut client = SignatureVerificationServiceClient::connect(test_cluster.rpc_url().to_owned())
+        .await
+        .unwrap();
+
+    let addresses = test_cluster.get_addresses();
+    let (owner, delegate) = (addresses[0], addresses[1]);
+    let keystore = &test_cluster.wallet.config.keystore;
+    let owner_kp = keystore.export(&owner).unwrap();
+    let delegate_kp = keystore.export(&delegate).unwrap();
+
+    let personal_message = PersonalMessage {
+        message: b"hello".to_vec(),
+    };
+    let personal_bytes = bcs::to_bytes(&personal_message).unwrap();
+    let personal_intent = IntentMessage::new(Intent::personal_message(), personal_message);
+    let owner_sig: GenericSignature = Signature::new_secure(&personal_intent, owner_kp).into();
+    let delegate_sig: GenericSignature =
+        Signature::new_secure(&personal_intent, delegate_kp).into();
+
+    // Checking aliases requires an address.
+    let status = verify_with_aliases(&mut client, &personal_bytes, &owner_sig, None, Some(true))
+        .await
+        .unwrap_err();
+    assert_eq!(status.code(), tonic::Code::InvalidArgument, "{status:?}");
+
+    // Without an alias configuration, the address is its own sole alias.
+    for (signature, is_valid) in [(&owner_sig, true), (&delegate_sig, false)] {
+        let r = verify_with_aliases(
+            &mut client,
+            &personal_bytes,
+            signature,
+            Some(owner),
+            Some(true),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (r.is_valid, r.address_aliases_checked),
+            (Some(is_valid), Some(true)),
+            "{:?}",
+            r.reason
+        );
+    }
+
+    let alias_state_version = test_cluster.fullnode_handle.rtd_node.with(|node| {
+        get_address_alias_state_obj_initial_shared_version(node.state().get_object_store().as_ref())
+            .unwrap()
+            .expect("address alias state object should exist")
+    });
+    let effects = call_address_alias(
+        &test_cluster,
+        owner,
+        "enable",
+        (RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, alias_state_version),
+        vec![],
+    )
+    .await;
+    let ((aliases_id, aliases_version, _), _) = effects
+        .created()
+        .into_iter()
+        .find(|(_, owner)| matches!(owner, Owner::ConsensusAddressOwner { .. }))
+        .expect("AddressAliases object should be created");
+    let aliases = (aliases_id, aliases_version);
+    call_address_alias(
+        &test_cluster,
+        owner,
+        "add",
+        aliases,
+        vec![CallArg::Pure(bcs::to_bytes(&delegate).unwrap())],
+    )
+    .await;
+
+    // The delegate can now sign for the owner, but only when aliases are checked.
+    for (check_address_aliases, expected) in [
+        (Some(true), (Some(true), Some(true))),
+        (None, (Some(false), None)),
+    ] {
+        let r = verify_with_aliases(
+            &mut client,
+            &personal_bytes,
+            &delegate_sig,
+            Some(owner),
+            check_address_aliases,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            (r.is_valid, r.address_aliases_checked),
+            expected,
+            "{:?}",
+            r.reason
+        );
+    }
+
+    // An alias match doesn't skip verifying the signature itself.
+    let other_message = bcs::to_bytes(&PersonalMessage {
+        message: b"other".to_vec(),
+    })
+    .unwrap();
+    let r = verify_with_aliases(
+        &mut client,
+        &other_message,
+        &delegate_sig,
+        Some(owner),
+        Some(true),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        (r.is_valid, r.address_aliases_checked),
+        (Some(false), Some(true))
+    );
+
+    // Once the owner removes itself, its own key only works without the alias check.
+    call_address_alias(
+        &test_cluster,
+        owner,
+        "remove",
+        aliases,
+        vec![CallArg::Pure(bcs::to_bytes(&owner).unwrap())],
+    )
+    .await;
+
+    for (signature, check_address_aliases, is_valid) in [
+        (&owner_sig, Some(true), false),
+        (&owner_sig, None, true),
+        (&delegate_sig, Some(true), true),
+    ] {
+        let r = verify_with_aliases(
+            &mut client,
+            &personal_bytes,
+            signature,
+            Some(owner),
+            check_address_aliases,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.is_valid, Some(is_valid), "{:?}", r.reason);
+    }
+}

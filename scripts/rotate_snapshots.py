@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 """
 Script to be used for deleting old snapshots on a host. Given a root dir,
-for example, /opt/sui, it assumes snapshots are staged in /opt/sui/snapshots,
-and all symlinks to said snapshots are contained under /opt/sui/instances. It will delete all snapshots that are not
+for example, /opt/rtd, it assumes snapshots are staged in /opt/rtd/snapshots,
+and all symlinks to said snapshots are contained under /opt/rtd/instances. It will delete all snapshots that are not
 referenced, except for the newest. If there is only onle snaopshot on the host,
 it does nothing.
 """
@@ -25,7 +25,7 @@ def usage():
     print(
         'Usage: rotate_snapshots.py --dir=<snapshots-dir>')
     print(
-        f'   --dir=<sui-base-dir>   Base directory for sui. Must contain /snapshots and /instances dirs')
+        f'   --dir=<rtd-base-dir>   Base directory for rtd. Must contain /snapshots and /instances dirs')
     print('  --help                 Print this help message')
     
 

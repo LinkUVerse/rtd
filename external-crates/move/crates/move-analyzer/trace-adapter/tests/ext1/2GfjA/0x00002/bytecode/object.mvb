@@ -43,7 +43,7 @@ B0:
 	2: Ret
 }
 
-sui_system_state(Arg0: &TxContext): UID {
+rtd_system_state(Arg0: &TxContext): UID {
 B0:
 	0: MoveLoc[0](Arg0: &TxContext)
 	1: Call tx_context::sender(&TxContext): address
@@ -86,7 +86,7 @@ B0:
 	3: Ret
 }
 
-public(friend) sui_deny_list_object_id(): UID {
+public(friend) rtd_deny_list_object_id(): UID {
 B0:
 	0: LdConst[4](address: 0x00..)
 	1: Pack[0](ID)

@@ -92,8 +92,8 @@ Do not post the findings or their resolution to the PR. Once the author has deci
 ## Step 5 — Run relevant tests
 
 Determine which packages were changed on this branch (compare against `$BASE`).
-- For unit tests: `SUI_SKIP_SIMTESTS=1 cargo nextest run --no-capture -p <package>`
-- For anything in `sui-e2e-tests`: `cargo simtest --no-capture -p sui-e2e-tests <test_filter>`
+- For unit tests: `RTD_SKIP_SIMTESTS=1 cargo nextest run --no-capture -p <package>`
+- For anything in `rtd-e2e-tests`: `cargo simtest --no-capture -p rtd-e2e-tests <test_filter>`
 - Consult crate-specific CLAUDE.md files for test guidance.
 
 Fix trivial test failures (assertion message changes, snapshot updates, etc.) and re-run. Stage changes but do not commit yet — they will be amended in Step 9.
@@ -111,7 +111,7 @@ Run `cargo fmt --all`. If it produces changes, stage them but do not commit yet 
 
 ## Step 8 — Protocol config snapshots
 
-If any commit on this branch touches `crates/sui-protocol-config/src/lib.rs`, run:
+If any commit on this branch touches `crates/rtd-protocol-config/src/lib.rs`, run:
 ```
 ./scripts/update_all_snapshots.sh
 ```

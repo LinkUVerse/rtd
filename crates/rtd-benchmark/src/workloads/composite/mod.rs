@@ -1,0 +1,3054 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+mod deny;
+mod lifecycle;
+mod operations;
+mod owned;
+mod party;
+mod receive;
+mod shared_deletion;
+mod upgrade;
+
+use derive_more::Add;
+use linku_common::random::get_rng;
+use linku_common::{assert_reachable, assert_sometimes, debug_fatal};
+pub use operations::{
+    ALIAS_ADD, ALIAS_REMOVE, ALIAS_TX, ALL_OPERATIONS, ALLOWED_PROPOSERS_TX,
+    AccumulatorBalanceRead, AddressBalanceDeposit, AddressBalanceOverdraw, AddressBalanceWithdraw,
+    AllowanceSelfWithdraw, AllowanceWithdraw, AuthenticatedEventEmit, COIN_MERGE,
+    CoinReservationWithdraw, GASLESS_TRANSFER, INVALID_ALIAS_TX, ImmutableObjectRead, MULTISIG_TX,
+    OWNED_CREATE, OWNED_DELETE, OWNED_FREEZE, ObjectBalanceDeposit, ObjectBalanceOverdraw,
+    ObjectBalanceWithdraw, OperationDescriptor, PACKAGE_UPGRADE, PARTY_CREATE, PARTY_END_STREAM,
+    PARTY_HAND_OFF, PARTY_MUTATE, PARTY_OLD_STREAM, PARTY_OWNED_MUTATE, PARTY_RACING_MUTATE,
+    PARTY_RESTART_STREAM, PARTY_RETRANSFER, PARTY_UNWRAP, PARTY_WRAP, RECEIVE_CHILD,
+    RECEIVE_CREATE_PARENT, RandomnessRead, SHARED_DELETE, SHARED_DELETE_CREATE,
+    SHARED_DELETE_INCREMENT, SHARED_DELETE_RACING, SHARED_DELETE_STALE, SPONSORED_TX,
+    SharedCounterIncrement, SharedCounterRead, TestCoinAddressDeposit, TestCoinAddressWithdraw,
+    TestCoinMint, TestCoinObjectWithdraw,
+};
+use rand::seq::SliceRandom;
+
+use crate::drivers::Interval;
+use crate::system_state_observer::SystemStateObserver;
+use crate::workloads::payload::{BatchExecutionResults, BatchedTransactionStatus, Payload};
+use crate::workloads::workload::{
+    ESTIMATED_COMPUTATION_COST, MAX_GAS_FOR_TESTING, STORAGE_COST_PER_COUNTER, Workload,
+    WorkloadBuilder,
+};
+use crate::workloads::{Gas, GasCoinConfig, WorkloadBuilderInfo, WorkloadParams, gas_to_multi_gas};
+use crate::{ExecutionEffects, ValidatorProxy};
+use async_trait::async_trait;
+use deny::DenyLifecycle;
+use futures::future::join_all;
+use lifecycle::{
+    Lifecycle, LifecycleCall, LifecycleStep, StepContext, UpgradeData, choose_lifecycles,
+};
+use operations::{
+    AllowanceInfo, InitRequirement, Operation, OperationResources, PayloadAllowances,
+    ResourceRequest, add_allowance_issue_commands,
+};
+use owned::{CoinMergeLifecycle, OwnedLifecycle};
+use party::PartyLifecycle;
+use rand::Rng;
+use receive::ReceiveLifecycle;
+use shared_deletion::SharedDeletionLifecycle;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::Duration;
+use rtd_protocol_config::reachability::register_reachability_for_config;
+use rtd_protocol_config::{ProtocolConfig, assert_reachable_gated};
+use rtd_test_transaction_builder::{PublishData, TestTransactionBuilder};
+use rtd_types::TypeTag;
+use rtd_types::accumulator_root::AccumulatorValue;
+use rtd_types::balance::Balance;
+use rtd_types::base_types::{FullObjectRef, ObjectID, ObjectRef, SequenceNumber, RtdAddress};
+use rtd_types::coin_reservation::ParsedObjectRefWithdrawal;
+use rtd_types::crypto::{AccountKeyPair, Signature, Signer, RtdKeyPair, get_key_pair};
+use rtd_types::digests::TransactionDigest;
+use rtd_types::gas_coin::GAS;
+use rtd_types::multisig::MultiSigPublicKey;
+use rtd_types::object::Owner;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::{
+    Argument, CallArg, Command, FundsWithdrawalArg, ObjectArg, SharedObjectMutability, Transaction,
+    TransactionData, TransactionDataAPI, TransactionExpiration,
+};
+use rtd_types::{Identifier, RTD_FRAMEWORK_PACKAGE_ID};
+use rtd_types::{
+    RTD_ACCUMULATOR_ROOT_OBJECT_ID, RTD_ADDRESS_ALIAS_STATE_OBJECT_ID, RTD_DENY_LIST_OBJECT_ID,
+    RTD_RANDOMNESS_STATE_OBJECT_ID,
+};
+use tracing::{debug, info, trace};
+use upgrade::UpgradeLifecycle;
+
+use super::MultiGas;
+
+/// Lifecycle steps take up to three txs each, so a batch has room for a few of them.
+const MAX_BATCH_SIZE: usize = 6;
+
+/// Submissions of the allowance setup transaction before giving up. A submission can fail
+/// transiently even when the transaction is valid, for example when a validator has not yet
+/// applied the effects that created the gas coin. Resubmitting the same signed transaction is
+/// idempotent: if an earlier submission was finalized, the response carries its effects.
+const ALLOWANCE_ISSUANCE_MAX_SUBMISSIONS: usize = 3;
+
+/// The RTD that each lifecycle gas account's address balance receives at init. Each package
+/// upgrade pays a publish charge of about 1.1 RTD, so the account is sized for long runs.
+const LIFECYCLE_GAS_FUNDING: u64 = 200_000_000_000;
+
+/// The gas budget of a multisig tx, in gas units.
+const MULTISIG_GAS_UNITS: u64 = 100_000;
+/// The RTD that each multisig account's address balance receives at init, which pays for
+/// many multisig txs.
+const MULTISIG_FUNDING: u64 = 10_000_000_000;
+
+/// Each payload's gas coins: one per batch tx, and one that its partner sponsors with.
+const NUM_GAS_COINS: usize = MAX_BATCH_SIZE + 1;
+
+/// The sponsor's gas coin that pays for coin-sponsored txs. The sponsor's own batches use it
+/// only when the mixed-payment branch claims it as a spare, so sponsorship rarely displaces
+/// the sponsor's own txs.
+const SPONSOR_GAS_IDX: usize = MAX_BATCH_SIZE;
+
+fn address_balance_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.enable_address_balance_gas_payments())
+        .unwrap_or(false)
+}
+
+fn address_alias_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.address_aliases())
+        .unwrap_or(false)
+}
+
+fn authenticated_events_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.enable_authenticated_event_streams())
+        .unwrap_or(false)
+}
+
+fn gasless_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.enable_gasless())
+        .unwrap_or(false)
+}
+
+/// Gasless txs in this workload transfer RTD, which validators accept only if the chain's
+/// gasless allowlist includes it. Production chain configs allow only specific stablecoins.
+fn gasless_rtd_transfer_allowed(protocol_config: &ProtocolConfig) -> bool {
+    protocol_config.enable_gasless()
+        && protocol_config
+            .gasless_allowed_token_types()
+            .iter()
+            .any(|(token, _)| {
+                token
+                    .parse::<TypeTag>()
+                    .is_ok_and(|tag| tag == GAS::type_tag())
+            })
+}
+
+fn allowed_proposers_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.allowed_proposers())
+        .unwrap_or(false)
+}
+
+fn timestamp_expiration_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.enable_timestamp_transaction_expiration())
+        .unwrap_or(false)
+}
+
+/// Picks a `(min_timestamp, max_timestamp)` window in Unix seconds.
+/// - Some windows closed seconds ago, inside the grace period in which validators still admit
+///   the transaction, so execution aborts it.
+/// - Some closed long enough ago that the fullnode and validators reject the transaction.
+/// - Some open at the current or next second, or seconds from now. The fullnode waits until
+///   `min_timestamp` before it submits, unless it skips its check, in which case admission
+///   rejects the transaction, or voting does if admission skips its check too.
+/// - The rest close within a few seconds, so execution can abort the transaction when it is
+///   first scheduled or after it is deferred.
+fn sample_timestamp_window(rng: &mut impl Rng) -> (Option<u64>, Option<u64>) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    match rng.gen_range(0..7) {
+        0 => (None, Some(now - rng.gen_range(1..5))),
+        1 => (None, Some(now - rng.gen_range(12..20))),
+        2 => (Some(now + rng.gen_range(0..2)), None),
+        3 => (Some(now + rng.gen_range(2..4)), None),
+        _ => {
+            let max = now + rng.gen_range(0..3);
+            let min = rng.gen_bool(0.5).then(|| max - rng.gen_range(1..10));
+            (min, Some(max))
+        }
+    }
+}
+
+fn allowances_disabled(protocol_config: Option<&ProtocolConfig>) -> bool {
+    protocol_config
+        .map(|cfg| !cfg.enable_allowances())
+        .unwrap_or(false)
+}
+
+macro_rules! update_gas {
+    ($gas:expr, $effects:expr) => {{
+        // Look up the tracked gas coin by ObjectID rather than reading whatever
+        // `gas_object()` reports — IFFW short-circuits leave `gas_object() == None`
+        // but the input coin is still version-bumped in `mutated()`. A tx paid with
+        // address-balance gas does not use the coin, so the coin is absent. This must not
+        // return early, because the caller may still have results to process.
+        if let Some(new_gas_ref) = $effects.updated_gas($gas.0) {
+            info!(
+                "Updating gas object from {:?} to {:?} for tx {:?}",
+                $gas,
+                new_gas_ref,
+                $effects.digest()
+            );
+            *$gas = new_gas_ref;
+        } else {
+            info!("No gas object in effects, skipping update");
+        }
+    }};
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct OperationSet(Vec<&'static str>);
+
+impl OperationSet {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn with(mut self, name: &'static str) -> Self {
+        if let Err(pos) = self.0.binary_search(&name) {
+            self.0.insert(pos, name);
+        }
+        self
+    }
+
+    pub fn contains(&self, name: &str) -> bool {
+        self.0.binary_search(&name).is_ok()
+    }
+
+    pub fn contains_shared_object_op(&self) -> bool {
+        self.contains(SharedCounterIncrement::NAME) || self.contains(SharedCounterRead::NAME)
+    }
+
+    pub fn contains_contentious_shared_object_op(&self) -> bool {
+        self.contains(SharedCounterIncrement::NAME)
+    }
+
+    pub fn describe(&self) -> String {
+        if self.0.is_empty() {
+            "empty".to_string()
+        } else {
+            self.0.join(" + ")
+        }
+    }
+}
+
+impl Default for OperationSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Default, Add, Copy, Clone)]
+pub struct OperationSetStats {
+    pub signed_and_sent_count: u64,
+    pub success_count: u64,
+    pub abort_count: u64,
+    pub permanent_failure_count: u64,
+    pub retriable_failure_count: u64,
+    pub unknown_rejection_count: u64,
+    pub cancellation_count: u64,
+    pub insufficient_funds_count: u64,
+}
+
+#[derive(Debug)]
+pub struct CompositionMetrics {
+    stats: HashMap<OperationSet, OperationSetStats>,
+}
+
+impl Default for CompositionMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CompositionMetrics {
+    pub fn new() -> Self {
+        Self {
+            stats: HashMap::new(),
+        }
+    }
+
+    pub fn sum_all(&self) -> OperationSetStats {
+        let mut stats = OperationSetStats::default();
+        for stat in self.stats.values() {
+            stats = stats + *stat;
+        }
+        stats
+    }
+
+    pub fn record_signed_and_sent(&mut self, op_set: OperationSet) {
+        self.stats.entry(op_set).or_default().signed_and_sent_count += 1;
+    }
+
+    pub fn record_success(&mut self, op_set: OperationSet) {
+        self.stats.entry(op_set).or_default().success_count += 1;
+    }
+
+    pub fn record_abort(&mut self, op_set: OperationSet) {
+        self.stats.entry(op_set).or_default().abort_count += 1;
+    }
+
+    pub fn record_permanent_failure(&mut self, op_set: OperationSet) {
+        self.stats
+            .entry(op_set)
+            .or_default()
+            .permanent_failure_count += 1;
+    }
+
+    pub fn record_retriable_failure(&mut self, op_set: OperationSet) {
+        self.stats
+            .entry(op_set)
+            .or_default()
+            .retriable_failure_count += 1;
+    }
+
+    pub fn record_unknown_rejection(&mut self, op_set: OperationSet) {
+        self.stats
+            .entry(op_set)
+            .or_default()
+            .unknown_rejection_count += 1;
+    }
+
+    pub fn record_cancellation(&mut self, op_set: OperationSet) {
+        self.stats.entry(op_set).or_default().cancellation_count += 1;
+    }
+
+    pub fn record_insufficient_funds(&mut self, op_set: OperationSet) {
+        self.stats
+            .entry(op_set)
+            .or_default()
+            .insufficient_funds_count += 1;
+    }
+
+    pub fn get_stats(&self, op_set: &OperationSet) -> Option<&OperationSetStats> {
+        self.stats.get(op_set)
+    }
+
+    pub fn cancellation_rate(&self, op_set: &OperationSet) -> Option<f64> {
+        self.stats.get(op_set).map(|s| {
+            let total = s.success_count + s.abort_count + s.cancellation_count;
+            if total == 0 {
+                0.0
+            } else {
+                s.cancellation_count as f64 / total as f64
+            }
+        })
+    }
+
+    pub fn total_transactions(&self, op_set: &OperationSet) -> u64 {
+        self.stats
+            .get(op_set)
+            .map(|s| s.success_count + s.abort_count + s.cancellation_count)
+            .unwrap_or(0)
+    }
+
+    pub fn total_transactions_all(&self) -> u64 {
+        self.stats
+            .values()
+            .map(|s| s.success_count + s.abort_count + s.cancellation_count)
+            .sum()
+    }
+
+    pub fn total_successes_all(&self) -> u64 {
+        self.stats.values().map(|s| s.success_count).sum()
+    }
+
+    pub fn total_failures_all(&self) -> u64 {
+        self.stats.values().map(|s| s.abort_count).sum()
+    }
+
+    pub fn total_cancellations_all(&self) -> u64 {
+        self.stats.values().map(|s| s.cancellation_count).sum()
+    }
+
+    pub fn overall_cancellation_rate(&self) -> f64 {
+        let total = self.total_transactions_all();
+        if total == 0 {
+            0.0
+        } else {
+            self.total_cancellations_all() as f64 / total as f64
+        }
+    }
+
+    pub fn distinct_operation_sets_count(&self) -> usize {
+        self.stats.len()
+    }
+
+    pub fn iter_stats(&self) -> impl Iterator<Item = (OperationSet, &OperationSetStats)> {
+        self.stats
+            .iter()
+            .map(|(op_set, stats)| (op_set.clone(), stats))
+    }
+}
+
+const MAX_GAS_IN_UNIT: u64 = 1_000_000_000;
+
+#[derive(Debug, Clone)]
+pub struct CompositeWorkloadConfig {
+    pub probabilities: HashMap<&'static str, f32>,
+    pub num_shared_counters: u64,
+    pub shared_counter_hotness: f32,
+    pub address_balance_amount: u64,
+    pub address_balance_gas_probability: f32,
+    /// Probability that a tx's gas payment is built as a mix of a real coin and a coin-reservation
+    /// digest entry (in randomized order). Exercises the gas-smashing path that combines an
+    /// `ObjectRef` gas coin with an address-balance reservation.
+    pub mixed_gas_payment_probability: f32,
+    pub conflicting_transaction_probability: f32,
+    pub alias_tx_probability: f32,
+    pub alias_txs_before_revoke: u32,
+    /// Per-batch probability that a payload with no party object in progress starts a
+    /// party-object lifecycle. A lifecycle in progress adds party calls to every batch until it
+    /// finishes.
+    /// Zero disables party-object operations.
+    pub party_object_probability: f32,
+    /// Per-batch probability that a payload with no shared-deletion lifecycle in progress
+    /// starts one. Zero disables it.
+    pub shared_deletion_probability: f32,
+    /// Per-batch probability that a payload with no transfer-to-object lifecycle in progress
+    /// starts one. Zero disables it.
+    pub receive_probability: f32,
+    /// Per-batch probability that the payload holding the composite package's upgrade cap
+    /// upgrades the package. Zero disables upgrades.
+    pub upgrade_probability: f32,
+    /// Per-batch probability that a payload with no owned-object lifecycle in progress starts
+    /// one. The coin-merge lifecycle uses the same probability and also needs the TestCoinCap.
+    /// Zero disables both.
+    pub owned_object_probability: f32,
+    /// Per-batch probability of adding a gasless RTD transfer to the partner. The protocol
+    /// config must allow RTD in gasless txs, or validators reject these txs.
+    pub gasless_probability: f32,
+    /// Per-tx probability that the partner payload sponsors a composite tx. Zero disables
+    /// sponsorship.
+    pub sponsored_probability: f32,
+    /// Per-batch probability that the payload holding TEST_COIN's deny cap toggles whether
+    /// its partner is denied. Zero disables it.
+    pub deny_probability: f32,
+    /// Per-batch probability of adding a tx from the payload's multisig account. Zero
+    /// disables multisig accounts.
+    pub multisig_probability: f32,
+    /// Per-tx probability that a composite or gasless tx restricts its allowed proposers.
+    pub allowed_proposers_probability: f32,
+    /// Per-tx probability that a tx outside any lifecycle pays gas from its address balance and
+    /// gets a timestamp window near the current time. Zero disables it.
+    pub timestamp_expiration_probability: f32,
+    pub metrics: Option<Arc<Mutex<CompositionMetrics>>>,
+}
+
+impl CompositeWorkloadConfig {
+    pub fn balanced() -> Self {
+        let mut probabilities = HashMap::new();
+        probabilities.insert(SharedCounterIncrement::NAME, 0.3);
+        probabilities.insert(SharedCounterRead::NAME, 0.3);
+        probabilities.insert(RandomnessRead::NAME, 0.2);
+        probabilities.insert(AddressBalanceDeposit::NAME, 0.2);
+        probabilities.insert(AddressBalanceWithdraw::NAME, 0.2);
+        probabilities.insert(ObjectBalanceDeposit::NAME, 0.2);
+        probabilities.insert(ObjectBalanceWithdraw::NAME, 0.2);
+        probabilities.insert(TestCoinMint::NAME, 0.1);
+        probabilities.insert(TestCoinAddressDeposit::NAME, 0.1);
+        probabilities.insert(TestCoinAddressWithdraw::NAME, 0.1);
+        probabilities.insert(TestCoinObjectWithdraw::NAME, 0.1);
+        probabilities.insert(AddressBalanceOverdraw::NAME, 0.1);
+        probabilities.insert(AccumulatorBalanceRead::NAME, 0.3);
+        probabilities.insert(ObjectBalanceOverdraw::NAME, 0.1);
+        probabilities.insert(AuthenticatedEventEmit::NAME, 0.1);
+        probabilities.insert(ImmutableObjectRead::NAME, 0.2);
+        probabilities.insert(CoinReservationWithdraw::NAME, 0.1);
+        probabilities.insert(AllowanceWithdraw::NAME, 0.1);
+        probabilities.insert(AllowanceSelfWithdraw::NAME, 0.1);
+        Self {
+            probabilities,
+            alias_tx_probability: 0.3,
+            party_object_probability: 0.1,
+            shared_deletion_probability: 0.1,
+            receive_probability: 0.1,
+            upgrade_probability: 0.05,
+            owned_object_probability: 0.1,
+            sponsored_probability: 0.05,
+            deny_probability: 0.05,
+            multisig_probability: 0.1,
+            allowed_proposers_probability: 0.2,
+            timestamp_expiration_probability: 0.1,
+            ..Default::default()
+        }
+    }
+
+    fn has_lifecycles(&self) -> bool {
+        [
+            self.party_object_probability,
+            self.shared_deletion_probability,
+            self.receive_probability,
+            self.upgrade_probability,
+            self.owned_object_probability,
+            self.deny_probability,
+        ]
+        .iter()
+        .any(|p| *p > 0.0)
+    }
+
+    pub fn with_probability(mut self, name: &'static str, prob: f32) -> Self {
+        self.probabilities.insert(name, prob);
+        self
+    }
+
+    pub fn probability_for(&self, desc: &OperationDescriptor) -> f32 {
+        self.probabilities.get(desc.name).copied().unwrap_or(0.0)
+    }
+
+    pub fn sample_operations(&self) -> Vec<Box<dyn Operation>> {
+        let mut rng = get_rng();
+        let mut ops: Vec<Box<dyn Operation>> = ALL_OPERATIONS
+            .iter()
+            .filter(|desc| rng.gen_bool(self.probability_for(desc) as f64))
+            .map(|desc| (desc.factory)())
+            .collect();
+
+        if ops.is_empty()
+            && let Some(desc) = ALL_OPERATIONS.first()
+        {
+            ops.push((desc.factory)());
+        }
+
+        ops.sort_by_key(|op| op.constraints().must_be_last_shared_access as u8);
+        ops
+    }
+
+    pub fn collect_init_requirements(
+        &self,
+        protocol_config: Option<&ProtocolConfig>,
+    ) -> std::collections::HashSet<InitRequirement> {
+        let mut requirements: std::collections::HashSet<InitRequirement> = ALL_OPERATIONS
+            .iter()
+            .filter(|desc| self.probability_for(desc) > 0.0)
+            .flat_map(|desc| (desc.factory)().init_requirements())
+            .collect();
+
+        if self.address_balance_gas_probability > 0.0 {
+            requirements.insert(InitRequirement::SeedAddressBalance);
+        }
+
+        if self.alias_tx_probability > 0.0 && !address_alias_disabled(protocol_config) {
+            requirements.insert(InitRequirement::EnableAddressAlias);
+        }
+
+        if allowances_disabled(protocol_config) {
+            requirements.remove(&InitRequirement::IssueAllowances);
+        }
+
+        requirements
+    }
+}
+
+impl Default for CompositeWorkloadConfig {
+    fn default() -> Self {
+        Self {
+            probabilities: HashMap::new(),
+            num_shared_counters: 10,
+            shared_counter_hotness: 0.5,
+            address_balance_amount: 1000,
+            address_balance_gas_probability: 0.5,
+            mixed_gas_payment_probability: 0.05,
+            conflicting_transaction_probability: 0.1,
+            alias_tx_probability: 0.0,
+            alias_txs_before_revoke: 3,
+            party_object_probability: 0.0,
+            shared_deletion_probability: 0.0,
+            receive_probability: 0.0,
+            upgrade_probability: 0.0,
+            owned_object_probability: 0.0,
+            gasless_probability: 0.0,
+            sponsored_probability: 0.0,
+            deny_probability: 0.0,
+            multisig_probability: 0.0,
+            allowed_proposers_probability: 0.0,
+            timestamp_expiration_probability: 0.0,
+            metrics: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct OperationPool {
+    pub shared_counters: Vec<(ObjectID, SequenceNumber)>,
+    /// The original composite package id, which defines its types.
+    pub package_id: ObjectID,
+    /// Every version of the composite package, oldest first.
+    pub package_versions: Arc<RwLock<Vec<ObjectID>>>,
+    pub randomness_initial_shared_version: SequenceNumber,
+    pub accumulator_root_initial_shared_version: SequenceNumber,
+    pub hotness: f32,
+    pub balance_pool: Option<(ObjectID, SequenceNumber)>,
+    pub test_coin_cap: Option<(ObjectID, SequenceNumber)>,
+    pub test_coin_type: Option<TypeTag>,
+    pub chain_identifier: rtd_types::digests::ChainIdentifier,
+    pub immutable_object: Option<ObjectRef>,
+    pub committee_size: Option<usize>,
+}
+
+impl OperationPool {
+    /// Picks the composite package version that a tx calls: the original, the latest, or any.
+    pub fn select_package_version(&self) -> ObjectID {
+        let versions = self.package_versions.read().unwrap();
+        let mut rng = get_rng();
+        match rng.gen_range(0..3) {
+            0 => versions[0],
+            1 => *versions.last().unwrap(),
+            _ => *versions.choose(&mut rng).unwrap(),
+        }
+    }
+
+    pub fn select_counter(&self) -> (ObjectID, SequenceNumber) {
+        let mut rng = get_rng();
+        if self.shared_counters.is_empty() {
+            panic!("No shared counters available");
+        }
+        if rng.gen_range(0.0..1.0) < self.hotness {
+            self.shared_counters[0]
+        } else {
+            let idx = rng.gen_range(0..self.shared_counters.len());
+            self.shared_counters[idx]
+        }
+    }
+}
+
+pub struct CompositePayload {
+    config: Arc<CompositeWorkloadConfig>,
+    fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
+    pool: Arc<OperationPool>,
+    gas: Arc<Mutex<MultiGas>>,
+    current_batch_num_conflicting_transactions: usize,
+    current_batch_txs: Vec<BatchTxInfo>,
+    system_state_observer: Arc<SystemStateObserver>,
+    metrics: Arc<Mutex<CompositionMetrics>>,
+    nonce_counter: AtomicU32,
+    alias_state: Option<AliasState>,
+    partner_address: RtdAddress,
+    allowances: Option<PayloadAllowances>,
+    lifecycles: Vec<Box<dyn Lifecycle>>,
+    sponsor: Option<Sponsor>,
+    multisig: Option<MultisigAccount>,
+    /// The account whose address balance pays for this payload's bare lifecycle txs.
+    lifecycle_gas: Option<(RtdAddress, Arc<AccountKeyPair>)>,
+    /// True if the current batch has a gasless tx. Every tx in a soft bundle must have the
+    /// same gas price, so such a batch is submitted tx by tx.
+    direct_submission: bool,
+}
+
+/// Tracks the lifecycle of an alias revoke-and-re-add cycle for a single payload.
+#[derive(Debug, Clone)]
+enum AliasRevokeCycleState {
+    /// The alias needs to be (re-)added. This is the beginning of the cycle.
+    NeedAdd,
+    /// An add-alias tx has been sent; waiting for its result and checkpoint confirmation.
+    /// Phase 1 (`None`): tx sent, waiting for effects from `handle_batch_results`.
+    /// Phase 2 (`Some(digest)`): effects received, polling for checkpoint inclusion.
+    AddPending {
+        tx_digest: Option<TransactionDigest>,
+    },
+    /// Alias is active; alias-signed txs are being injected. Once `successful_alias_txs`
+    /// reaches the configured threshold, a remove-alias tx is sent.
+    Active { successful_alias_txs: u32 },
+    /// A remove-alias tx has been sent; waiting for its result and checkpoint confirmation.
+    /// Phase 1 (`None`): tx sent, waiting for effects from `handle_batch_results`.
+    /// Phase 2 (`Some(digest)`): effects received, polling for checkpoint inclusion.
+    RemovePending {
+        tx_digest: Option<TransactionDigest>,
+    },
+    /// Alias was successfully removed. Next batch will inject an invalid post-revocation tx.
+    Revoked,
+    /// An invalid post-revocation tx has been sent; waiting for its (expected) failure.
+    InvalidPostRevocationTxPending,
+}
+
+/// Per-payload alias setup data produced during init:
+/// (alias_address, alias_keypair, address_aliases_object_id, address_aliases_initial_shared_version).
+type AliasInitInfo = (RtdAddress, Arc<AccountKeyPair>, ObjectID, SequenceNumber);
+
+/// Per-payload alias state used at runtime to drive alias-signed transactions and
+/// the revoke/re-add cycle.
+#[derive(Debug)]
+struct AliasState {
+    alias_address: RtdAddress,
+    alias_keypair: Arc<AccountKeyPair>,
+    address_aliases_id: ObjectID,
+    address_aliases_initial_shared_version: SequenceNumber,
+    cycle_state: AliasRevokeCycleState,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum BatchTxKind {
+    /// Standard composite PTB.
+    Normal,
+    /// Transaction signed by alias keypair.
+    AliasSigned,
+    /// Remove alias Move call.
+    AliasRemove,
+    /// Add alias Move call.
+    AliasAdd,
+    /// Alias-signed transfer after revocation (expected to fail).
+    InvalidPostRevocation,
+    /// A gasless RTD transfer.
+    Gasless,
+    /// A tx from the payload's multisig account.
+    Multisig,
+    /// A call from the lifecycle at `index` in `CompositePayload::lifecycles`.
+    Lifecycle { index: usize, step: LifecycleStep },
+}
+
+impl BatchTxKind {
+    fn is_alias(self) -> bool {
+        matches!(
+            self,
+            BatchTxKind::AliasSigned
+                | BatchTxKind::AliasRemove
+                | BatchTxKind::AliasAdd
+                | BatchTxKind::InvalidPostRevocation
+        )
+    }
+}
+
+#[derive(Clone)]
+struct BatchTxInfo {
+    gas_idx: usize,
+    /// Index of a second real gas coin used by this tx (only populated by the
+    /// mixed-payment branch when it claims a spare from `current_batch_gas`). Its
+    /// tracked version must also be refreshed from effects.
+    extra_gas_idx: Option<usize>,
+    /// The index and id of the sponsor's gas coin that pays for this tx.
+    sponsor_coin: Option<(usize, ObjectID)>,
+    op_set: OperationSet,
+    kind: BatchTxKind,
+}
+
+/// A 2-of-3 multisig account with one key of each scheme. Its gas is paid from its address
+/// balance, which is funded at init.
+#[derive(Debug, Clone)]
+struct MultisigAccount {
+    address: RtdAddress,
+    public_key: MultiSigPublicKey,
+    keys: Vec<Arc<RtdKeyPair>>,
+}
+
+impl MultisigAccount {
+    fn new() -> Self {
+        let keys: Vec<Arc<RtdKeyPair>> = vec![
+            Arc::new(RtdKeyPair::Ed25519(get_key_pair().1)),
+            Arc::new(RtdKeyPair::Secp256k1(get_key_pair().1)),
+            Arc::new(RtdKeyPair::Secp256r1(get_key_pair().1)),
+        ];
+        let public_key = MultiSigPublicKey::new(
+            keys.iter().map(|key| key.public()).collect(),
+            vec![1; keys.len()],
+            2,
+        )
+        .expect("the multisig public key is valid");
+        Self {
+            address: RtdAddress::from(&public_key),
+            public_key,
+            keys,
+        }
+    }
+}
+
+/// The gas owner of a sponsored tx. `op` is recorded in the tx's `OperationSet`.
+struct TxSponsor {
+    address: RtdAddress,
+    keypair: Arc<AccountKeyPair>,
+    op: Option<&'static str>,
+}
+
+/// The partner payload, which sponsors some of this payload's txs.
+#[derive(Clone)]
+struct Sponsor {
+    address: RtdAddress,
+    keypair: Arc<AccountKeyPair>,
+    /// The sponsor's own gas. A sponsored tx paid with one of these coins updates the coin's
+    /// version here, and it can conflict with the sponsor's own txs on that coin.
+    gas: Arc<Mutex<MultiGas>>,
+}
+
+impl std::fmt::Debug for CompositePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompositePayload")
+            .field("config", &self.config)
+            .finish()
+    }
+}
+
+impl std::fmt::Display for CompositePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "composite")
+    }
+}
+
+impl CompositePayload {
+    fn resolve_resources_for_op(
+        op: &dyn Operation,
+        pool: &OperationPool,
+        package_version: ObjectID,
+        config: &CompositeWorkloadConfig,
+        current_epoch: u64,
+        payload_allowances: Option<PayloadAllowances>,
+    ) -> OperationResources {
+        let mut counter = None;
+        let mut randomness = None;
+        let mut accumulator_root = None;
+        let mut balance_pool = None;
+        let mut test_coin_cap = None;
+        let mut chain_identifier = None;
+        let mut epoch = None;
+        let mut allowances = None;
+
+        for req in op.resource_requests() {
+            match req {
+                ResourceRequest::SharedCounter => {
+                    counter = Some(pool.select_counter());
+                }
+                ResourceRequest::Randomness => {
+                    randomness = Some(pool.randomness_initial_shared_version);
+                }
+                ResourceRequest::AddressBalance => {}
+                ResourceRequest::ObjectBalance => {
+                    balance_pool = pool.balance_pool;
+                }
+                ResourceRequest::TestCoinCap => {
+                    test_coin_cap = pool.test_coin_cap;
+                }
+                ResourceRequest::AccumulatorRoot => {
+                    accumulator_root = Some(pool.accumulator_root_initial_shared_version);
+                }
+                ResourceRequest::ImmutableObject => {}
+                ResourceRequest::CoinReservation => {
+                    chain_identifier = Some(pool.chain_identifier);
+                    epoch = Some(current_epoch);
+                    accumulator_root = Some(pool.accumulator_root_initial_shared_version);
+                }
+                ResourceRequest::Allowances => {
+                    allowances = payload_allowances;
+                }
+            }
+        }
+
+        OperationResources {
+            counter,
+            randomness,
+            accumulator_root,
+            package_id: package_version,
+            address_balance_amount: config.address_balance_amount,
+            balance_pool,
+            test_coin_cap,
+            test_coin_type: pool.test_coin_type.clone(),
+            immutable_object: pool.immutable_object,
+            chain_identifier,
+            current_epoch: epoch,
+            allowances,
+        }
+    }
+
+    fn sample_restrict_proposers(&self) -> bool {
+        self.pool.committee_size.is_some()
+            && !allowed_proposers_disabled(
+                self.system_state_observer
+                    .state
+                    .borrow()
+                    .protocol_config
+                    .as_ref(),
+            )
+            && get_rng().gen_bool(self.config.allowed_proposers_probability as f64)
+    }
+
+    fn restrict_proposers(&self, data: &mut TransactionData, current_epoch: u64) {
+        operations::restrict_proposers(
+            data,
+            self.pool.committee_size.unwrap(),
+            current_epoch,
+            self.pool.chain_identifier,
+            self.nonce_counter.fetch_add(1, Ordering::Relaxed),
+        );
+    }
+
+    /// Samples the ops for one tx. If the tx carries a lifecycle call, isolated ops are
+    /// dropped and the result may be empty.
+    fn sample_operations(&self, with_lifecycle_call: bool) -> Vec<Box<dyn Operation>> {
+        let protocol_config = self
+            .system_state_observer
+            .state
+            .borrow()
+            .protocol_config
+            .clone();
+        let filter_address_balance = address_balance_disabled(protocol_config.as_ref());
+        let filter_authenticated_events = authenticated_events_disabled(protocol_config.as_ref());
+
+        loop {
+            let mut ops = self.config.sample_operations();
+            if filter_address_balance {
+                ops.retain(|op| {
+                    !op.resource_requests().iter().any(|r| {
+                        matches!(
+                            r,
+                            ResourceRequest::AddressBalance
+                                | ResourceRequest::ObjectBalance
+                                | ResourceRequest::AccumulatorRoot
+                                | ResourceRequest::CoinReservation
+                        )
+                    })
+                });
+            }
+            if filter_authenticated_events {
+                ops.retain(|op| op.name() != AuthenticatedEventEmit::NAME);
+            }
+            if self.allowances.is_none() {
+                ops.retain(|op| {
+                    op.name() != AllowanceWithdraw::NAME && op.name() != AllowanceSelfWithdraw::NAME
+                });
+            }
+            let isolated = if with_lifecycle_call {
+                false
+            } else {
+                ops.iter().any(|op| op.constraints().isolated)
+            };
+            ops.retain(|op| op.constraints().isolated == isolated);
+            if !ops.is_empty() || with_lifecycle_call {
+                return ops;
+            }
+        }
+    }
+
+    fn generate_transaction(
+        &mut self,
+        mut tx_builder: TestTransactionBuilder,
+        account_state: &AccountState,
+        keypair: &AccountKeyPair,
+        current_epoch: u64,
+        lifecycle_call: Option<&LifecycleCall>,
+        sponsor: Option<TxSponsor>,
+        timestamp_window: Option<(Option<u64>, Option<u64>)>,
+    ) -> (Transaction, OperationSet) {
+        let ops = match lifecycle_call {
+            Some(call) if call.bare => vec![],
+            _ => self.sample_operations(lifecycle_call.is_some()),
+        };
+
+        let mut op_set = OperationSet::new();
+        for op in &ops {
+            op_set = op_set.with(op.name());
+        }
+        if let Some(call) = lifecycle_call {
+            op_set = op_set.with(call.op);
+        }
+        if let Some(op) = sponsor.as_ref().and_then(|sponsor| sponsor.op) {
+            op_set = op_set.with(op);
+        }
+        let restrict = self.sample_restrict_proposers();
+        if restrict {
+            op_set = op_set.with(ALLOWED_PROPOSERS_TX);
+        }
+        self.metrics
+            .lock()
+            .unwrap()
+            .record_signed_and_sent(op_set.clone());
+
+        let op_names: Vec<&str> = ops.iter().map(|op| op.name()).collect();
+
+        tracing::debug!(
+            "Building composite transaction with operations: {:?}",
+            op_names
+        );
+
+        {
+            let package_version = self.pool.select_package_version();
+            let builder = tx_builder.ptb_builder_mut();
+            // The lifecycle call goes first because some ops must be the last shared access.
+            if let Some(call) = lifecycle_call {
+                call.apply(builder, package_version);
+            }
+            for op in &ops {
+                let resources = Self::resolve_resources_for_op(
+                    op.as_ref(),
+                    &self.pool,
+                    package_version,
+                    &self.config,
+                    current_epoch,
+                    self.allowances,
+                );
+                op.apply(builder, &resources, account_state);
+            }
+        }
+
+        let mut data = tx_builder.ensure_unique().build();
+        if let Some((min, max)) = timestamp_window {
+            let TransactionExpiration::ValidDuring {
+                min_timestamp,
+                max_timestamp,
+                ..
+            } = data.expiration_mut()
+            else {
+                panic!("timestamp windows require a ValidDuring expiration");
+            };
+            *min_timestamp = min;
+            *max_timestamp = max;
+        }
+        if restrict {
+            self.restrict_proposers(&mut data, current_epoch);
+        }
+        let tx = match sponsor {
+            None => Transaction::from_data_and_signer(data, vec![keypair]),
+            Some(sponsor) => {
+                data.gas_data_mut().owner = sponsor.address;
+                Transaction::from_data_and_signer(data, vec![keypair, sponsor.keypair.as_ref()])
+            }
+        };
+        (tx, op_set)
+    }
+
+    fn generate_alias_transaction(
+        &mut self,
+        sender: RtdAddress,
+        gas: ObjectRef,
+        gas_idx: usize,
+        rgp: u64,
+        keypair: &AccountKeyPair,
+    ) -> (Transaction, BatchTxInfo) {
+        let alias_state = self.alias_state.as_mut().unwrap();
+
+        let (tx, op_set, kind) = match &alias_state.cycle_state {
+            AliasRevokeCycleState::Active {
+                successful_alias_txs,
+            } if *successful_alias_txs >= self.config.alias_txs_before_revoke => {
+                let tx = TestTransactionBuilder::new(sender, gas, rgp)
+                    .move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        "address_alias",
+                        "remove",
+                        vec![
+                            CallArg::Object(ObjectArg::SharedObject {
+                                id: alias_state.address_aliases_id,
+                                initial_shared_version: alias_state
+                                    .address_aliases_initial_shared_version,
+                                mutability: SharedObjectMutability::Mutable,
+                            }),
+                            CallArg::Pure(bcs::to_bytes(&alias_state.alias_address).unwrap()),
+                        ],
+                    )
+                    .ensure_unique()
+                    .build_and_sign(keypair);
+                alias_state.cycle_state = AliasRevokeCycleState::RemovePending { tx_digest: None };
+                (
+                    tx,
+                    OperationSet::new().with(ALIAS_REMOVE),
+                    BatchTxKind::AliasRemove,
+                )
+            }
+            AliasRevokeCycleState::Active { .. } => {
+                let data = TestTransactionBuilder::new(sender, gas, rgp)
+                    .transfer_rtd(None, sender)
+                    .ensure_unique()
+                    .build();
+                let tx = Transaction::from_data_and_signer(
+                    data,
+                    vec![alias_state.alias_keypair.as_ref()],
+                );
+                (
+                    tx,
+                    OperationSet::new().with(ALIAS_TX),
+                    BatchTxKind::AliasSigned,
+                )
+            }
+            AliasRevokeCycleState::Revoked => {
+                let data = TestTransactionBuilder::new(sender, gas, rgp)
+                    .transfer_rtd(None, sender)
+                    .ensure_unique()
+                    .build();
+                let tx = Transaction::from_data_and_signer(
+                    data,
+                    vec![alias_state.alias_keypair.as_ref()],
+                );
+                alias_state.cycle_state = AliasRevokeCycleState::InvalidPostRevocationTxPending;
+                (
+                    tx,
+                    OperationSet::new().with(INVALID_ALIAS_TX),
+                    BatchTxKind::InvalidPostRevocation,
+                )
+            }
+            AliasRevokeCycleState::NeedAdd => {
+                let tx = TestTransactionBuilder::new(sender, gas, rgp)
+                    .move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        "address_alias",
+                        "add",
+                        vec![
+                            CallArg::Object(ObjectArg::SharedObject {
+                                id: alias_state.address_aliases_id,
+                                initial_shared_version: alias_state
+                                    .address_aliases_initial_shared_version,
+                                mutability: SharedObjectMutability::Mutable,
+                            }),
+                            CallArg::Pure(bcs::to_bytes(&alias_state.alias_address).unwrap()),
+                        ],
+                    )
+                    .ensure_unique()
+                    .build_and_sign(keypair);
+                alias_state.cycle_state = AliasRevokeCycleState::AddPending { tx_digest: None };
+                (
+                    tx,
+                    OperationSet::new().with(ALIAS_ADD),
+                    BatchTxKind::AliasAdd,
+                )
+            }
+            _ => unreachable!("should not generate alias tx in pending state"),
+        };
+
+        self.metrics
+            .lock()
+            .unwrap()
+            .record_signed_and_sent(op_set.clone());
+        (
+            tx,
+            BatchTxInfo {
+                gas_idx,
+                extra_gas_idx: None,
+                sponsor_coin: None,
+                op_set,
+                kind,
+            },
+        )
+    }
+
+    /// Builds a tx from the multisig account, signed by a random two of its three keys. It
+    /// increments a shared counter and sends one MIST to the partner.
+    fn generate_multisig_transaction(&mut self, rgp: u64, current_epoch: u64) -> Transaction {
+        let account = self.multisig.clone().unwrap();
+        let nonce = self.nonce_counter.fetch_add(1, Ordering::Relaxed);
+        let mut tx_builder = TestTransactionBuilder::new_with_address_balance_gas(
+            account.address,
+            rgp,
+            self.pool.chain_identifier,
+            current_epoch,
+            nonce,
+        )
+        .with_gas_budget(rgp * MULTISIG_GAS_UNITS);
+        {
+            let package_version = self.pool.select_package_version();
+            let (counter_id, counter_version) = self.pool.select_counter();
+            let builder = tx_builder.ptb_builder_mut();
+            builder
+                .move_call(
+                    package_version,
+                    Identifier::new("counter").unwrap(),
+                    Identifier::new("increment").unwrap(),
+                    vec![],
+                    vec![CallArg::Object(ObjectArg::SharedObject {
+                        id: counter_id,
+                        initial_shared_version: counter_version,
+                        mutability: SharedObjectMutability::Mutable,
+                    })],
+                )
+                .unwrap();
+            let withdrawal = builder
+                .funds_withdrawal(FundsWithdrawalArg::balance_from_sender(1, GAS::type_tag()))
+                .unwrap();
+            let balance = builder.programmable_move_call(
+                RTD_FRAMEWORK_PACKAGE_ID,
+                Identifier::new("balance").unwrap(),
+                Identifier::new("redeem_funds").unwrap(),
+                vec![GAS::type_tag()],
+                vec![withdrawal],
+            );
+            let recipient = builder.pure(self.partner_address).unwrap();
+            builder.programmable_move_call(
+                RTD_FRAMEWORK_PACKAGE_ID,
+                Identifier::new("balance").unwrap(),
+                Identifier::new("send_funds").unwrap(),
+                vec![GAS::type_tag()],
+                vec![balance, recipient],
+            );
+        }
+        // The signatures must be in the order of the keys in the multisig public key.
+        let skipped = get_rng().gen_range(0..account.keys.len());
+        let mut signers: Vec<&dyn Signer<Signature>> = vec![];
+        let mut bitmap = 0;
+        for (i, key) in account.keys.iter().enumerate() {
+            if i != skipped {
+                signers.push(key.as_ref());
+                bitmap |= 1 << i;
+            }
+        }
+        let tx = tx_builder.ensure_unique().build_and_sign_multisig(
+            account.public_key.clone(),
+            &signers,
+            bitmap,
+        );
+        let op_set = OperationSet::new().with(MULTISIG_TX);
+        self.metrics
+            .lock()
+            .unwrap()
+            .record_signed_and_sent(op_set.clone());
+        self.current_batch_txs.push(BatchTxInfo {
+            // The tx uses no gas coin, so the result leaves this coin unchanged.
+            gas_idx: 0,
+            extra_gas_idx: None,
+            sponsor_coin: None,
+            op_set,
+            kind: BatchTxKind::Multisig,
+        });
+        tx
+    }
+
+    /// Builds a gasless tx that sends RTD from the sender's address balance to the partner.
+    /// Gasless txs may call only framework fund functions, so it carries no sampled ops.
+    fn generate_gasless_transaction(
+        &mut self,
+        sender: RtdAddress,
+        keypair: &AccountKeyPair,
+        current_epoch: u64,
+    ) -> Transaction {
+        let mut builder = ProgrammableTransactionBuilder::new();
+        let withdrawal = builder
+            .funds_withdrawal(FundsWithdrawalArg::balance_from_sender(1, GAS::type_tag()))
+            .unwrap();
+        let balance = builder.programmable_move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            Identifier::new("balance").unwrap(),
+            Identifier::new("redeem_funds").unwrap(),
+            vec![GAS::type_tag()],
+            vec![withdrawal],
+        );
+        let recipient = builder.pure(self.partner_address).unwrap();
+        builder.programmable_move_call(
+            RTD_FRAMEWORK_PACKAGE_ID,
+            Identifier::new("balance").unwrap(),
+            Identifier::new("send_funds").unwrap(),
+            vec![GAS::type_tag()],
+            vec![balance, recipient],
+        );
+        let nonce = self.nonce_counter.fetch_add(1, Ordering::Relaxed);
+        let mut data = TransactionData::new_programmable_with_address_balance_gas(
+            sender,
+            builder.finish(),
+            0,
+            0,
+            self.pool.chain_identifier,
+            current_epoch,
+            nonce,
+        );
+        let mut op_set = OperationSet::new().with(GASLESS_TRANSFER);
+        if self.sample_restrict_proposers() {
+            self.restrict_proposers(&mut data, current_epoch);
+            op_set = op_set.with(ALLOWED_PROPOSERS_TX);
+        }
+        self.metrics
+            .lock()
+            .unwrap()
+            .record_signed_and_sent(op_set.clone());
+        self.current_batch_txs.push(BatchTxInfo {
+            // The tx uses no gas coin, so the result leaves this coin unchanged.
+            gas_idx: 0,
+            extra_gas_idx: None,
+            sponsor_coin: None,
+            op_set,
+            kind: BatchTxKind::Gasless,
+        });
+        Transaction::from_data_and_signer(data, vec![keypair])
+    }
+
+    /// Polls for pending alias checkpoint confirmations and returns true if
+    /// an alias tx should be generated this batch.
+    async fn advance_alias_state(&mut self) -> bool {
+        let Some(ref mut alias_state) = self.alias_state else {
+            return false;
+        };
+
+        match &alias_state.cycle_state {
+            AliasRevokeCycleState::AddPending {
+                tx_digest: Some(digest),
+            } => {
+                let checkpointed = self.fullnode_proxies[0]
+                    .is_transaction_checkpointed(digest)
+                    .await
+                    .unwrap_or(false);
+                if checkpointed {
+                    info!("Add alias tx {digest} checkpoint confirmed");
+                    alias_state.cycle_state = AliasRevokeCycleState::Active {
+                        successful_alias_txs: 0,
+                    };
+                }
+            }
+            AliasRevokeCycleState::RemovePending {
+                tx_digest: Some(digest),
+            } => {
+                let checkpointed = self.fullnode_proxies[0]
+                    .is_transaction_checkpointed(digest)
+                    .await
+                    .unwrap_or(false);
+                if checkpointed {
+                    info!("Remove alias tx {digest} checkpoint confirmed");
+                    alias_state.cycle_state = AliasRevokeCycleState::Revoked;
+                }
+            }
+            _ => {}
+        }
+
+        let mut rng = get_rng();
+        match &alias_state.cycle_state {
+            AliasRevokeCycleState::Active {
+                successful_alias_txs,
+            } if *successful_alias_txs >= self.config.alias_txs_before_revoke => true,
+            AliasRevokeCycleState::Active { .. } => {
+                rng.gen_bool(self.config.alias_tx_probability as f64)
+            }
+            AliasRevokeCycleState::Revoked | AliasRevokeCycleState::NeedAdd => true,
+            _ => false,
+        }
+    }
+
+    /// Updates alias cycle state based on a transaction result.
+    /// Returns true if this was an expected alias failure (should not count toward
+    /// the conflicting transaction failure assertion).
+    fn handle_alias_tx_result(
+        alias_state: &mut AliasState,
+        kind: BatchTxKind,
+        status: &BatchedTransactionStatus,
+        alias_txs_before_revoke: u32,
+        digest: TransactionDigest,
+    ) -> bool {
+        match (kind, status) {
+            (BatchTxKind::InvalidPostRevocation, BatchedTransactionStatus::Success { .. }) => {
+                debug_fatal!("Invalid post-revocation alias tx unexpectedly succeeded: {digest:?}");
+                alias_state.cycle_state = AliasRevokeCycleState::NeedAdd;
+                false
+            }
+            (
+                BatchTxKind::InvalidPostRevocation,
+                BatchedTransactionStatus::PermanentFailure { .. }
+                | BatchedTransactionStatus::UnknownRejection,
+            ) => {
+                info!("Invalid post-revocation alias tx correctly rejected: {digest:?}");
+                alias_state.cycle_state = AliasRevokeCycleState::NeedAdd;
+                true
+            }
+            (
+                BatchTxKind::InvalidPostRevocation,
+                BatchedTransactionStatus::RetriableFailure { .. },
+            ) => {
+                info!(
+                    "Invalid post-revocation alias tx had retriable failure, will retry: {digest:?}",
+                );
+                alias_state.cycle_state = AliasRevokeCycleState::Revoked;
+                false
+            }
+
+            (BatchTxKind::AliasRemove, BatchedTransactionStatus::Success { effects }) => {
+                if effects.is_ok() {
+                    info!("Remove alias tx succeeded, waiting for checkpoint: {digest:?}");
+                    alias_state.cycle_state = AliasRevokeCycleState::RemovePending {
+                        tx_digest: Some(digest),
+                    };
+                } else {
+                    info!("Remove alias tx aborted: {digest:?}");
+                    alias_state.cycle_state = AliasRevokeCycleState::Active {
+                        successful_alias_txs: alias_txs_before_revoke,
+                    };
+                }
+                false
+            }
+            (BatchTxKind::AliasRemove, _) => {
+                info!("Remove alias tx failed, retrying: {digest:?}");
+                alias_state.cycle_state = AliasRevokeCycleState::Active {
+                    successful_alias_txs: alias_txs_before_revoke,
+                };
+                false
+            }
+
+            (BatchTxKind::AliasAdd, BatchedTransactionStatus::Success { effects }) => {
+                if effects.is_ok() {
+                    info!("Add alias tx succeeded, waiting for checkpoint: {digest:?}");
+                    alias_state.cycle_state = AliasRevokeCycleState::AddPending {
+                        tx_digest: Some(digest),
+                    };
+                } else {
+                    info!("Add alias tx aborted: {digest:?}");
+                    alias_state.cycle_state = AliasRevokeCycleState::NeedAdd;
+                }
+                false
+            }
+            (BatchTxKind::AliasAdd, _) => {
+                info!("Add alias tx failed, retrying: {digest:?}");
+                alias_state.cycle_state = AliasRevokeCycleState::NeedAdd;
+                false
+            }
+
+            (BatchTxKind::AliasSigned, BatchedTransactionStatus::Success { effects }) => {
+                if effects.is_ok()
+                    && let AliasRevokeCycleState::Active {
+                        ref mut successful_alias_txs,
+                    } = alias_state.cycle_state
+                {
+                    *successful_alias_txs += 1;
+                }
+                false
+            }
+            (BatchTxKind::AliasSigned, _) => false,
+
+            (kind, _) => unreachable!("{kind:?} txs should not reach this function"),
+        }
+    }
+}
+
+#[async_trait]
+impl Payload for CompositePayload {
+    fn make_new_payload(&mut self, _: &ExecutionEffects) {
+        unimplemented!();
+    }
+
+    fn make_transaction(&mut self) -> Transaction {
+        unimplemented!()
+    }
+
+    fn is_batched(&self) -> bool {
+        true
+    }
+
+    fn use_direct_batch_submission(&self) -> bool {
+        self.direct_submission
+    }
+
+    async fn make_transaction_batch(&mut self) -> Vec<Transaction> {
+        let alias_tx_needed = self.advance_alias_state().await;
+        let system_state = self.system_state_observer.state.borrow().clone();
+        if let Some(protocol_config) = system_state.protocol_config.as_ref() {
+            register_reachability_for_config(protocol_config);
+        }
+        let sender = self.gas.lock().unwrap().1;
+
+        self.current_batch_txs.clear();
+        self.current_batch_num_conflicting_transactions = 0;
+        self.direct_submission = false;
+
+        let max_normal_batch = if alias_tx_needed {
+            MAX_BATCH_SIZE - 1
+        } else {
+            MAX_BATCH_SIZE
+        };
+        let ctx = StepContext {
+            sender,
+            partner: self.partner_address,
+        };
+        let mut lifecycle_calls = vec![];
+        for index in choose_lifecycles(&self.lifecycles, max_normal_batch) {
+            let max_calls = self.lifecycles[index].max_step_calls();
+            let calls = self.lifecycles[index].next_step(&ctx);
+            assert!(calls.len() <= max_calls);
+            lifecycle_calls.extend(calls.into_iter().map(|call| (index, call)));
+        }
+        let batch_size = {
+            let mut rng = get_rng();
+            assert!(lifecycle_calls.len() <= max_normal_batch);
+            rng.gen_range(lifecycle_calls.len().max(1)..=max_normal_batch)
+        };
+
+        let rgp = system_state.reference_gas_price;
+        let current_epoch = system_state.epoch;
+        let address_balance_gas_disabled =
+            address_balance_disabled(system_state.protocol_config.as_ref());
+        let timestamp_expiration_disabled =
+            timestamp_expiration_disabled(system_state.protocol_config.as_ref());
+
+        let (current_batch_gas, sender, keypair) = {
+            let gas = self.gas.lock().unwrap();
+            assert!(
+                gas.0.len() >= batch_size,
+                "Not enough gas coins available in pool"
+            );
+            (gas.0.clone(), gas.1, gas.2.clone())
+        };
+
+        let mut transactions = Vec::with_capacity(batch_size + 1);
+
+        let account_state = AccountState::new(
+            sender,
+            &self.fullnode_proxies,
+            self.pool.balance_pool,
+            self.partner_address,
+        )
+        .await;
+
+        let mut used_gas = vec![];
+
+        let mut rng = get_rng();
+
+        // Spare gas coins available beyond the per-tx allocation and the optional alias
+        // slot. The mixed-payment branch can claim these to build 2-real-coin payments.
+        let alias_offset = if alias_tx_needed { 1 } else { 0 };
+        let mut next_spare_gas_idx = batch_size + alias_offset;
+        let mut sponsor_coin_claimed = false;
+
+        for (i, gas) in current_batch_gas.iter().take(batch_size).enumerate() {
+            let mut extra_gas_idx_opt: Option<usize> = None;
+            let (lifecycle_index, lifecycle_call) = match lifecycle_calls.get(i) {
+                Some((index, call)) => (*index, Some(call)),
+                None => (0, None),
+            };
+            let mut sponsor = None;
+            let mut sponsor_coin = None;
+            let timestamp_window = (lifecycle_call.is_none()
+                && !address_balance_gas_disabled
+                && !timestamp_expiration_disabled
+                && rng.gen_bool(self.config.timestamp_expiration_probability as f64))
+            .then(|| sample_timestamp_window(&mut rng));
+            // A soft-bundle member before its min_timestamp gets a retriable rejection, and the
+            // harness then retries the whole bundle.
+            if timestamp_window.is_some_and(|(min, _)| {
+                min.is_some_and(|min| {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    min >= now
+                })
+            }) {
+                self.direct_submission = true;
+            }
+            let builder = if lifecycle_call.is_some_and(|call| call.bare)
+                && !address_balance_gas_disabled
+                && let Some((address, keypair)) = &self.lifecycle_gas
+            {
+                // A bare tx pays from the lifecycle gas account's address balance, so that no
+                // gas coin version raises the versions it assigns or writes.
+                sponsor = Some(TxSponsor {
+                    address: *address,
+                    keypair: keypair.clone(),
+                    op: None,
+                });
+                let nonce = self.nonce_counter.fetch_add(1, Ordering::Relaxed);
+                TestTransactionBuilder::new_with_address_balance_gas(
+                    sender,
+                    rgp,
+                    self.pool.chain_identifier,
+                    current_epoch,
+                    nonce,
+                )
+            } else if lifecycle_call.is_none()
+                && timestamp_window.is_none()
+                && !sponsor_coin_claimed
+                && let Some(s) = &self.sponsor
+                && rng.gen_bool(self.config.sponsored_probability as f64)
+            {
+                // Validators do not yet accept `WithdrawFrom::Sponsor` withdrawals, so a
+                // sponsored tx withdraws only through its gas. The sponsor's address balance
+                // holds only the small seed, so the sponsor pays with a coin, and one tx per
+                // batch claims it.
+                sponsor = Some(TxSponsor {
+                    address: s.address,
+                    keypair: s.keypair.clone(),
+                    op: Some(SPONSORED_TX),
+                });
+                sponsor_coin_claimed = true;
+                let idx = SPONSOR_GAS_IDX;
+                let coin = s.gas.lock().unwrap().0[idx];
+                sponsor_coin = Some((idx, coin.0));
+                TestTransactionBuilder::new(sender, coin, rgp)
+            } else if timestamp_window.is_some()
+                || (!address_balance_gas_disabled
+                    && rng.gen_bool(self.config.address_balance_gas_probability as f64))
+            {
+                let nonce = self.nonce_counter.fetch_add(1, Ordering::Relaxed);
+                TestTransactionBuilder::new_with_address_balance_gas(
+                    sender,
+                    rgp,
+                    self.pool.chain_identifier,
+                    current_epoch,
+                    nonce,
+                )
+            } else if !address_balance_gas_disabled
+                && rng.gen_bool(self.config.mixed_gas_payment_probability as f64)
+            {
+                used_gas.push(i);
+                // Mix 1-2 real coins with 1-2 coin-reservation digest entries and shuffle.
+                // When such a tx is cancelled for insufficient funds (IFFW), each
+                // address-balance entry left in the payment list is settled as a Split
+                // against the (possibly depleted) accumulator: the gas-smashing path under test.
+                let rtd_balance_type = Balance::type_tag(GAS::type_tag());
+                let accumulator_obj_id = AccumulatorValue::get_field_id(sender, &rtd_balance_type)
+                    .expect("Failed to compute accumulator object ID");
+                // Sized in the same order of magnitude as the AB amount: large enough that
+                // concurrent overdraw can leave it underfunded, but not so large that signing
+                // or scheduling rejects it. base+1 gives the second fake coin a distinct digest.
+                let base_reservation = std::cmp::max(1, self.config.address_balance_amount * 10);
+
+                let mut payment = vec![*gas];
+                if rng.gen_bool(0.5) && next_spare_gas_idx < current_batch_gas.len() {
+                    payment.push(current_batch_gas[next_spare_gas_idx]);
+                    extra_gas_idx_opt = Some(next_spare_gas_idx);
+                    next_spare_gas_idx += 1;
+                }
+                let num_fakes = if rng.gen_bool(0.5) { 2 } else { 1 };
+                for k in 0..num_fakes {
+                    let fake_coin = ParsedObjectRefWithdrawal::new(
+                        *accumulator_obj_id.inner(),
+                        current_epoch,
+                        base_reservation + k as u64,
+                    )
+                    .encode(SequenceNumber::new(), self.pool.chain_identifier);
+                    payment.push(fake_coin);
+                }
+                payment.shuffle(&mut rng);
+                TestTransactionBuilder::new_with_gas_objects(sender, payment, rgp)
+            } else {
+                used_gas.push(i);
+                TestTransactionBuilder::new(sender, *gas, rgp)
+            };
+
+            let (tx, op_set) = self.generate_transaction(
+                builder,
+                &account_state,
+                &keypair,
+                current_epoch,
+                lifecycle_call,
+                sponsor,
+                timestamp_window,
+            );
+            self.current_batch_txs.push(BatchTxInfo {
+                gas_idx: i,
+                extra_gas_idx: extra_gas_idx_opt,
+                sponsor_coin,
+                op_set,
+                kind: lifecycle_call.map_or(BatchTxKind::Normal, |call| BatchTxKind::Lifecycle {
+                    index: lifecycle_index,
+                    step: call.step,
+                }),
+            });
+            transactions.push(tx);
+        }
+
+        self.current_batch_num_conflicting_transactions = if rng
+            .gen_bool(self.config.conflicting_transaction_probability as f64)
+            && !used_gas.is_empty()
+        {
+            let num_conflicting_transactions = rng.gen_range(1..=used_gas.len());
+            for gas_idx in used_gas.iter().take(num_conflicting_transactions) {
+                let gas = current_batch_gas[*gas_idx];
+
+                // use rgp + 1 to ensure we never make a duplicate transaction here
+                let builder = TestTransactionBuilder::new(sender, gas, rgp + 1);
+                let (tx, op_set) = self.generate_transaction(
+                    builder,
+                    &account_state,
+                    &keypair,
+                    current_epoch,
+                    None,
+                    None,
+                    None,
+                );
+                self.current_batch_txs.push(BatchTxInfo {
+                    gas_idx: *gas_idx,
+                    extra_gas_idx: None,
+                    sponsor_coin: None,
+                    op_set,
+                    kind: BatchTxKind::Normal,
+                });
+                transactions.push(tx);
+            }
+            num_conflicting_transactions
+        } else {
+            0
+        };
+
+        if alias_tx_needed {
+            let alias_gas_idx = batch_size;
+            if alias_gas_idx < current_batch_gas.len() {
+                let gas = current_batch_gas[alias_gas_idx];
+                let (tx, info) = self.generate_alias_transaction(
+                    sender,
+                    gas,
+                    alias_gas_idx,
+                    rgp,
+                    keypair.as_ref(),
+                );
+                self.current_batch_txs.push(info);
+                transactions.push(tx);
+            }
+        }
+
+        if !address_balance_gas_disabled
+            && self.multisig.is_some()
+            && rng.gen_bool(self.config.multisig_probability as f64)
+        {
+            transactions.push(self.generate_multisig_transaction(rgp, current_epoch));
+        }
+
+        if !address_balance_gas_disabled
+            && !gasless_disabled(system_state.protocol_config.as_ref())
+            && rng.gen_bool(self.config.gasless_probability as f64)
+        {
+            self.direct_submission = true;
+            transactions.push(self.generate_gasless_transaction(
+                sender,
+                keypair.as_ref(),
+                current_epoch,
+            ));
+        }
+
+        debug!(
+            num_conflicting_transactions = self.current_batch_num_conflicting_transactions,
+            "built batch: {:?}",
+            transactions
+                .iter()
+                .map(|tx| tx.digest())
+                .collect::<Vec<_>>(),
+        );
+        transactions
+    }
+
+    fn handle_batch_results(&mut self, results: &BatchExecutionResults) {
+        debug!(
+            "Handling batch results: {:?}",
+            results.results.iter().map(|r| r.digest).collect::<Vec<_>>()
+        );
+        let mut metrics = self.metrics.lock().unwrap();
+
+        let mut permanent_failure_count = 0;
+        let mut expected_alias_failure_count = 0;
+
+        let mut gas = self.gas.lock().unwrap();
+        let mut sponsor_gas_updates = vec![];
+        for (i, result) in results.results.iter().enumerate() {
+            let tx_info = &self.current_batch_txs[i];
+            trace!("result: {}", result.description());
+            assert!(
+                tx_info.gas_idx < gas.0.len(),
+                "result should correspond to a gas coin"
+            );
+
+            if let BatchTxKind::Lifecycle { index, step } = tx_info.kind {
+                self.lifecycles[index].handle_result(step, &result.status);
+            }
+            if let (BatchTxKind::Gasless, BatchedTransactionStatus::Success { effects }) =
+                (tx_info.kind, &result.status)
+                && effects.is_ok()
+            {
+                assert_reachable_gated!(
+                    "gasless composite transfer executed",
+                    gasless_rtd_transfer_allowed
+                );
+            }
+            if let (BatchTxKind::Multisig, BatchedTransactionStatus::Success { effects }) =
+                (tx_info.kind, &result.status)
+                && effects.is_ok()
+            {
+                assert_reachable!("multisig composite tx executed");
+            }
+
+            if tx_info.kind.is_alias()
+                && let Some(ref mut alias_state) = self.alias_state
+                && Self::handle_alias_tx_result(
+                    alias_state,
+                    tx_info.kind,
+                    &result.status,
+                    self.config.alias_txs_before_revoke,
+                    result.digest,
+                )
+            {
+                expected_alias_failure_count += 1;
+            }
+
+            match &result.status {
+                BatchedTransactionStatus::Success { effects } => {
+                    if effects.is_address_denied() {
+                        assert_reachable!("composite tx failed for a denied address");
+                    }
+                    if effects.is_cancelled() {
+                        metrics.record_cancellation(tx_info.op_set.clone());
+                    } else if effects.is_insufficient_funds() {
+                        // TODO: Split insufficient address funds and insufficient object funds
+                        // cases to make sure we have a good coverage for both of them.
+                        metrics.record_insufficient_funds(tx_info.op_set.clone());
+                    } else if effects.is_ok() {
+                        metrics.record_success(tx_info.op_set.clone());
+                    } else {
+                        metrics.record_abort(tx_info.op_set.clone());
+                    }
+                    update_gas!(&mut gas.0[tx_info.gas_idx], effects);
+                    if let Some(extra_idx) = tx_info.extra_gas_idx {
+                        update_gas!(&mut gas.0[extra_idx], effects);
+                    }
+                    if let Some((idx, coin_id)) = tx_info.sponsor_coin
+                        && let Some(new_ref) = effects.updated_gas(coin_id)
+                    {
+                        sponsor_gas_updates.push((idx, new_ref));
+                    }
+                    if tx_info.sponsor_coin.is_some() && effects.is_ok() {
+                        assert_reachable!("composite tx sponsored with a coin executed");
+                    }
+                }
+                BatchedTransactionStatus::PermanentFailure { error } => {
+                    if error.contains("denied") {
+                        assert_reachable!("composite tx rejected for a denied address");
+                    }
+                    permanent_failure_count += 1;
+                    metrics.record_permanent_failure(tx_info.op_set.clone());
+                    tracing::debug!(
+                        "Transaction {} ({}) rejected with error: {:?}",
+                        i,
+                        result.digest,
+                        error
+                    );
+                }
+                BatchedTransactionStatus::RetriableFailure { error } => {
+                    metrics.record_retriable_failure(tx_info.op_set.clone());
+                    tracing::debug!(
+                        "Transaction {} ({}) had retriable failure: {:?}",
+                        i,
+                        result.digest,
+                        error
+                    );
+                }
+                BatchedTransactionStatus::UnknownRejection => {
+                    metrics.record_unknown_rejection(tx_info.op_set.clone());
+                    tracing::debug!(
+                        "Transaction {} ({}) had unknown rejection",
+                        i,
+                        result.digest,
+                    );
+                }
+            }
+        }
+        // Partners sponsor each other, so a payload never holds its own gas lock while it
+        // takes its sponsor's.
+        drop(gas);
+        if let Some(sponsor) = &self.sponsor {
+            let mut sponsor_gas = sponsor.gas.lock().unwrap();
+            for (idx, new_ref) in sponsor_gas_updates {
+                // The sponsor's own txs may have moved the coin to a later version.
+                if sponsor_gas.0[idx].0 == new_ref.0 && sponsor_gas.0[idx].1 < new_ref.1 {
+                    sponsor_gas.0[idx] = new_ref;
+                }
+            }
+        }
+        assert_sometimes!(
+            permanent_failure_count
+                >= self.current_batch_num_conflicting_transactions + expected_alias_failure_count,
+            "failure count should sometimes be greater than or equal to the number of conflicting transactions"
+        );
+
+        self.current_batch_txs.clear();
+    }
+}
+
+pub struct AccountState {
+    pub sender: RtdAddress,
+    pub rtd_balance: u64,
+    pub pool_balance: u64,
+    pub partner_address: RtdAddress,
+}
+
+impl AccountState {
+    pub async fn new(
+        sender: RtdAddress,
+        fullnode_proxies: &Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
+        balance_pool: Option<(ObjectID, SequenceNumber)>,
+        partner_address: RtdAddress,
+    ) -> Self {
+        let mut retries = 0;
+        while retries < 3 {
+            let proxy = fullnode_proxies.choose(&mut get_rng()).unwrap();
+            let Ok(rtd_balance) = proxy.get_rtd_address_balance(sender).await else {
+                info!("Failed to get rtd balance for address {sender}");
+                retries += 1;
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            };
+            assert_reachable!("successfully got rtd balance for address");
+            let pool_balance = if let Some((pool_id, _)) = balance_pool {
+                let pool_address: RtdAddress = pool_id.into();
+                proxy
+                    .get_rtd_address_balance(pool_address)
+                    .await
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            return Self {
+                sender,
+                rtd_balance,
+                pool_balance,
+                partner_address,
+            };
+        }
+        Self {
+            sender,
+            rtd_balance: 0,
+            pool_balance: 0,
+            partner_address,
+        }
+    }
+}
+
+pub struct CompositeWorkloadBuilder {
+    config: CompositeWorkloadConfig,
+    num_payloads: u64,
+    rgp: u64,
+    metrics: Arc<Mutex<CompositionMetrics>>,
+}
+
+impl std::fmt::Debug for CompositeWorkloadBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompositeWorkloadBuilder")
+            .field("config", &self.config)
+            .field("num_payloads", &self.num_payloads)
+            .field("rgp", &self.rgp)
+            .finish()
+    }
+}
+
+impl CompositeWorkloadBuilder {
+    pub fn from(
+        weight: f32,
+        target_qps: u64,
+        num_workers: u64,
+        in_flight_ratio: u64,
+        config: CompositeWorkloadConfig,
+        reference_gas_price: u64,
+        duration: Interval,
+        group: u32,
+    ) -> Option<WorkloadBuilderInfo> {
+        let target_qps = (target_qps as f32 * weight) as u64;
+        if target_qps == 0 || num_workers == 0 {
+            return None;
+        }
+        Self::new_with_config(
+            config,
+            target_qps,
+            num_workers,
+            in_flight_ratio,
+            reference_gas_price,
+            duration,
+            group,
+        )
+    }
+
+    pub fn new_with_config(
+        config: CompositeWorkloadConfig,
+        target_qps: u64,
+        num_workers: u64,
+        in_flight_ratio: u64,
+        reference_gas_price: u64,
+        duration: Interval,
+        group: u32,
+    ) -> Option<WorkloadBuilderInfo> {
+        let max_ops = target_qps * in_flight_ratio;
+        if max_ops == 0 || num_workers == 0 {
+            return None;
+        }
+
+        let workload_params = WorkloadParams {
+            group,
+            target_qps,
+            num_workers,
+            max_ops,
+            duration,
+        };
+
+        let metrics = config
+            .metrics
+            .clone()
+            .unwrap_or_else(|| Arc::new(Mutex::new(CompositionMetrics::new())));
+
+        let workload_builder =
+            Box::<dyn WorkloadBuilder<dyn Payload>>::from(Box::new(CompositeWorkloadBuilder {
+                config,
+                num_payloads: max_ops,
+                rgp: reference_gas_price,
+                metrics,
+            }));
+
+        Some(WorkloadBuilderInfo {
+            workload_params,
+            workload_builder,
+        })
+    }
+}
+
+#[async_trait]
+impl WorkloadBuilder<dyn Payload> for CompositeWorkloadBuilder {
+    async fn generate_coin_config_for_init(&self) -> Vec<GasCoinConfig> {
+        let mut configs = vec![];
+
+        let (address, keypair) = get_key_pair::<AccountKeyPair>();
+        configs.push(GasCoinConfig {
+            amount: MAX_GAS_FOR_TESTING,
+            address,
+            keypair: Arc::new(keypair),
+        });
+
+        for _ in 0..self.config.num_shared_counters {
+            let (address, keypair) = get_key_pair::<AccountKeyPair>();
+            configs.push(GasCoinConfig {
+                amount: MAX_GAS_FOR_TESTING,
+                address,
+                keypair: Arc::new(keypair),
+            });
+        }
+
+        configs
+    }
+
+    async fn generate_coin_config_for_payloads(&self) -> Vec<GasCoinConfig> {
+        let mut configs = vec![];
+        let amount = MAX_GAS_IN_UNIT * self.rgp
+            + ESTIMATED_COMPUTATION_COST
+            + STORAGE_COST_PER_COUNTER * self.config.num_shared_counters;
+
+        for _ in 0..self.num_payloads {
+            let (address, keypair) = get_key_pair::<AccountKeyPair>();
+            configs.push(GasCoinConfig {
+                amount,
+                address,
+                keypair: Arc::new(keypair),
+            });
+        }
+
+        configs
+    }
+
+    async fn build(
+        &self,
+        init_gas: Vec<Gas>,
+        payload_gas: Vec<Gas>,
+    ) -> Box<dyn Workload<dyn Payload>> {
+        Box::<dyn Workload<dyn Payload>>::from(Box::new(CompositeWorkload {
+            config: self.config.clone(),
+            package_id: None,
+            shared_counters: vec![],
+            randomness_initial_shared_version: None,
+            accumulator_root_initial_shared_version: None,
+            balance_pool: None,
+            test_coin_cap: None,
+            immutable_object: None,
+            init_gas,
+            payload_gas: payload_gas.into_iter().map(gas_to_multi_gas).collect(),
+            num_payloads: self.num_payloads,
+            metrics: self.metrics.clone(),
+            chain_identifier: None,
+            alias_infos: vec![],
+            allowances: vec![],
+            upgrade_data: None,
+            upgrade_cap: None,
+            deny_cap: None,
+            deny_list_initial_shared_version: None,
+            multisig_accounts: vec![],
+            lifecycle_gas_accounts: vec![],
+        }))
+    }
+}
+
+#[derive(Debug)]
+pub struct CompositeWorkload {
+    config: CompositeWorkloadConfig,
+    package_id: Option<ObjectID>,
+    shared_counters: Vec<(ObjectID, SequenceNumber)>,
+    randomness_initial_shared_version: Option<SequenceNumber>,
+    accumulator_root_initial_shared_version: Option<SequenceNumber>,
+    balance_pool: Option<(ObjectID, SequenceNumber)>,
+    test_coin_cap: Option<(ObjectID, SequenceNumber)>,
+    immutable_object: Option<ObjectRef>,
+    init_gas: Vec<Gas>,
+    payload_gas: Vec<MultiGas>,
+    num_payloads: u64,
+    metrics: Arc<Mutex<CompositionMetrics>>,
+    chain_identifier: Option<rtd_types::digests::ChainIdentifier>,
+    alias_infos: Vec<Option<AliasInitInfo>>,
+    /// Indexed by the spending payload.
+    allowances: Vec<PayloadAllowances>,
+    upgrade_data: Option<Arc<UpgradeData>>,
+    /// The composite package's upgrade cap, owned by payload 0.
+    upgrade_cap: Option<ObjectRef>,
+    /// TEST_COIN's deny cap, owned by payload 0.
+    deny_cap: Option<ObjectRef>,
+    deny_list_initial_shared_version: Option<SequenceNumber>,
+    /// Indexed by payload.
+    multisig_accounts: Vec<MultisigAccount>,
+    /// Indexed by payload.
+    lifecycle_gas_accounts: Vec<(RtdAddress, Arc<AccountKeyPair>)>,
+}
+
+impl CompositeWorkload {
+    pub fn metrics(&self) -> Arc<Mutex<CompositionMetrics>> {
+        self.metrics.clone()
+    }
+
+    fn make_lifecycles(
+        config: &CompositeWorkloadConfig,
+        sender: RtdAddress,
+        test_coin_cap: Option<(ObjectID, SequenceNumber)>,
+        upgrade: Option<UpgradeLifecycle>,
+        deny: Option<DenyLifecycle>,
+    ) -> Vec<Box<dyn Lifecycle>> {
+        let mut lifecycles: Vec<Box<dyn Lifecycle>> = vec![];
+        if config.party_object_probability > 0.0 {
+            lifecycles.push(Box::new(PartyLifecycle::new(
+                config.party_object_probability as f64,
+            )));
+        }
+        if config.shared_deletion_probability > 0.0 {
+            lifecycles.push(Box::new(SharedDeletionLifecycle::new(
+                config.shared_deletion_probability as f64,
+            )));
+        }
+        if config.receive_probability > 0.0 {
+            lifecycles.push(Box::new(ReceiveLifecycle::new(
+                sender,
+                config.receive_probability as f64,
+            )));
+        }
+        if config.owned_object_probability > 0.0 {
+            let probability = config.owned_object_probability as f64;
+            lifecycles.push(Box::new(OwnedLifecycle::new(probability)));
+            if let Some(cap) = test_coin_cap {
+                lifecycles.push(Box::new(CoinMergeLifecycle::new(probability, cap)));
+            }
+        }
+        if let Some(upgrade) = upgrade {
+            lifecycles.push(Box::new(upgrade));
+        }
+        if let Some(deny) = deny {
+            lifecycles.push(Box::new(deny));
+        }
+        lifecycles
+    }
+
+    /// Each payload funds one allowance for the spender at its position; returns them in
+    /// payload order.
+    async fn issue_allowances(
+        &mut self,
+        execution_proxy: &Arc<dyn ValidatorProxy + Sync + Send>,
+        gas_price: u64,
+        spenders: &[RtdAddress],
+    ) -> Vec<AllowanceInfo> {
+        let futures = itertools::zip_eq(&self.payload_gas, spenders).map(
+            |((gas_coins, sender, keypair), spender)| {
+                assert_eq!(gas_coins.len(), 1);
+                let proxy_ref = execution_proxy.clone();
+                let mut tx_builder = TestTransactionBuilder::new(*sender, gas_coins[0], gas_price);
+                add_allowance_issue_commands(tx_builder.ptb_builder_mut(), *spender);
+                let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+
+                async move {
+                    for submission in 1..=ALLOWANCE_ISSUANCE_MAX_SUBMISSIONS {
+                        match proxy_ref.execute_transaction_block(tx.clone()).await {
+                            Ok(effects) => return effects,
+                            Err(error) if submission < ALLOWANCE_ISSUANCE_MAX_SUBMISSIONS => {
+                                tracing::warn!(
+                                    submission,
+                                    ?error,
+                                    "Resubmitting allowance issuance"
+                                );
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                            }
+                            Err(error) => panic!("Allowance issuance should succeed: {error:?}"),
+                        }
+                    }
+                    unreachable!("allowance issuance loop returns on its final submission")
+                }
+            },
+        );
+        let results = join_all(futures).await;
+
+        // join_all preserves order, so results line up with the funding payloads.
+        let mut allowances = vec![];
+        for ((gas_coins, sender, _), effects) in itertools::zip_eq(&mut self.payload_gas, results) {
+            gas_coins[0] = effects
+                .updated_gas(gas_coins[0].0)
+                .expect("the issuance tx mutates its gas coin");
+            let (allowance_ref, initial_shared_version) = effects
+                .created()
+                .iter()
+                .find_map(|(obj_ref, owner)| match owner {
+                    Owner::Shared {
+                        initial_shared_version,
+                    } => Some((*obj_ref, *initial_shared_version)),
+                    _ => None,
+                })
+                .expect("the allowance is created as a shared object");
+            allowances.push((allowance_ref.0, initial_shared_version, *sender));
+        }
+        allowances
+    }
+}
+
+#[async_trait]
+impl Workload<dyn Payload> for CompositeWorkload {
+    async fn init(
+        &mut self,
+        execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        _fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
+        system_state_observer: Arc<SystemStateObserver>,
+    ) {
+        if self.package_id.is_some() {
+            return;
+        }
+
+        self.chain_identifier = Some(execution_proxy.get_chain_identifier());
+        info!("Chain identifier: {:?}", self.chain_identifier);
+
+        let gas_price = system_state_observer.state.borrow().reference_gas_price;
+        let (head, tail) = self
+            .init_gas
+            .split_first()
+            .expect("Not enough gas to initialize composite workload");
+
+        info!("Publishing composite package for composite workload");
+        let mut path = crate::workloads::benchmark_move_base_dir();
+        path.push("src/workloads/data/composite");
+        let compiled_package = rtd_move_build::BuildConfig::new_for_testing()
+            .build_async(&path)
+            .await
+            .expect("composite package should build");
+        // An upgrade republishes the same modules, which is a compatible upgrade.
+        self.upgrade_data = Some(Arc::new(UpgradeData {
+            modules: compiled_package.get_package_bytes(false),
+            dependencies: compiled_package.get_dependency_storage_package_ids(),
+            digest: compiled_package.get_package_digest(false).to_vec(),
+        }));
+        let transaction = TestTransactionBuilder::new(head.1, head.0, gas_price)
+            .publish_with_data_async(PublishData::CompiledPackage(compiled_package))
+            .await
+            .ensure_unique()
+            .build_and_sign(head.2.as_ref());
+        let execution_result = execution_proxy.execute_transaction_block(transaction).await;
+        let effects = execution_result.expect("Package publish should succeed");
+
+        let mut treasury_cap_ref = None;
+        let mut upgrade_cap_ref = None;
+        let mut deny_cap_ref = None;
+        let mut owned_refs = vec![];
+        for (obj_ref, owner) in effects.created() {
+            match owner {
+                // The regulated TEST_COIN also freezes its RegulatedCoinMetadata.
+                Owner::Immutable
+                    if execution_proxy
+                        .get_object(obj_ref.0)
+                        .await
+                        .is_ok_and(|obj| obj.is_package()) =>
+                {
+                    self.package_id = Some(obj_ref.0);
+                    info!("Composite package id {:?}", self.package_id);
+                }
+                Owner::AddressOwner(_) => {
+                    owned_refs.push(obj_ref);
+                }
+                _ => {}
+            }
+        }
+        for obj_ref in owned_refs {
+            if let Ok(obj) = execution_proxy.get_object(obj_ref.0).await {
+                let obj_type = obj.type_().map(|t| t.to_string()).unwrap_or_default();
+                if obj_type.contains("TreasuryCap") {
+                    treasury_cap_ref = Some(obj.compute_object_reference());
+                    info!("Found TreasuryCap {:?}", treasury_cap_ref);
+                } else if obj_type.contains("UpgradeCap") {
+                    upgrade_cap_ref = Some(obj.compute_object_reference());
+                } else if obj_type.contains("DenyCapV2") {
+                    deny_cap_ref = Some(obj.compute_object_reference());
+                }
+            }
+        }
+        let updated_gas = effects.gas_object().0;
+
+        let mut futures = vec![];
+        for (gas, sender, keypair) in tail.iter() {
+            let transaction = TestTransactionBuilder::new(*sender, *gas, gas_price)
+                .call_counter_create(self.package_id.unwrap())
+                .ensure_unique()
+                .build_and_sign(keypair.as_ref());
+            let proxy_ref = execution_proxy.clone();
+            futures.push(async move {
+                let execution_result = proxy_ref.execute_transaction_block(transaction).await;
+                let (obj_ref, owner) = execution_result.unwrap().created()[0].clone();
+                let initial_shared_version = match owner {
+                    Owner::Shared {
+                        initial_shared_version,
+                    } => initial_shared_version,
+                    _ => panic!("Counter should be shared"),
+                };
+                (obj_ref.0, initial_shared_version)
+            });
+        }
+        self.shared_counters = join_all(futures).await;
+        self.init_gas[0].0 = updated_gas;
+        info!("Created {} shared counters", self.shared_counters.len());
+
+        let obj = execution_proxy
+            .get_object(RTD_RANDOMNESS_STATE_OBJECT_ID)
+            .await
+            .expect("Failed to get randomness object");
+        let Owner::Shared {
+            initial_shared_version,
+        } = obj.owner()
+        else {
+            panic!("Randomness object must be shared");
+        };
+        self.randomness_initial_shared_version = Some(*initial_shared_version);
+        info!(
+            "Randomness initial shared version: {:?}",
+            self.randomness_initial_shared_version
+        );
+
+        let obj = execution_proxy
+            .get_object(RTD_ACCUMULATOR_ROOT_OBJECT_ID)
+            .await
+            .expect("Failed to get accumulator root object");
+        let Owner::Shared {
+            initial_shared_version,
+        } = obj.owner()
+        else {
+            panic!("AccumulatorRoot object must be shared");
+        };
+        self.accumulator_root_initial_shared_version = Some(*initial_shared_version);
+        info!(
+            "AccumulatorRoot initial shared version: {:?}",
+            self.accumulator_root_initial_shared_version
+        );
+
+        let protocol_config = system_state_observer.state.borrow().protocol_config.clone();
+        let init_requirements = self
+            .config
+            .collect_init_requirements(protocol_config.as_ref());
+        info!("Init requirements: {:?}", init_requirements);
+
+        if init_requirements.contains(&InitRequirement::SeedAddressBalance) {
+            let seed_amount = self.config.address_balance_amount * 100;
+            info!(
+                "Seeding address balances with {} MIST for {} addresses",
+                seed_amount,
+                self.payload_gas.len()
+            );
+
+            let mut futures = vec![];
+            for (idx, (gas_coins, sender, keypair)) in self.payload_gas.iter().enumerate() {
+                assert_eq!(gas_coins.len(), 1);
+                let gas = gas_coins[0];
+
+                let mut tx_builder = TestTransactionBuilder::new(*sender, gas, gas_price);
+                {
+                    let builder = tx_builder.ptb_builder_mut();
+                    let amount_arg = builder.pure(seed_amount).unwrap();
+                    let coin =
+                        builder.command(Command::SplitCoins(Argument::GasCoin, vec![amount_arg]));
+                    let Argument::Result(coin_idx) = coin else {
+                        panic!("SplitCoins should return Result");
+                    };
+                    let coin = Argument::NestedResult(coin_idx, 0);
+                    let coin_balance = builder.programmable_move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        Identifier::new("coin").unwrap(),
+                        Identifier::new("into_balance").unwrap(),
+                        vec![GAS::type_tag()],
+                        vec![coin],
+                    );
+                    let recipient_arg = builder.pure(*sender).unwrap();
+                    builder.programmable_move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        Identifier::new("balance").unwrap(),
+                        Identifier::new("send_funds").unwrap(),
+                        vec![GAS::type_tag()],
+                        vec![coin_balance, recipient_arg],
+                    );
+                }
+                let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+
+                let proxy_ref = execution_proxy.clone();
+                futures.push(async move {
+                    let execution_result = proxy_ref.execute_transaction_block(tx).await;
+                    let effects = execution_result.expect("Seed deposit should succeed");
+                    (idx, effects)
+                });
+            }
+
+            let results = join_all(futures).await;
+            for (idx, effects) in results {
+                update_gas!(&mut self.payload_gas[idx].0[0], effects);
+            }
+            info!("Seeded {} address balances", self.payload_gas.len());
+        }
+
+        if init_requirements.contains(&InitRequirement::IssueAllowances) {
+            info!("Issuing allowances for {} payloads", self.payload_gas.len());
+            let senders: Vec<RtdAddress> = self
+                .payload_gas
+                .iter()
+                .map(|(_, sender, _)| *sender)
+                .collect();
+            let n = senders.len();
+
+            // Two rounds (one tx creating both allowances can't tell them apart in the effects),
+            // in sequence because each payload pays with its single gas coin.
+            let neighbors: Vec<_> = senders.iter().cycle().skip(1).take(n).copied().collect();
+            let mut neighbor = self
+                .issue_allowances(&execution_proxy, gas_price, &neighbors)
+                .await;
+            // Payload `i` spends what payload `i - 1` funded.
+            neighbor.rotate_right(1);
+            let own = self
+                .issue_allowances(&execution_proxy, gas_price, &senders)
+                .await;
+            self.allowances = itertools::zip_eq(neighbor, own)
+                .map(|(neighbor, own)| PayloadAllowances { neighbor, own })
+                .collect();
+            info!("Issued a neighbor and a self allowance for {n} payloads");
+        }
+
+        if init_requirements.contains(&InitRequirement::CreateBalancePool) {
+            info!("Creating balance pool for object balance operations");
+            let (multi_gas, sender, keypair) = &mut self.payload_gas[0];
+            let gas = &mut multi_gas[0];
+            let tx = TestTransactionBuilder::new(*sender, *gas, gas_price)
+                .move_call(self.package_id.unwrap(), "balance_pool", "create", vec![])
+                .ensure_unique()
+                .build_and_sign(keypair.as_ref());
+
+            let execution_result = execution_proxy.execute_transaction_block(tx).await;
+            let effects = execution_result.expect("Balance pool creation should succeed");
+
+            update_gas!(gas, effects);
+
+            let (obj_ref, owner) = effects.created()[0].clone();
+            let initial_shared_version = match owner {
+                Owner::Shared {
+                    initial_shared_version,
+                } => initial_shared_version,
+                _ => panic!("Balance pool should be shared"),
+            };
+            self.balance_pool = Some((obj_ref.0, initial_shared_version));
+            info!("Created balance pool {:?}", self.balance_pool);
+        }
+
+        if init_requirements.contains(&InitRequirement::SeedBalancePool) {
+            let seed_amount = self.config.address_balance_amount * 100;
+            info!("Seeding balance pool with {} MIST", seed_amount);
+
+            let (multi_gas, sender, keypair) = &mut self.payload_gas[0];
+            let gas = &mut multi_gas[0];
+            let (pool_id, pool_version) = self.balance_pool.unwrap();
+            let mut tx_builder = TestTransactionBuilder::new(*sender, *gas, gas_price);
+            {
+                let builder = tx_builder.ptb_builder_mut();
+                let amount_arg = builder.pure(seed_amount).unwrap();
+                let coin =
+                    builder.command(Command::SplitCoins(Argument::GasCoin, vec![amount_arg]));
+                let Argument::Result(coin_idx) = coin else {
+                    panic!("SplitCoins should return Result");
+                };
+                let coin = Argument::NestedResult(coin_idx, 0);
+                let coin_balance = builder.programmable_move_call(
+                    RTD_FRAMEWORK_PACKAGE_ID,
+                    Identifier::new("coin").unwrap(),
+                    Identifier::new("into_balance").unwrap(),
+                    vec![GAS::type_tag()],
+                    vec![coin],
+                );
+                let pool_arg = builder
+                    .obj(ObjectArg::SharedObject {
+                        id: pool_id,
+                        initial_shared_version: pool_version,
+                        mutability: SharedObjectMutability::Immutable,
+                    })
+                    .unwrap();
+                builder.programmable_move_call(
+                    self.package_id.unwrap(),
+                    Identifier::new("balance_pool").unwrap(),
+                    Identifier::new("deposit").unwrap(),
+                    vec![GAS::type_tag()],
+                    vec![pool_arg, coin_balance],
+                );
+            }
+            let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+
+            let execution_result = execution_proxy.execute_transaction_block(tx).await;
+            let effects = execution_result.expect("Balance pool seed should succeed");
+            update_gas!(gas, effects);
+            info!("Seeded balance pool");
+        }
+
+        if init_requirements.contains(&InitRequirement::CreateTestCoinCap) {
+            if let Some(cap_ref) = treasury_cap_ref {
+                info!("Creating TestCoinCap for multi-currency operations");
+                let (gas, sender, keypair) = &self.init_gas[0];
+                let tx = TestTransactionBuilder::new(*sender, *gas, gas_price)
+                    .move_call(
+                        self.package_id.unwrap(),
+                        "test_coin",
+                        "create_cap",
+                        vec![cap_ref.into()],
+                    )
+                    .ensure_unique()
+                    .build_and_sign(keypair.as_ref());
+
+                let execution_result = execution_proxy.execute_transaction_block(tx).await;
+                let effects = execution_result.expect("TestCoinCap creation should succeed");
+
+                self.init_gas[0].0 = effects.gas_object().0;
+
+                let (obj_ref, owner) = effects.created()[0].clone();
+                let initial_shared_version = match owner {
+                    Owner::Shared {
+                        initial_shared_version,
+                    } => initial_shared_version,
+                    _ => panic!("TestCoinCap should be shared"),
+                };
+                self.test_coin_cap = Some((obj_ref.0, initial_shared_version));
+                info!("Created TestCoinCap {:?}", self.test_coin_cap);
+            } else {
+                panic!("TreasuryCap not found in publish effects");
+            }
+        }
+
+        if init_requirements.contains(&InitRequirement::CreateImmutableObject) {
+            info!("Creating immutable object for immutable object read operations");
+            let (multi_gas, sender, keypair) = &mut self.payload_gas[0];
+            let gas = &mut multi_gas[0];
+
+            let value: u64 = 42;
+            let mut tx_builder = TestTransactionBuilder::new(*sender, *gas, gas_price);
+            {
+                let builder = tx_builder.ptb_builder_mut();
+                let value_arg = builder.pure(value).unwrap();
+                builder.programmable_move_call(
+                    self.package_id.unwrap(),
+                    Identifier::new("immutable_object").unwrap(),
+                    Identifier::new("create_and_freeze").unwrap(),
+                    vec![],
+                    vec![value_arg],
+                );
+            }
+            let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+
+            let execution_result = execution_proxy.execute_transaction_block(tx).await;
+            let effects = execution_result.expect("Immutable object creation should succeed");
+            update_gas!(gas, effects);
+
+            let obj_ref = effects
+                .created()
+                .iter()
+                .find_map(|(obj_ref, owner)| match owner {
+                    Owner::Immutable => Some(*obj_ref),
+                    _ => None,
+                })
+                .expect("ImmutableData object should be created");
+            self.immutable_object = Some(obj_ref);
+            info!("Created immutable object {:?}", self.immutable_object);
+        }
+
+        if init_requirements.contains(&InitRequirement::SeedTestCoinAddressBalance) {
+            if let Some((cap_id, cap_version)) = self.test_coin_cap {
+                let seed_amount = self.config.address_balance_amount * 100;
+                info!(
+                    "Seeding TEST_COIN address balances with {} for {} addresses",
+                    seed_amount,
+                    self.payload_gas.len()
+                );
+
+                let test_coin_type =
+                    TypeTag::Struct(Box::new(move_core_types::language_storage::StructTag {
+                        address: self.package_id.unwrap().into(),
+                        module: Identifier::new("test_coin").unwrap(),
+                        name: Identifier::new("TEST_COIN").unwrap(),
+                        type_params: vec![],
+                    }));
+
+                for (gas, sender, keypair) in self.payload_gas.iter_mut() {
+                    let gas = &mut gas[0];
+                    let mut tx_builder = TestTransactionBuilder::new(*sender, *gas, gas_price);
+                    {
+                        let builder = tx_builder.ptb_builder_mut();
+                        let cap_arg = builder
+                            .obj(ObjectArg::SharedObject {
+                                id: cap_id,
+                                initial_shared_version: cap_version,
+                                mutability: SharedObjectMutability::Mutable,
+                            })
+                            .unwrap();
+                        let amount_arg = builder.pure(seed_amount).unwrap();
+                        let balance = builder.programmable_move_call(
+                            self.package_id.unwrap(),
+                            Identifier::new("test_coin").unwrap(),
+                            Identifier::new("mint_balance").unwrap(),
+                            vec![],
+                            vec![cap_arg, amount_arg],
+                        );
+                        let recipient_arg = builder.pure(*sender).unwrap();
+                        builder.programmable_move_call(
+                            RTD_FRAMEWORK_PACKAGE_ID,
+                            Identifier::new("balance").unwrap(),
+                            Identifier::new("send_funds").unwrap(),
+                            vec![test_coin_type.clone()],
+                            vec![balance, recipient_arg],
+                        );
+                    }
+                    let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+
+                    let execution_result = execution_proxy.execute_transaction_block(tx).await;
+                    let effects = execution_result.expect("TEST_COIN seed deposit should succeed");
+                    update_gas!(gas, effects);
+                }
+                info!(
+                    "Seeded {} TEST_COIN address balances",
+                    self.payload_gas.len()
+                );
+            } else {
+                info!("TestCoinCap not available - skipping TEST_COIN address balance seeding");
+            }
+        }
+
+        // Payload 0 runs the lifecycles that need the publisher's caps.
+        let mut caps = vec![];
+        if self.config.upgrade_probability > 0.0 {
+            caps.push(upgrade_cap_ref.expect("the publish tx creates an upgrade cap"));
+        }
+        if self.config.deny_probability > 0.0 {
+            caps.push(deny_cap_ref.expect("the publish tx creates a deny cap"));
+            let deny_list = execution_proxy
+                .get_object(RTD_DENY_LIST_OBJECT_ID)
+                .await
+                .expect("Failed to get the deny list object");
+            let Owner::Shared {
+                initial_shared_version,
+            } = deny_list.owner()
+            else {
+                panic!("The deny list must be shared");
+            };
+            self.deny_list_initial_shared_version = Some(*initial_shared_version);
+        }
+        if !caps.is_empty() {
+            let (gas, sender, keypair) = &mut self.init_gas[0];
+            let recipient = self.payload_gas[0].1;
+            let mut tx_builder = TestTransactionBuilder::new(*sender, *gas, gas_price);
+            for cap in &caps {
+                tx_builder = tx_builder.transfer(FullObjectRef::from_fastpath_ref(*cap), recipient);
+            }
+            let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+            let effects = execution_proxy
+                .execute_transaction_block(tx)
+                .await
+                .expect("Cap transfer should succeed");
+            update_gas!(gas, effects);
+            let transferred = |cap: Option<ObjectRef>| {
+                let id = cap?.0;
+                effects
+                    .mutated()
+                    .into_iter()
+                    .find(|(obj_ref, _)| obj_ref.0 == id)
+                    .map(|(obj_ref, _)| obj_ref)
+            };
+            if self.config.upgrade_probability > 0.0 {
+                self.upgrade_cap = transferred(upgrade_cap_ref);
+            }
+            if self.config.deny_probability > 0.0 {
+                self.deny_cap = transferred(deny_cap_ref);
+            }
+            info!("Transferred {} publisher caps to {recipient}", caps.len());
+        }
+
+        if init_requirements.contains(&InitRequirement::EnableAddressAlias) {
+            let alias_state_obj = execution_proxy
+                .get_object(RTD_ADDRESS_ALIAS_STATE_OBJECT_ID)
+                .await
+                .expect("Failed to get AddressAliasState object");
+            let Owner::Shared {
+                initial_shared_version: alias_state_isv,
+            } = alias_state_obj.owner()
+            else {
+                panic!("AddressAliasState must be shared");
+            };
+            let alias_state_isv = *alias_state_isv;
+            info!(
+                "AddressAliasState initial shared version: {:?}",
+                alias_state_isv
+            );
+
+            // For each payload, call address_alias::enable to create the AddressAliases
+            // object. The alias keypair is generated but not added yet. The cycle starts
+            // in NeedAdd state and the first add happens at runtime.
+            for (gas_coins, sender, keypair) in self.payload_gas.iter_mut() {
+                let gas = &mut gas_coins[0];
+
+                let (alias_address, alias_kp): (_, AccountKeyPair) = get_key_pair();
+                let alias_kp = Arc::new(alias_kp);
+
+                let enable_tx = TestTransactionBuilder::new(*sender, *gas, gas_price)
+                    .move_call(
+                        RTD_FRAMEWORK_PACKAGE_ID,
+                        "address_alias",
+                        "enable",
+                        vec![CallArg::Object(ObjectArg::SharedObject {
+                            id: RTD_ADDRESS_ALIAS_STATE_OBJECT_ID,
+                            initial_shared_version: alias_state_isv,
+                            mutability: SharedObjectMutability::Mutable,
+                        })],
+                    )
+                    .ensure_unique()
+                    .build_and_sign(keypair.as_ref());
+
+                let execution_result = execution_proxy.execute_transaction_block(enable_tx).await;
+                let effects = execution_result.expect("Address alias enable should succeed");
+                update_gas!(gas, effects);
+
+                let (aliases_ref, aliases_isv) = effects
+                    .created()
+                    .iter()
+                    .find_map(|(obj_ref, owner)| match owner {
+                        Owner::ConsensusAddressOwner { start_version, .. } => {
+                            Some((*obj_ref, *start_version))
+                        }
+                        _ => None,
+                    })
+                    .expect("AddressAliases object should be created");
+
+                self.alias_infos
+                    .push(Some((alias_address, alias_kp, aliases_ref.0, aliases_isv)));
+                info!(
+                    "Enabled address alias for sender {sender:?}, alias {alias_address:?}, aliases_id {:?}",
+                    aliases_ref.0
+                );
+            }
+            info!(
+                "Initialized address aliases for {} payloads",
+                self.alias_infos.len()
+            );
+        }
+
+        if !address_balance_disabled(protocol_config.as_ref()) {
+            if self.config.multisig_probability > 0.0 {
+                self.multisig_accounts = (0..self.payload_gas.len())
+                    .map(|_| MultisigAccount::new())
+                    .collect();
+            }
+            if self.config.has_lifecycles() {
+                self.lifecycle_gas_accounts = (0..self.payload_gas.len())
+                    .map(|_| {
+                        let (address, keypair) = get_key_pair::<AccountKeyPair>();
+                        (address, Arc::new(keypair))
+                    })
+                    .collect();
+            }
+        }
+        if !self.multisig_accounts.is_empty() || !self.lifecycle_gas_accounts.is_empty() {
+            let mut futures = vec![];
+            for (idx, (gas_coins, sender, keypair)) in self.payload_gas.iter().enumerate() {
+                let recipients: Vec<(RtdAddress, u64)> = self
+                    .multisig_accounts
+                    .get(idx)
+                    .map(|account| (account.address, MULTISIG_FUNDING))
+                    .into_iter()
+                    .chain(
+                        self.lifecycle_gas_accounts
+                            .get(idx)
+                            .map(|(address, _)| (*address, LIFECYCLE_GAS_FUNDING)),
+                    )
+                    .collect();
+                let mut tx_builder = TestTransactionBuilder::new(*sender, gas_coins[0], gas_price);
+                {
+                    let builder = tx_builder.ptb_builder_mut();
+                    for (recipient, amount) in recipients {
+                        let amount_arg = builder.pure(amount).unwrap();
+                        let coin = builder
+                            .command(Command::SplitCoins(Argument::GasCoin, vec![amount_arg]));
+                        let Argument::Result(coin_idx) = coin else {
+                            panic!("SplitCoins should return Result");
+                        };
+                        let balance = builder.programmable_move_call(
+                            RTD_FRAMEWORK_PACKAGE_ID,
+                            Identifier::new("coin").unwrap(),
+                            Identifier::new("into_balance").unwrap(),
+                            vec![GAS::type_tag()],
+                            vec![Argument::NestedResult(coin_idx, 0)],
+                        );
+                        let recipient = builder.pure(recipient).unwrap();
+                        builder.programmable_move_call(
+                            RTD_FRAMEWORK_PACKAGE_ID,
+                            Identifier::new("balance").unwrap(),
+                            Identifier::new("send_funds").unwrap(),
+                            vec![GAS::type_tag()],
+                            vec![balance, recipient],
+                        );
+                    }
+                }
+                let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+                let proxy_ref = execution_proxy.clone();
+                futures.push(async move {
+                    let effects = proxy_ref
+                        .execute_transaction_block(tx)
+                        .await
+                        .expect("Multisig and lifecycle gas account funding should succeed");
+                    (idx, effects)
+                });
+            }
+            for (idx, effects) in join_all(futures).await {
+                update_gas!(&mut self.payload_gas[idx].0[0], effects);
+            }
+            info!(
+                "Funded {} multisig and {} lifecycle gas accounts",
+                self.multisig_accounts.len(),
+                self.lifecycle_gas_accounts.len()
+            );
+        }
+
+        // split remaining gas coins into 4 equal parts
+        {
+            let mut futures = vec![];
+            for (idx, (gas_coins, sender, keypair)) in self.payload_gas.iter().enumerate() {
+                assert_eq!(gas_coins.len(), 1);
+                let gas = gas_coins[0];
+                let gas_obj = execution_proxy
+                    .get_object(gas.0)
+                    .await
+                    .expect("Gas object should exist");
+                // take original gas coin, split the remaining balance into 4 equal parts
+                let gas_balance = gas_obj.as_coin_maybe().unwrap().balance.value();
+                let split_amount = gas_balance / NUM_GAS_COINS as u64;
+
+                let mut tx_builder = TestTransactionBuilder::new(*sender, gas, gas_price);
+                {
+                    let builder = tx_builder.ptb_builder_mut();
+                    let split_amount_arg = builder.pure(split_amount).unwrap();
+                    let coin = builder.command(Command::SplitCoins(
+                        Argument::GasCoin,
+                        vec![split_amount_arg; NUM_GAS_COINS - 1],
+                    ));
+                    let Argument::Result(coin_idx) = coin else {
+                        panic!("SplitCoins should return Result");
+                    };
+                    let new_coin_args = (0..NUM_GAS_COINS - 1)
+                        .map(|i| Argument::NestedResult(coin_idx, i as u16))
+                        .collect();
+                    builder.transfer_args(*sender, new_coin_args);
+                }
+                let tx = tx_builder.ensure_unique().build_and_sign(keypair.as_ref());
+                let proxy_ref = execution_proxy.clone();
+                futures.push(async move {
+                    let execution_result = proxy_ref.execute_transaction_block(tx).await;
+                    let effects = execution_result.expect("Seed deposit should succeed");
+                    (idx, effects)
+                });
+            }
+
+            let results = join_all(futures).await;
+
+            for (idx, effects) in results {
+                let cur_gas = &mut self.payload_gas[idx];
+                assert_eq!(cur_gas.0.len(), 1);
+                update_gas!(&mut cur_gas.0[0], effects);
+                for (new_coin_ref, new_coin_owner) in effects.created().into_iter() {
+                    if let Owner::AddressOwner(new_owner_address) = new_coin_owner {
+                        assert_eq!(new_owner_address, cur_gas.1);
+                        cur_gas.0.push(new_coin_ref);
+                    } else {
+                        panic!("unexpected owner type: {:?}", new_coin_owner);
+                    }
+                }
+            }
+            for multi_gas in self.payload_gas.iter_mut() {
+                assert_eq!(multi_gas.0.len(), NUM_GAS_COINS);
+            }
+            info!(
+                "Split remaining gas coins into {} equal parts",
+                NUM_GAS_COINS
+            );
+        }
+    }
+
+    async fn make_test_payloads(
+        &self,
+        _execution_proxy: Arc<dyn ValidatorProxy + Sync + Send>,
+        fullnode_proxies: Vec<Arc<dyn ValidatorProxy + Sync + Send>>,
+        system_state_observer: Arc<SystemStateObserver>,
+    ) -> Vec<Box<dyn Payload>> {
+        info!("Creating composite workload payloads...");
+
+        let test_coin_type = self.package_id.map(|pkg| {
+            TypeTag::Struct(Box::new(move_core_types::language_storage::StructTag {
+                address: pkg.into(),
+                module: Identifier::new("test_coin").unwrap(),
+                name: Identifier::new("TEST_COIN").unwrap(),
+                type_params: vec![],
+            }))
+        });
+
+        let package_versions = Arc::new(RwLock::new(vec![self.package_id.unwrap()]));
+        let operation_pool = Arc::new(OperationPool {
+            shared_counters: self.shared_counters.clone(),
+            package_id: self.package_id.unwrap(),
+            package_versions: package_versions.clone(),
+            randomness_initial_shared_version: self.randomness_initial_shared_version.unwrap(),
+            accumulator_root_initial_shared_version: self
+                .accumulator_root_initial_shared_version
+                .unwrap(),
+            hotness: self.config.shared_counter_hotness,
+            balance_pool: self.balance_pool,
+            test_coin_cap: self.test_coin_cap,
+            test_coin_type,
+            chain_identifier: self.chain_identifier.unwrap(),
+            immutable_object: self.immutable_object,
+            committee_size: fullnode_proxies
+                .first()
+                .map(|proxy| proxy.clone_committee().num_members()),
+        });
+
+        let config = Arc::new(self.config.clone());
+
+        if config.address_balance_gas_probability > 0.0 && config.address_balance_amount == 0 {
+            panic!("Address balance gas probability is set to 0 but address balance amount is 0");
+        }
+
+        // Collect all payload addresses for pairing
+        let payload_addresses: Vec<RtdAddress> = self
+            .payload_gas
+            .iter()
+            .map(|(_, sender, _)| *sender)
+            .collect();
+
+        // Pair payloads: 0↔1, 2↔3, etc. If odd number, last one pairs with first.
+        let get_partner_index = |i: usize| -> usize {
+            if i.is_multiple_of(2) {
+                if i + 1 < payload_addresses.len() {
+                    i + 1
+                } else {
+                    0
+                }
+            } else {
+                i - 1
+            }
+        };
+        let payload_gas: Vec<Arc<Mutex<MultiGas>>> = self
+            .payload_gas
+            .iter()
+            .map(|gas| Arc::new(Mutex::new(gas.clone())))
+            .collect();
+
+        let mut payloads: Vec<Box<dyn Payload>> = vec![];
+        for i in 0..self.num_payloads {
+            let gas = payload_gas[i as usize].clone();
+            let sender = self.payload_gas[i as usize].1;
+            let partner_idx = get_partner_index(i as usize);
+            let sponsor =
+                (config.sponsored_probability > 0.0 && partner_idx != i as usize).then(|| {
+                    let (_, address, keypair) = &self.payload_gas[partner_idx];
+                    Sponsor {
+                        address: *address,
+                        keypair: keypair.clone(),
+                        gas: payload_gas[partner_idx].clone(),
+                    }
+                });
+            let upgrade = if i == 0
+                && let Some(cap) = self.upgrade_cap
+            {
+                Some(UpgradeLifecycle::new(
+                    config.upgrade_probability as f64,
+                    cap,
+                    self.upgrade_data.clone().unwrap(),
+                    package_versions.clone(),
+                ))
+            } else {
+                None
+            };
+            let alias_state = self
+                .alias_infos
+                .get(i as usize)
+                .and_then(|info| info.as_ref())
+                .map(
+                    |(alias_address, alias_keypair, aliases_id, aliases_isv)| AliasState {
+                        alias_address: *alias_address,
+                        alias_keypair: alias_keypair.clone(),
+                        address_aliases_id: *aliases_id,
+                        address_aliases_initial_shared_version: *aliases_isv,
+                        cycle_state: AliasRevokeCycleState::NeedAdd,
+                    },
+                );
+            let partner_address = payload_addresses[partner_idx];
+            let deny = if i == 0
+                && partner_idx != 0
+                && let Some(cap) = self.deny_cap
+            {
+                Some(DenyLifecycle::new(
+                    config.deny_probability as f64,
+                    cap,
+                    self.deny_list_initial_shared_version.unwrap(),
+                    partner_address,
+                ))
+            } else {
+                None
+            };
+            let allowances = self.allowances.get(i as usize).copied();
+            payloads.push(Box::new(CompositePayload {
+                config: config.clone(),
+                fullnode_proxies: fullnode_proxies.clone(),
+                pool: operation_pool.clone(),
+                gas,
+                current_batch_num_conflicting_transactions: 0,
+                current_batch_txs: vec![],
+                system_state_observer: system_state_observer.clone(),
+                metrics: self.metrics.clone(),
+                nonce_counter: AtomicU32::new(0),
+                alias_state,
+                partner_address,
+                allowances,
+                lifecycles: Self::make_lifecycles(
+                    &config,
+                    sender,
+                    self.test_coin_cap,
+                    upgrade,
+                    deny,
+                ),
+                sponsor,
+                multisig: self.multisig_accounts.get(i as usize).cloned(),
+                lifecycle_gas: self.lifecycle_gas_accounts.get(i as usize).cloned(),
+                direct_submission: false,
+            }));
+        }
+
+        info!("Created {} composite payloads", payloads.len());
+        payloads
+    }
+
+    fn name(&self) -> &str {
+        "Composite"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gasless_rtd_transfer_allowed;
+    use rtd_protocol_config::{Chain, ProtocolConfig, ProtocolVersion};
+
+    #[test]
+    fn gasless_rtd_transfers_are_expected_only_where_rtd_is_allowlisted() {
+        for chain in [Chain::Unknown, Chain::Testnet, Chain::Mainnet] {
+            let config = ProtocolConfig::get_for_version(ProtocolVersion::MAX, chain);
+            assert!(!gasless_rtd_transfer_allowed(&config), "{chain:?}");
+        }
+
+        let mut config = ProtocolConfig::get_for_version(ProtocolVersion::MAX, Chain::Unknown);
+        config.set_gasless_allowed_token_types_for_testing(vec![("0x2::rtd::RTD".to_string(), 0)]);
+        assert!(gasless_rtd_transfer_allowed(&config));
+    }
+}

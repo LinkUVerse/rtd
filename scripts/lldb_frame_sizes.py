@@ -1,4 +1,4 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 import lldb
@@ -11,7 +11,7 @@ import lldb
 #
 # == Usage ==
 #
-#     (lldb) command script import ./sui/scripts/lldb_frame_sizes
+#     (lldb) command script import ./rtd/scripts/lldb_frame_sizes
 #     Loaded "frame-sizes" command.
 #     (lldb) ...
 #     

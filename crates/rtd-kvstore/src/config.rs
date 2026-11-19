@@ -1,0 +1,460 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::num::NonZeroUsize;
+use std::time::Duration;
+
+use serde::Deserialize;
+use serde::Serialize;
+use rtd_indexer_alt_framework::config::ConcurrencyConfig;
+use rtd_indexer_alt_framework::config::warn_ignored_config_key;
+use rtd_indexer_alt_framework::pipeline;
+use rtd_indexer_alt_framework::pipeline::CommitterConfig;
+use rtd_indexer_alt_framework::pipeline::concurrent::ConcurrentConfig;
+use rtd_indexer_alt_framework::pipeline::sequential::SequentialConfig;
+use rtd_indexer_alt_framework::{self as framework};
+use tracing::warn;
+
+use crate::bigtable::client::PoolConfig;
+use crate::bigtable::client::ReadRowsRetryConfig;
+
+/// Default maximum rows per BigTable write batch. Matches the official Google
+/// Java client default.
+pub(crate) const DEFAULT_MAX_ROWS_PER_BIGTABLE_BATCH: usize = 100;
+
+const DEFAULT_WRITE_CONCURRENCY: usize = 256;
+
+/// Minimum gap between two watermark writes of the same concurrent pipeline (sequential pipelines
+/// write their watermark with every commit). Shorter than the time between checkpoints, so at the
+/// tip every checkpoint's watermark is written as soon as it is complete.
+const DEFAULT_WATERMARK_INTERVAL_MS: u64 = 100;
+
+/// Returns the committer defaults used by rtd-kvstore before applying config overrides.
+pub fn default_committer_config() -> CommitterConfig {
+    CommitterConfig {
+        write_concurrency: DEFAULT_WRITE_CONCURRENCY,
+        watermark_interval_ms: DEFAULT_WATERMARK_INTERVAL_MS,
+        ..CommitterConfig::default()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct IndexerConfig {
+    pub ingestion: IngestionConfig,
+    pub committer: CommitterLayer,
+    pub pipeline: PipelineLayer,
+    /// Global rate limit (rows per second) shared across all pipelines.
+    pub total_max_rows_per_second: Option<u64>,
+    /// Default per-pipeline rate limit (rows per second).
+    /// Individual pipelines can override via their `ConcurrentLayer`.
+    pub max_rows_per_second: Option<u64>,
+    /// Deprecated: use `bigtable-pool` section instead. If set, overrides
+    /// `bigtable-pool.initial-pool-size`. Will be removed in a future release.
+    pub bigtable_connection_pool_size: Option<usize>,
+    /// Channel-level timeout in milliseconds for BigTable gRPC calls (default: 60000).
+    pub bigtable_channel_timeout_ms: Option<u64>,
+    /// Longest a ReadRows attempt may wait for its response headers or its next response message
+    /// before it is retried on another channel, in milliseconds (default: 5000). The final
+    /// attempt has no gap timeout. A stall before the headers is retried only while
+    /// `bigtable-channel-timeout-ms`, which ends that wait on every attempt, is longer.
+    pub bigtable_read_rows_gap_timeout_ms: Option<u64>,
+    /// Attempts per ReadRows call, including the first (default: 3). 1 turns off the gap
+    /// timeout and retries.
+    pub bigtable_read_rows_max_attempts: Option<u32>,
+    /// Enable Bigtable batch write flow control by advertising the mutate-rows
+    /// rate-limit feature flags and adaptively throttling MutateRows from
+    /// `RateLimitInfo`. Requires a single-cluster-routing app profile and pairs
+    /// with Bigtable autoscaling. Enabled by default; set to false to disable.
+    pub batch_write_flow_control: bool,
+    /// Bigtable connection pool configuration.
+    pub bigtable_pool: BigtablePoolLayer,
+}
+
+impl Default for IndexerConfig {
+    fn default() -> Self {
+        Self {
+            ingestion: IngestionConfig::default(),
+            committer: CommitterLayer::default(),
+            pipeline: PipelineLayer::default(),
+            total_max_rows_per_second: None,
+            max_rows_per_second: None,
+            bigtable_connection_pool_size: None,
+            bigtable_channel_timeout_ms: None,
+            bigtable_read_rows_gap_timeout_ms: None,
+            bigtable_read_rows_max_attempts: None,
+            batch_write_flow_control: true,
+            bigtable_pool: BigtablePoolLayer::default(),
+        }
+    }
+}
+
+impl IndexerConfig {
+    pub fn read_rows_retry(&self) -> ReadRowsRetryConfig {
+        let base = ReadRowsRetryConfig::default();
+        ReadRowsRetryConfig {
+            gap_timeout: self
+                .bigtable_read_rows_gap_timeout_ms
+                .map_or(base.gap_timeout, Duration::from_millis),
+            max_attempts: self
+                .bigtable_read_rows_max_attempts
+                .unwrap_or(base.max_attempts),
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct BigtablePoolLayer {
+    /// Number of channels to create at startup (default: 10).
+    pub initial_pool_size: Option<usize>,
+    /// Minimum number of channels the pool will maintain (default: 4).
+    pub min_pool_size: Option<usize>,
+    /// Maximum number of channels the pool can scale to (default: 200).
+    pub max_pool_size: Option<usize>,
+    /// The pool shrinks when a maintenance interval's peak in-flight requests would leave
+    /// fewer than this many per channel (default: 1).
+    pub min_rpcs_per_channel: Option<usize>,
+    /// The pool grows when a maintenance interval's peak in-flight requests would put more
+    /// than this many on each channel (default: 25). Channel selection also counts a channel
+    /// carrying an error penalty as this many requests busier.
+    pub max_rpcs_per_channel: Option<usize>,
+    /// Maximum channels to add or remove in a single resize (default: 2).
+    pub max_resize_delta: Option<usize>,
+    /// Milliseconds between maintenance cycles (resize + refresh) (default: 60000).
+    pub maintenance_interval_ms: Option<u64>,
+    /// Channel age in milliseconds before it is eligible for refresh (default: 2700000 = 45 min).
+    pub refresh_age_ms: Option<u64>,
+    /// Random jitter in milliseconds added to refresh age (default: 300000 = 5 min).
+    pub refresh_jitter_ms: Option<u64>,
+    /// Detect stalled channels, quarantine them, and replace ones that stay unhealthy
+    /// (default: true).
+    pub channel_health_check: Option<bool>,
+    /// HTTP/2 receive window of each BigTable response stream, in bytes (default: 262144 =
+    /// 256 KiB).
+    pub http2_stream_window_bytes: Option<u32>,
+    /// HTTP/2 receive window of each BigTable connection, in bytes (default: 268435456 =
+    /// 256 MiB). While unread response data fills it, no request on that channel receives
+    /// anything.
+    pub http2_connection_window_bytes: Option<u32>,
+
+    /// Deprecated and ignored; setting it logs a warning. The pool sizes itself on
+    /// `min-rpcs-per-channel` and `max-rpcs-per-channel`.
+    pub downscale_threshold: Option<usize>,
+}
+
+impl BigtablePoolLayer {
+    pub fn finish(self, deprecated_pool_size: Option<usize>) -> PoolConfig {
+        if deprecated_pool_size.is_some() {
+            warn!(
+                "bigtable-connection-pool-size is deprecated; \
+                 use the [bigtable-pool] section instead"
+            );
+        }
+        if self.downscale_threshold.is_some() {
+            warn!(
+                "Config field `downscale-threshold` in [bigtable-pool] is deprecated and ignored. \
+                 Remove it from your config; the pool resizes on `min-rpcs-per-channel` and \
+                 `max-rpcs-per-channel`."
+            );
+        }
+
+        let base = PoolConfig::default();
+        PoolConfig {
+            initial_pool_size: self
+                .initial_pool_size
+                .or(deprecated_pool_size)
+                .unwrap_or(base.initial_pool_size),
+            min_pool_size: self.min_pool_size.unwrap_or(base.min_pool_size),
+            max_pool_size: self.max_pool_size.unwrap_or(base.max_pool_size),
+            min_rpcs_per_channel: self
+                .min_rpcs_per_channel
+                .unwrap_or(base.min_rpcs_per_channel),
+            max_rpcs_per_channel: self
+                .max_rpcs_per_channel
+                .unwrap_or(base.max_rpcs_per_channel),
+            max_resize_delta: self.max_resize_delta.unwrap_or(base.max_resize_delta),
+            maintenance_interval: self
+                .maintenance_interval_ms
+                .map(Duration::from_millis)
+                .unwrap_or(base.maintenance_interval),
+            refresh_age: self
+                .refresh_age_ms
+                .map(Duration::from_millis)
+                .unwrap_or(base.refresh_age),
+            refresh_jitter: self
+                .refresh_jitter_ms
+                .map(Duration::from_millis)
+                .unwrap_or(base.refresh_jitter),
+            health_check: base
+                .health_check
+                .filter(|_| self.channel_health_check.unwrap_or(true)),
+            http2_stream_window_bytes: self
+                .http2_stream_window_bytes
+                .unwrap_or(base.http2_stream_window_bytes),
+            http2_connection_window_bytes: self
+                .http2_connection_window_bytes
+                .unwrap_or(base.http2_connection_window_bytes),
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct CommitterLayer {
+    pub write_concurrency: Option<usize>,
+    pub watermark_interval_ms: Option<u64>,
+    pub watermark_interval_jitter_ms: Option<u64>,
+
+    /// Minimum number of pending rows the collector waits for before cutting a batch. `0` cuts a
+    /// batch as soon as the committer has room for it.
+    pub min_batch_rows: Option<usize>,
+
+    /// Longest time, in milliseconds, the oldest pending row waits for `min-batch-rows` to
+    /// accumulate before a batch is cut anyway.
+    pub max_batch_delay_ms: Option<u64>,
+
+    /// Deprecated and ignored: batches are cut as soon as the committer has room; see
+    /// `min-batch-rows` and `max-batch-delay-ms`.
+    pub collect_interval_ms: Option<u64>,
+}
+
+impl CommitterLayer {
+    pub fn finish(self, base: CommitterConfig) -> CommitterConfig {
+        if self.collect_interval_ms.is_some() {
+            warn_ignored_config_key("collect-interval-ms");
+        }
+
+        CommitterConfig {
+            write_concurrency: self.write_concurrency.unwrap_or(base.write_concurrency),
+            watermark_interval_ms: self
+                .watermark_interval_ms
+                .unwrap_or(base.watermark_interval_ms),
+            watermark_interval_jitter_ms: self
+                .watermark_interval_jitter_ms
+                .unwrap_or(base.watermark_interval_jitter_ms),
+            min_batch_rows: self.min_batch_rows.unwrap_or(base.min_batch_rows),
+            max_batch_delay_ms: self.max_batch_delay_ms.unwrap_or(base.max_batch_delay_ms),
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct ConcurrentLayer {
+    pub committer: Option<CommitterLayer>,
+    pub ingestion: Option<PipelineIngestionLayer>,
+    /// Maximum rows per BigTable batch for this pipeline.
+    pub max_rows: Option<usize>,
+    /// Per-pipeline rate limit (rows per second). Overrides the default
+    /// `IndexerConfig::max_rows_per_second` when set.
+    pub max_rows_per_second: Option<u64>,
+    pub fanout: Option<ConcurrencyConfig>,
+    /// Deprecated and ignored: batch size is controlled by the committer's `min-batch-rows` and
+    /// `max-batch-delay-ms`.
+    pub min_eager_rows: Option<usize>,
+    pub max_pending_rows: Option<usize>,
+    pub max_watermark_updates: Option<usize>,
+    pub processor_channel_size: Option<usize>,
+    pub collector_channel_size: Option<usize>,
+    pub committer_channel_size: Option<usize>,
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PipelineIngestionLayer {
+    pub subscriber_channel_size: Option<usize>,
+}
+
+impl ConcurrentLayer {
+    pub(crate) fn max_rows_or_default(&self) -> usize {
+        self.max_rows.unwrap_or(DEFAULT_MAX_ROWS_PER_BIGTABLE_BATCH)
+    }
+
+    pub fn finish(self, base: ConcurrentConfig) -> ConcurrentConfig {
+        if self.min_eager_rows.is_some() {
+            warn_ignored_config_key("min-eager-rows");
+        }
+
+        ConcurrentConfig {
+            committer: if let Some(c) = self.committer {
+                c.finish(base.committer)
+            } else {
+                base.committer
+            },
+            ingestion: if let Some(i) = self.ingestion {
+                i.finish(base.ingestion)
+            } else {
+                base.ingestion
+            },
+            pruner: None,
+            fanout: self.fanout.or(base.fanout),
+            max_pending_rows: self.max_pending_rows.or(base.max_pending_rows),
+            max_watermark_updates: self.max_watermark_updates.or(base.max_watermark_updates),
+            processor_channel_size: self.processor_channel_size.or(base.processor_channel_size),
+            collector_channel_size: self.collector_channel_size.or(base.collector_channel_size),
+            committer_channel_size: self.committer_channel_size.or(base.committer_channel_size),
+        }
+    }
+}
+
+impl PipelineIngestionLayer {
+    pub fn finish(self, base: pipeline::IngestionConfig) -> pipeline::IngestionConfig {
+        pipeline::IngestionConfig {
+            subscriber_channel_size: self
+                .subscriber_channel_size
+                .or(base.subscriber_channel_size),
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct SequentialLayer {
+    // Framework sequential surface — mirrors the fields actually read by
+    // `rtd_indexer_alt_framework::pipeline::sequential`.
+    pub committer: Option<CommitterLayer>,
+    pub ingestion: Option<PipelineIngestionLayer>,
+    pub fanout: Option<ConcurrencyConfig>,
+    /// Deprecated and ignored: batch size is controlled by the committer's `min-batch-rows` and
+    /// `max-batch-delay-ms`.
+    pub min_eager_rows: Option<usize>,
+    pub max_pending_rows: Option<usize>,
+    pub max_batch_checkpoints: Option<usize>,
+    pub processor_channel_size: Option<usize>,
+    pub pipeline_depth: Option<usize>,
+
+    // rtd-kvstore-specific config extensions
+
+    // Controls the concurrency of the bitmap flushes. The framework doesn't
+    // perform commits for sequential pipelines concurrently, but our store
+    // implementation doesn't actually write to the database on commit for
+    // the bitmap pipelines. The store buffers the bitmaps for the current
+    // working "bucket" ranges internally, merges in rows from each framework
+    // batch on commit (parallelized on background tasks), then finally flushes
+    // the updated bitmaps to bigtable concurrently. Same semantic as
+    // `ConcurrentLayer::write_concurrency`.
+    pub write_concurrency: Option<usize>,
+    /// Maximum rows per in-handler BigTable write RPC. Same semantic as
+    /// `ConcurrentLayer::max_rows`.
+    pub max_rows: Option<usize>,
+    /// Per-pipeline rate limit (rows per second). Overrides the default
+    /// `IndexerConfig::max_rows_per_second` when set.
+    pub max_rows_per_second: Option<u64>,
+}
+
+impl SequentialLayer {
+    pub(crate) fn max_rows_or_default(&self) -> usize {
+        self.max_rows.unwrap_or(DEFAULT_MAX_ROWS_PER_BIGTABLE_BATCH)
+    }
+
+    pub fn finish(self, base: ConcurrentConfig) -> SequentialConfig {
+        if self.min_eager_rows.is_some() {
+            warn_ignored_config_key("min-eager-rows");
+        }
+
+        let committer = if let Some(c) = self.committer {
+            c.finish(base.committer)
+        } else {
+            base.committer
+        };
+        SequentialConfig {
+            committer,
+            ingestion: if let Some(i) = self.ingestion {
+                i.finish(base.ingestion)
+            } else {
+                base.ingestion
+            },
+            fanout: self.fanout.or(base.fanout),
+            max_pending_rows: self.max_pending_rows.or(base.max_pending_rows),
+            max_batch_checkpoints: self.max_batch_checkpoints,
+            processor_channel_size: self.processor_channel_size.or(base.processor_channel_size),
+            pipeline_depth: self.pipeline_depth,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case")]
+pub struct PipelineLayer {
+    pub checkpoints: ConcurrentLayer,
+    pub checkpoints_by_digest: ConcurrentLayer,
+    pub transactions: ConcurrentLayer,
+    pub objects: ConcurrentLayer,
+    pub epoch_start: ConcurrentLayer,
+    pub epoch_end: ConcurrentLayer,
+    /// Configures `kvstore_protocol_configs` and `kvstore_protocol_configs_v2`.
+    pub protocol_configs: ConcurrentLayer,
+    pub packages: ConcurrentLayer,
+    pub packages_by_id: ConcurrentLayer,
+    pub packages_by_checkpoint: ConcurrentLayer,
+    pub system_packages: ConcurrentLayer,
+    pub tx_seq_digest: ConcurrentLayer,
+    /// Configures `kvstore_transaction_dimensions` and `kvstore_transaction_dimensions_v2`.
+    pub transaction_bitmap_index: SequentialLayer,
+    /// Configures `kvstore_event_dimensions` and `kvstore_event_dimensions_v2`.
+    pub event_bitmap_index: SequentialLayer,
+    pub object_versions_by_checkpoint: ConcurrentLayer,
+    pub object_tombstones: ConcurrentLayer,
+}
+
+/// This type is identical to [`framework::ingestion::IngestionConfig`], but is set-up to be
+/// serialized and deserialized by `serde`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct IngestionConfig {
+    pub ingest_concurrency: framework::config::ConcurrencyConfig,
+    pub retry_interval_ms: u64,
+    pub streaming_backoff_initial_batch_size: NonZeroUsize,
+    pub streaming_backoff_max_batch_size: usize,
+    pub streaming_connection_timeout_ms: u64,
+    pub streaming_statement_timeout_ms: u64,
+    pub min_cohort_boundary: u64,
+
+    /// Deprecated: accepted (and ignored) so old configs don't fail to parse. Replaced by
+    /// per-pipeline `ingestion.subscriber-channel-size`.
+    pub checkpoint_buffer_size: Option<usize>,
+}
+
+impl Default for IngestionConfig {
+    fn default() -> Self {
+        framework::ingestion::IngestionConfig::default().into()
+    }
+}
+
+impl From<framework::ingestion::IngestionConfig> for IngestionConfig {
+    fn from(config: framework::ingestion::IngestionConfig) -> Self {
+        Self {
+            ingest_concurrency: config.ingest_concurrency,
+            retry_interval_ms: config.retry_interval_ms,
+            streaming_backoff_initial_batch_size: config.streaming_backoff_initial_batch_size,
+            streaming_backoff_max_batch_size: config.streaming_backoff_max_batch_size,
+            streaming_connection_timeout_ms: config.streaming_connection_timeout_ms,
+            streaming_statement_timeout_ms: config.streaming_statement_timeout_ms,
+            min_cohort_boundary: config.min_cohort_boundary,
+            checkpoint_buffer_size: None,
+        }
+    }
+}
+
+impl From<IngestionConfig> for framework::ingestion::IngestionConfig {
+    fn from(config: IngestionConfig) -> Self {
+        if config.checkpoint_buffer_size.is_some() {
+            warn!(
+                "Config field `checkpoint-buffer-size` is deprecated and ignored. Remove it from \
+                 your config; set `subscriber-channel-size` under each pipeline's `ingestion` \
+                 section if you need to override the default."
+            );
+        }
+
+        framework::ingestion::IngestionConfig {
+            ingest_concurrency: config.ingest_concurrency,
+            retry_interval_ms: config.retry_interval_ms,
+            streaming_backoff_initial_batch_size: config.streaming_backoff_initial_batch_size,
+            streaming_backoff_max_batch_size: config.streaming_backoff_max_batch_size,
+            streaming_connection_timeout_ms: config.streaming_connection_timeout_ms,
+            streaming_statement_timeout_ms: config.streaming_statement_timeout_ms,
+            min_cohort_boundary: config.min_cohort_boundary,
+        }
+    }
+}

@@ -22,7 +22,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 # output a note when they are encountered.
 ignore = [
     # "RUSTSEC-0000-0000",
-    # we don't do RSA signing on Sui (only verifying for zklogin)
+    # we don't do RSA signing on Rtd (only verifying for zklogin)
     "RUSTSEC-2023-0071",
     # allow yaml-rust being unmaintained
     "RUSTSEC-2024-0320",
@@ -44,22 +44,22 @@ ignore = [
     "RUSTSEC-2025-0056",
     # fxhash not maintained
     "RUSTSEC-2025-0057",
-    # bincode unmaintained - maintainers consider 1.3.3 complete, used by anemo and sui crates
+    # bincode unmaintained - maintainers consider 1.3.3 complete, used by anemo and rtd crates
     "RUSTSEC-2025-0141",
     # rand 0.8.5 unsoundness when a custom logger invokes rand reentrantly during
-    # thread-local RNG init. Not triggerable in Sui: logging uses tracing/tracing-subscriber
+    # thread-local RNG init. Not triggerable in Rtd: logging uses tracing/tracing-subscriber
     # which never calls rand during setup. Migrating rand 0.8 -> 0.9 would require ~316
-    # call-site edits across ~143 files in Sui alone, plus cascading updates in fastcrypto,
+    # call-site edits across ~143 files in Rtd alone, plus cascading updates in fastcrypto,
     # walrus, seal, and other downstream consumers. Deferred pending a coordinated
     # ecosystem-wide bump (likely driven by fastcrypto first).
     "RUSTSEC-2026-0097",
     # `proc-macro-error2` is unmaintained, no safe upgrade — transitive via
-    # alloy-sol-macro (sui-bridge ethereum stack); waiting for alloy to migrate
+    # alloy-sol-macro (rtd-bridge ethereum stack); waiting for alloy to migrate
     "RUSTSEC-2026-0173",
     # quick-xml 0.38: quadratic duplicate-attribute check (0194) and unbounded
     # namespace-declaration allocation DoS (0195). Fixed only in quick-xml >= 0.41,
     # but quick-xml is transitive via object_store, whose latest release (0.14.0)
-    # still requires ^0.40 — no upgrade path yet. In Sui, quick-xml only parses
+    # still requires ^0.40 — no upgrade path yet. In Rtd, quick-xml only parses
     # XML API responses from cloud storage providers (S3/GCS/Azure) via
     # object_store, not attacker-controlled input. Remove once object_store
     # releases with quick-xml >= 0.41.
@@ -71,11 +71,11 @@ ignore = [
     # https://github.com/zkcrypto/bulletproofs/pull/17
     "RUSTSEC-2026-0283",
     # `unsafe-libyaml` is unmaintained. Transitive via serde_yaml 0.9 (itself
-    # deprecated), used only by the sui-metric-checker CLI to parse its own
-    # config file. Remove once sui-metric-checker moves off serde_yaml.
+    # deprecated), used only by the rtd-metric-checker CLI to parse its own
+    # config file. Remove once rtd-metric-checker moves off serde_yaml.
     "RUSTSEC-2024-0449",
     # crypto-bigint < 0.7.6: operations intended to be constant-time may branch on
-    # secret data. Fixed only in crypto-bigint 0.7.6; Sui pulls 0.4.x/0.5.x through
+    # secret data. Fixed only in crypto-bigint 0.7.6; Rtd pulls 0.4.x/0.5.x through
     # the RustCrypto elliptic-curve 0.12/0.13 stack (k256, p256, p384, ecdsa,
     # primeorder via fastcrypto and alloy-signer), so clearing it needs the
     # elliptic-curve 0.14 / crypto-bigint 0.7 upgrade. Validator signing uses
@@ -96,13 +96,13 @@ ignore = [
     "RUSTSEC-2026-0403",
     # `pin-utils` is unmaintained (repo archived 2026-10-01), no patched release.
     # Transitive only: aws-smithy-http 0.62 / aws-smithy-runtime / aws-smithy-types
-    # (aws-config, aws-sdk-kms in the sui crate), futures-util 0.3.31 and
+    # (aws-config, aws-sdk-kms in the rtd crate), futures-util 0.3.31 and
     # scoped-futures. futures-util >= 0.3.34 dropped it; remove once the AWS SDK
     # crates are upgraded past their pin-utils dependency.
     "RUSTSEC-2026-0441",
     # `thrift` < 0.23 binary protocol `read_bytes` allocates from an unchecked
     # wire length. Only parquet 57 pulls in thrift 0.17, and only
-    # sui-analytics-indexer uses parquet: it writes Parquet files and parses
+    # rtd-analytics-indexer uses parquet: it writes Parquet files and parses
     # them only in tests (its own output). parquet must match the arrow version
     # of snowflake-api (0.14, arrow 57); remove once snowflake-api moves to an
     # arrow version whose parquet no longer depends on thrift.
@@ -261,8 +261,8 @@ allow-git = [
 
 [sources.allow-org]
 github = [
-    "mystenmark",
+    "linkumark",
     "bmwill",
-    "mystenlabs",
+    "linkuverse",
     "nextest-rs",
 ]

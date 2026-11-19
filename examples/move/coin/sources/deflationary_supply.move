@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Implements a coin with a deflationary supply. Upon initialization, mint the
@@ -9,8 +9,8 @@
 /// description, and icon URL.
 module examples::burn_only_supply;
 
-use sui::coin::Coin;
-use sui::coin_registry::{Self, Currency};
+use rtd::coin::Coin;
+use rtd::coin_registry::{Self, Currency};
 
 // Total supply of the `BURN_ONLY_SUPPLY` coin is 1B (with 6 decimals).
 const TOTAL_SUPPLY: u64 = 1000000000_000000;

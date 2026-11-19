@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 import { CONSTANTS } from "@/constants";
 import { InfiniteScrollArea } from "@/components/InfiniteScrollArea";
-import { useCurrentAccount, useSuiClientInfiniteQuery } from "@mysten/dapp-kit";
+import { useCurrentAccount, useRtdClientInfiniteQuery } from "@linku/dapp-kit";
 import { LockedObject } from "./LockedObject";
 
 /**
@@ -14,7 +14,7 @@ export function OwnedLockedList() {
   const account = useCurrentAccount();
 
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useSuiClientInfiniteQuery(
+    useRtdClientInfiniteQuery(
       "getOwnedObjects",
       {
         filter: {

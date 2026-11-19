@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -8,7 +8,7 @@ use std::{
 
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockDigest, BlockRef, Round, TransactionIndex};
-use mysten_common::ZipDebugEqIteratorExt;
+use linku_common::ZipDebugEqIteratorExt;
 use parking_lot::RwLock;
 
 use super::{Store, WriteBatch};

@@ -12,7 +12,7 @@ pub use package_impl::*;
 pub use root_package::RootPackage;
 pub mod package_loader;
 
-/// Convert an async task into a single-threaded task. Copied from `sui-replay-2`
+/// Convert an async task into a single-threaded task. Copied from `rtd-replay-2`
 macro_rules! block_on {
     ($expr:expr) => {{
         #[allow(clippy::disallowed_methods, clippy::result_large_err)]

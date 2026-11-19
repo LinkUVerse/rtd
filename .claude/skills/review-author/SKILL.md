@@ -12,7 +12,7 @@ This skill tells an authoring agent how to prepare a PR for the tiered review po
 
 ## Policy summary
 
-- The policy applies only to PRs whose author is a member of the MystenLabs GitHub organization.
+- The policy applies only to PRs whose author is a member of the LinkUVerse GitHub organization.
 - The policy is opt in. A PR opts in when its description contains a tier tag (see Step 4).
   A PR without a tier tag goes through normal human code review.
 - Every PR under the policy gets an AI review, and the human author accepts or rejects each
@@ -27,7 +27,7 @@ This skill tells an authoring agent how to prepare a PR for the tiered review po
 
 A file is eligible if it matches an entry in the eligible list and no entry in the excluded list.
 Entries are string prefixes of paths relative to the repository root, so
-`crates/sui-bridge` matches `crates/sui-bridge/` and `crates/sui-bridge-cli/`. An excluded entry
+`crates/rtd-bridge` matches `crates/rtd-bridge/` and `crates/rtd-bridge-cli/`. An excluded entry
 wins over an eligible entry. A team opts its code in by adding its paths here, and opts a subpath
 out by adding it to the excluded list.
 
@@ -49,9 +49,9 @@ Excluded:
 .claude/skills/review-author/
 .claude/skills/review-approver/
 .github/CODEOWNERS
-crates/sui-framework
-crates/sui-bridge
-crates/sui-package-
+crates/rtd-framework
+crates/rtd-bridge
+crates/rtd-package-
 ```
 
 A PR that changes ineligible files can still opt in and follow its tier. The approver agent does
@@ -132,15 +132,15 @@ changes to the protocol. In this repository a change is always Tier 3 if it does
 - changes a protocol setting, or reads a new protocol config flag. A protocol setting is the
   value of a feature flag or config field for any protocol version or chain, the set of flags and
   fields, or the range of supported protocol versions. A change that alters any snapshot in
-  `crates/sui-protocol-config/src/snapshots/` changes a protocol setting. A change to
-  `crates/sui-protocol-config/` that leaves every protocol setting unchanged, such as a refactor,
+  `crates/rtd-protocol-config/src/snapshots/` changes a protocol setting. A change to
+  `crates/rtd-protocol-config/` that leaves every protocol setting unchanged, such as a refactor,
   a comment, or a test edit, is not Tier 3 by this rule, and the shape of the change decides its
   tier;
-- changes `crates/sui-types/tests/snapshots/format__sui.yaml.snap` or any BCS-serialized type;
+- changes `crates/rtd-types/tests/snapshots/format__rtd.yaml.snap` or any BCS-serialized type;
 - changes the result of executing any transaction, or the contents of checkpoints or effects;
 - changes the schema or key encoding of a persisted table;
 - adds or changes a gRPC, JSON-RPC, GraphQL, CLI, or Rust SDK interface;
-- changes a system package in `crates/sui-framework/packages/`.
+- changes a system package in `crates/rtd-framework/packages/`.
 
 When the choice between two tiers is unclear, pick the higher tier.
 

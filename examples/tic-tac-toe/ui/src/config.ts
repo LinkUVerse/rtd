@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { createNetworkConfig } from "@mysten/dapp-kit";
-import { getFullnodeUrl } from "@mysten/sui/client";
+import { createNetworkConfig } from "@linku/dapp-kit";
+import { getFullnodeUrl } from "@linku/rtd/client";
 
 import DevnetPackage from "./env.devnet.ts";
 import LocalnetPackage from "./env.localnet.ts";

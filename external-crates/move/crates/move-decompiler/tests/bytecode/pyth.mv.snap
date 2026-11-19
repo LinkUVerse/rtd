@@ -19,7 +19,7 @@ use 0x8d97f1cd6ac663735be08d1d2b6d02a159e711586461306ce60a2b7a6a565a9e::state;
 use 0x1::option::Option;
 use 0x2::clock::Clock;
 use 0x2::coin::Coin;
-use 0x2::sui::SUI;
+use 0x2::rtd::RTD;
 use 0x2::tx_context::TxContext;
 use 0x5306f64e312b581766351c07af79c72fcb1cd25147157fdc2f8ad76de9a3fb6a::state::State;
 use 0x8d97f1cd6ac663735be08d1d2b6d02a159e711586461306ce60a2b7a6a565a9e::price_info::PriceInfoObject;
@@ -27,7 +27,7 @@ use 0x8d97f1cd6ac663735be08d1d2b6d02a159e711586461306ce60a2b7a6a565a9e::state::S
 
 // -- functions -- 
 
-public fun update_1(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &State, l5: vector<u8>, l6: &mut Coin<SUI>, l7: &Clock, l8: &mut TxContext) {
+public fun update_1(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &State, l5: vector<u8>, l6: &mut Coin<RTD>, l7: &Clock, l8: &mut TxContext) {
     let l10 = clock::timestamp_ms(l7) / 1000u64;
     let l11 = price::get_timestamp(&pyth::get_price_unsafe(freeze(l2)));
     let l13 = option::get_with_default(&l3, state::get_stale_price_threshold_secs(l0));
@@ -45,7 +45,7 @@ public fun update_1(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     hot_potato_vector::destroy(pyth::update_single_price_feed(l0, l12, l2, coin::split(l6, state::get_base_update_fee(l0), l8), l7))
 }
 
-public fun update_2(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &State, l7: vector<u8>, l8: &mut Coin<SUI>, l9: &Clock, l10: &mut TxContext) {
+public fun update_2(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &State, l7: vector<u8>, l8: &mut Coin<RTD>, l9: &Clock, l10: &mut TxContext) {
     let l14 = state::get_stale_price_threshold_secs(l0);
     let l13 = clock::timestamp_ms(l9) / 1000u64;
     let mut l15 = true;
@@ -85,7 +85,7 @@ public fun update_2(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_3(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &State, l9: vector<u8>, l10: &mut Coin<SUI>, l11: &Clock, l12: &mut TxContext) {
+public fun update_3(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &State, l9: vector<u8>, l10: &mut Coin<RTD>, l11: &Clock, l12: &mut TxContext) {
     let l17 = state::get_stale_price_threshold_secs(l0);
     let l16 = clock::timestamp_ms(l11) / 1000u64;
     let mut l18 = true;
@@ -143,7 +143,7 @@ public fun update_3(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_4(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &State, l11: vector<u8>, l12: &mut Coin<SUI>, l13: &Clock, l14: &mut TxContext) {
+public fun update_4(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &State, l11: vector<u8>, l12: &mut Coin<RTD>, l13: &Clock, l14: &mut TxContext) {
     let l20 = state::get_stale_price_threshold_secs(l0);
     let l19 = clock::timestamp_ms(l13) / 1000u64;
     let mut l21 = true;
@@ -219,7 +219,7 @@ public fun update_4(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_5(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &State, l13: vector<u8>, l14: &mut Coin<SUI>, l15: &Clock, l16: &mut TxContext) {
+public fun update_5(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &State, l13: vector<u8>, l14: &mut Coin<RTD>, l15: &Clock, l16: &mut TxContext) {
     let l23 = state::get_stale_price_threshold_secs(l0);
     let l22 = clock::timestamp_ms(l15) / 1000u64;
     let mut l24 = true;
@@ -313,7 +313,7 @@ public fun update_5(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_6(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &State, l15: vector<u8>, l16: &mut Coin<SUI>, l17: &Clock, l18: &mut TxContext) {
+public fun update_6(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &State, l15: vector<u8>, l16: &mut Coin<RTD>, l17: &Clock, l18: &mut TxContext) {
     let l26 = state::get_stale_price_threshold_secs(l0);
     let l25 = clock::timestamp_ms(l17) / 1000u64;
     let mut l27 = true;
@@ -425,7 +425,7 @@ public fun update_6(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_7(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &mut PriceInfoObject, l15: Option<u64>, l16: &State, l17: vector<u8>, l18: &mut Coin<SUI>, l19: &Clock, l20: &mut TxContext) {
+public fun update_7(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &mut PriceInfoObject, l15: Option<u64>, l16: &State, l17: vector<u8>, l18: &mut Coin<RTD>, l19: &Clock, l20: &mut TxContext) {
     let l29 = state::get_stale_price_threshold_secs(l0);
     let l28 = clock::timestamp_ms(l19) / 1000u64;
     let mut l30 = true;
@@ -555,7 +555,7 @@ public fun update_7(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_8(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &mut PriceInfoObject, l15: Option<u64>, l16: &mut PriceInfoObject, l17: Option<u64>, l18: &State, l19: vector<u8>, l20: &mut Coin<SUI>, l21: &Clock, l22: &mut TxContext) {
+public fun update_8(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3: Option<u64>, l4: &mut PriceInfoObject, l5: Option<u64>, l6: &mut PriceInfoObject, l7: Option<u64>, l8: &mut PriceInfoObject, l9: Option<u64>, l10: &mut PriceInfoObject, l11: Option<u64>, l12: &mut PriceInfoObject, l13: Option<u64>, l14: &mut PriceInfoObject, l15: Option<u64>, l16: &mut PriceInfoObject, l17: Option<u64>, l18: &State, l19: vector<u8>, l20: &mut Coin<RTD>, l21: &Clock, l22: &mut TxContext) {
     let l32 = state::get_stale_price_threshold_secs(l0);
     let l31 = clock::timestamp_ms(l21) / 1000u64;
     let mut l33 = true;
@@ -703,7 +703,7 @@ public fun update_8(l0: &x8_State, l1: vector<u8>, l2: &mut PriceInfoObject, l3:
     }
 }
 
-public fun update_all(l0: &x8_State, l1: vector<u8>, mut l2: vector<PriceInfoObject>, l3: vector<Option<u64>>, l4: &State, l5: vector<u8>, l6: &mut Coin<SUI>, l7: &Clock, l8: &mut TxContext) {
+public fun update_all(l0: &x8_State, l1: vector<u8>, mut l2: vector<PriceInfoObject>, l3: vector<Option<u64>>, l4: &State, l5: vector<u8>, l6: &mut Coin<RTD>, l7: &Clock, l8: &mut TxContext) {
     let l14 = l2.length();
     let mut l12 = 0u64;
     let l10 = clock::timestamp_ms(l7) / 1000u64;

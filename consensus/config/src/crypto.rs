@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Here we select the cryptographic types that are used by default in the code base.
@@ -134,9 +134,9 @@ impl ProtocolKeySignature {
 }
 
 /// Authority name is a raw bytes identity for an authority, matching `AuthorityName`
-/// on the Sui side. It is only used for identity sanity checks and not for cryptographic
+/// on the Rtd side. It is only used for identity sanity checks and not for cryptographic
 /// verification, so its length is not tied to any particular signature scheme: the bytes are
-/// whatever the Sui side derives the authority's identity from (a BLS12381 public key today).
+/// whatever the Rtd side derives the authority's identity from (a BLS12381 public key today).
 /// Any expectation about the length belongs to the code constructing the committee.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AuthorityName(Vec<u8>);

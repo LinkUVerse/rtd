@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -6,7 +6,7 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use mysten_network::Multiaddr;
+use linku_network::Multiaddr;
 use serde::{Deserialize, Serialize};
 
 use crate::{AuthorityName, NetworkPublicKey, ProtocolPublicKey};
@@ -14,7 +14,7 @@ use crate::{AuthorityName, NetworkPublicKey, ProtocolPublicKey};
 /// Committee of the consensus protocol is updated each epoch.
 pub type Epoch = u64;
 
-/// Voting power of an authority, roughly proportional to the actual amount of Sui staked
+/// Voting power of an authority, roughly proportional to the actual amount of Rtd staked
 /// by the authority.
 /// Total stake / voting power of all authorities should sum to 10,000.
 pub type Stake = u64;
@@ -241,7 +241,7 @@ pub struct Authority {
     pub address: Multiaddr,
     /// The authority's hostname, for metrics and logging.
     pub hostname: String,
-    /// The authority's name, matching AuthorityName on the Sui side.
+    /// The authority's name, matching AuthorityName on the Rtd side.
     pub authority_name: AuthorityName,
     /// The authority's public key for verifying blocks.
     pub protocol_key: ProtocolPublicKey,

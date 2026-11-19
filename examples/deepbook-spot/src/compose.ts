@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import { OrderType } from '@mysten/deepbook-v3';
+import { Transaction } from '@linku/rtd/transactions';
+import { OrderType } from '@linku/deepbook-v3';
 import type { DeepBookTestnetClient } from './client.js';
 
 // docs::#fund-order

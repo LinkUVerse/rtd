@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -10,7 +10,7 @@ use std::{
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockRef, Round};
-use mysten_common::ZipDebugEqIteratorExt;
+use linku_common::ZipDebugEqIteratorExt;
 use parking_lot::RwLock;
 use rand::seq::SliceRandom;
 use tracing::debug;
@@ -150,7 +150,7 @@ impl BlockSyncService {
                     .min(missing_ancestors.len());
                 if selected_num_blocks > 0 {
                     let selected_ancestor_refs = missing_ancestors
-                        .choose_multiple(&mut mysten_common::random::get_rng(), selected_num_blocks)
+                        .choose_multiple(&mut linku_common::random::get_rng(), selected_num_blocks)
                         .copied()
                         .collect::<Vec<_>>();
                     // Ancestors of recently accepted blocks are in the cache, like the

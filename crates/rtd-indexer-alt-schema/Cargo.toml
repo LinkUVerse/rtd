@@ -1,0 +1,23 @@
+[package]
+name = "rtd-indexer-alt-schema"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+diesel = {workspace = true, features = ["postgres_backend", "chrono"]}
+diesel_migrations.workspace = true
+serde.workspace = true
+bcs.workspace = true
+siphasher = "1.0"
+
+move-core-types.workspace = true
+rtd-field-count.workspace = true
+rtd-protocol-config.workspace = true
+rtd-types.workspace = true

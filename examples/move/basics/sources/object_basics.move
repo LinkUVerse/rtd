@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Test CTURD object basics (create, transfer, update, read, delete)
 module basics::object_basics;
 
-use sui::event;
-use sui::party;
+use rtd::event;
+use rtd::party;
 
 public struct Object has key, store {
     id: UID,

@@ -1,17 +1,17 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import {SuiClient} from "@mysten/sui/client";
+import {RtdClient} from "@linku/rtd/client";
 import {
     ADMIN_SECRET_KEY, COIN_TYPE,
     DENY_CAP_ID,
-    SUI_DENY_LIST_OBJECT_ID,
-    SUI_NETWORK,
+    RTD_DENY_LIST_OBJECT_ID,
+    RTD_NETWORK,
     TREASURY_CAP_ID,
 } from "./config";
-import {Transaction} from '@mysten/sui/transactions';
+import {Transaction} from '@linku/rtd/transactions';
 import {program} from "commander";
-import {Ed25519Keypair} from "@mysten/sui/keypairs/ed25519";
+import {Ed25519Keypair} from "@linku/rtd/keypairs/ed25519";
 
 
 const run = async () => {
@@ -34,7 +34,7 @@ const run = async () => {
             txb.moveCall({
                 target: `0x2::coin::deny_list_v2_add`,
                 arguments: [
-                    txb.object(SUI_DENY_LIST_OBJECT_ID),
+                    txb.object(RTD_DENY_LIST_OBJECT_ID),
                     txb.object(DENY_CAP_ID),
                     txb.pure.address(options.address),
                 ],
@@ -61,7 +61,7 @@ const run = async () => {
             txb.moveCall({
                 target: `0x2::coin::deny_list_v2_remove`,
                 arguments: [
-                    txb.object(SUI_DENY_LIST_OBJECT_ID),
+                    txb.object(RTD_DENY_LIST_OBJECT_ID),
                     txb.object(DENY_CAP_ID),
                     txb.pure.address(options.address),
                 ],
@@ -143,8 +143,8 @@ run();
 
 async function executeTx(txb: Transaction) {
 
-    console.log("Connecting to Sui network: ", SUI_NETWORK);
-    const suiClient = new SuiClient({url: SUI_NETWORK});
+    console.log("Connecting to Rtd network: ", RTD_NETWORK);
+    const rtdClient = new RtdClient({url: RTD_NETWORK});
 
     if(!ADMIN_SECRET_KEY) throw new Error("ADMIN_SECRET_KEY environment variable is not set.");
 
@@ -154,7 +154,7 @@ async function executeTx(txb: Transaction) {
 
     txb.setGasBudget(1000000000);
 
-    suiClient.signAndExecuteTransaction({
+    rtdClient.signAndExecuteTransaction({
         signer: adminKeypair,
         transaction: txb,
         requestType: 'WaitForLocalExecution',

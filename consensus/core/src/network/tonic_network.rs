@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -15,16 +15,16 @@ use consensus_config::{AuthorityIndex, NetworkKeyPair, NetworkPublicKey};
 use consensus_types::block::{BlockRef, Round};
 use fastcrypto::{encoding::Encoding, traits::ToFromBytes};
 use futures::{Stream, StreamExt as _, stream};
-use mysten_network::{Multiaddr, multiaddr::Protocol};
+use linku_network::{Multiaddr, multiaddr::Protocol};
 use parking_lot::RwLock;
-use sui_http::{
+use rtd_http::{
     ServerHandle,
     middleware::{
         callback::{CallbackLayer, MakeCallbackHandler, RequestBody, ResponseHandler},
         grpc_timeout::GrpcTimeout,
     },
 };
-use sui_tls::AllowPublicKeys;
+use rtd_tls::AllowPublicKeys;
 use tokio_stream::{Iter, iter};
 use tonic::{Request, Response, Streaming, codec::CompressionEncoding};
 use tower_http::trace::{DefaultMakeSpan, DefaultOnFailure, TraceLayer};
@@ -400,7 +400,7 @@ impl ValidatorNetworkClient for TonicValidatorClient {
 }
 
 // Tonic channel wrapped with layers.
-pub(crate) type Channel = sui_http::middleware::callback::Callback<
+pub(crate) type Channel = rtd_http::middleware::callback::Callback<
     tower::util::MapRequest<
         tower_http::trace::Trace<
             tonic_rustls::Channel,
@@ -502,7 +502,7 @@ impl ChannelPool {
         let address = format!("https://{address}");
         let config = &self.context.parameters.tonic;
         let buffer_size = config.connection_buffer_size;
-        let client_tls_config = sui_tls::create_rustls_client_config(
+        let client_tls_config = rtd_tls::create_rustls_client_config(
             self.context
                 .committee
                 .authority(peer)
@@ -984,7 +984,7 @@ impl TonicManager {
             // Add a layer to extract a peer's PeerInfo from their TLS certs
             .map_request(move |mut request: http::Request<_>| {
                 if let Some(peer_certificates) =
-                    request.extensions().get::<sui_http::PeerCertificates>()
+                    request.extensions().get::<rtd_http::PeerCertificates>()
                     && let Some(peer_info) =
                         peer_info_from_certs(&connections_info, peer_certificates)
                 {
@@ -1013,7 +1013,7 @@ impl TonicManager {
             .into_axum_router()
             .route_layer(layers);
 
-        let tls_server_config = sui_tls::create_rustls_server_config_with_client_verifier(
+        let tls_server_config = rtd_tls::create_rustls_server_config_with_client_verifier(
             self.network_keypair.clone().private_key().into_inner(),
             certificate_server_name(&self.context),
             AllowPublicKeys::new(
@@ -1025,7 +1025,7 @@ impl TonicManager {
             ),
         );
 
-        let http_config = sui_http::Config::default()
+        let http_config = rtd_http::Config::default()
             .initial_connection_window_size(HTTP2_INITIAL_CONNECTION_WINDOW_SIZE)
             .initial_stream_window_size(HTTP2_INITIAL_STREAM_WINDOW_SIZE)
             .http2_keepalive_interval(Some(config.keepalive_interval))
@@ -1040,7 +1040,7 @@ impl TonicManager {
         // for a short/reasonable period of time before giving up.
         let deadline = Instant::now() + Duration::from_secs(20);
         let server = loop {
-            match sui_http::Builder::new()
+            match rtd_http::Builder::new()
                 .config(http_config.clone())
                 .tls_config(tls_server_config.clone())
                 .serve(self.own_address, consensus_service.clone())
@@ -1072,10 +1072,10 @@ impl TonicManager {
         let observer_allowlist = parse_observer_allowlist(&observer_params.allowlist);
         let observer_tls_config = if observer_allowlist.is_empty() {
             info!("Observer server allowlist disabled - all observers allowed");
-            sui_tls::create_rustls_server_config_with_client_verifier(
+            rtd_tls::create_rustls_server_config_with_client_verifier(
                 self.network_keypair.clone().private_key().into_inner(),
                 certificate_server_name(&self.context),
-                sui_tls::AllowAll,
+                rtd_tls::AllowAll,
             )
         } else {
             info!(
@@ -1086,7 +1086,7 @@ impl TonicManager {
                 .into_iter()
                 .map(|k| k.into_inner())
                 .collect();
-            sui_tls::create_rustls_server_config_with_client_verifier(
+            rtd_tls::create_rustls_server_config_with_client_verifier(
                 self.network_keypair.clone().private_key().into_inner(),
                 certificate_server_name(&self.context),
                 AllowPublicKeys::new(allowed_keys),
@@ -1108,7 +1108,7 @@ impl TonicManager {
         let layers = tower::ServiceBuilder::new()
             .map_request(move |mut request: http::Request<_>| {
                 if let Some(peer_certificates) =
-                    request.extensions().get::<sui_http::PeerCertificates>()
+                    request.extensions().get::<rtd_http::PeerCertificates>()
                 {
                     if let Some(observer_peer_info) =
                         observer_peer_info_from_certs(peer_certificates)
@@ -1136,7 +1136,7 @@ impl TonicManager {
             .into_axum_router()
             .route_layer(layers);
 
-        let http_config = sui_http::Config::default()
+        let http_config = rtd_http::Config::default()
             .initial_connection_window_size(HTTP2_INITIAL_CONNECTION_WINDOW_SIZE)
             .initial_stream_window_size(HTTP2_INITIAL_STREAM_WINDOW_SIZE)
             .http2_keepalive_interval(Some(tonic_config.keepalive_interval))
@@ -1145,7 +1145,7 @@ impl TonicManager {
 
         let deadline = Instant::now() + Duration::from_secs(20);
         let observer_server = loop {
-            match sui_http::Builder::new()
+            match rtd_http::Builder::new()
                 .config(http_config.clone())
                 .tls_config(observer_tls_config.clone())
                 .serve(observer_address, observer_service.clone())
@@ -1179,11 +1179,11 @@ impl Drop for TonicManager {
     }
 }
 
-// TODO: improve sui-http to allow for providing a MakeService so that this can be done once per
+// TODO: improve rtd-http to allow for providing a MakeService so that this can be done once per
 // connection
 fn peer_info_from_certs(
     connections_info: &ConnectionsInfo,
-    peer_certificates: &sui_http::PeerCertificates,
+    peer_certificates: &rtd_http::PeerCertificates,
 ) -> Option<PeerInfo> {
     let certs = peer_certificates.peer_certs();
 
@@ -1195,7 +1195,7 @@ fn peer_info_from_certs(
         return None;
     }
     trace!("Received {} certificates", certs.len());
-    let public_key = sui_tls::public_key_from_certificate(&certs[0])
+    let public_key = rtd_tls::public_key_from_certificate(&certs[0])
         .map_err(|e| {
             trace!("Failed to extract public key from certificate: {e:?}");
             e
@@ -1213,7 +1213,7 @@ fn peer_info_from_certs(
 /// Unlike validator peers, observers are not required to be in the committee.
 /// The allowlist filtering is enforced at the TLS level via AllowPublicKeys or AllowAll.
 fn observer_peer_info_from_certs(
-    peer_certificates: &sui_http::PeerCertificates,
+    peer_certificates: &rtd_http::PeerCertificates,
 ) -> Option<ObserverPeerInfo> {
     let certs = peer_certificates.peer_certs();
 
@@ -1225,7 +1225,7 @@ fn observer_peer_info_from_certs(
         return None;
     }
     trace!("Received {} observer certificates", certs.len());
-    let public_key = sui_tls::public_key_from_certificate(&certs[0])
+    let public_key = rtd_tls::public_key_from_certificate(&certs[0])
         .map_err(|e| {
             trace!("Failed to extract public key from observer certificate: {e:?}");
             e

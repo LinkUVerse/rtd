@@ -22,7 +22,7 @@ use indexmap::IndexMap;
 /// language.
 ///
 /// Note: this is distinct from [`move_compiler::editions::Flavor`], which selects compiler syntax
-/// and semantics (e.g. `Core` vs `Sui`). `MoveFlavor` controls package-level concerns like system
+/// and semantics (e.g. `Core` vs `Rtd`). `MoveFlavor` controls package-level concerns like system
 /// dependencies, default environments, and on-chain fetching.
 #[async_trait]
 pub trait MoveFlavor: Debug + Send + Sync {

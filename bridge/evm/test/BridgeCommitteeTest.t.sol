@@ -419,7 +419,7 @@ contract BridgeCommitteeTest is BridgeBaseTest {
                     supportedTokens,
                     tokenPrices,
                     tokenIds,
-                    suiDecimals,
+                    rtdDecimals,
                     supportedChains
                 )
             ),

@@ -1,0 +1,9 @@
+[package]
+name = "tto"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+tto = "0x0"

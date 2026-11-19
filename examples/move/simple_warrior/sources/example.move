@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// Demonstrates wrapping objects using the `Option` type.
@@ -40,7 +40,7 @@ public fun unequip(warrior: &mut Warrior): Sword {
 
 // === Tests ===
 #[test_only]
-use sui::test_scenario as ts;
+use rtd::test_scenario as ts;
 
 #[test]
 fun test_equip_empty() {

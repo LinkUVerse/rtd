@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module.exports = {
@@ -8,7 +8,7 @@ module.exports = {
 	tabWidth: 2,
 	trailingComma: 'all',
 	useTabs: true,
-	plugins: ['@ianvs/prettier-plugin-sort-imports', '@mysten/prettier-plugin-move'],
+	plugins: ['@ianvs/prettier-plugin-sort-imports', '@linku/prettier-plugin-move'],
 	importOrder: [
 		'<BUILT_IN_MODULES>',
 		'<THIRD_PARTY_MODULES>',

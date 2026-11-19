@@ -1,0 +1,42 @@
+[package]
+name = "rtd-sdk"
+version.workspace = true
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+# This needs to be specified, in addition to the same setting
+# in the workspace Cargo.toml.
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_with.workspace = true
+futures.workspace = true
+bcs.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+shared-crypto.workspace = true
+rtd-config.workspace = true
+rtd-crypto.workspace = true
+rtd-keys.workspace = true
+rtd-rpc.workspace = true
+rtd-rpc-api.workspace = true
+rtd-sdk-types.workspace = true
+rtd-types.workspace = true
+
+# NOTE: It's important to keep the above dependency list short.
+# This crate is widely used to develop on Rtd and it's valuable
+# to not have to pull in the entire rtd repo for it.
+
+[dev-dependencies]
+fastcrypto.workspace = true
+rtd-macros.workspace = true
+rtd-simulator.workspace = true
+tempfile.workspace = true
+test-cluster.workspace = true
+tokio.workspace = true

@@ -1,5 +1,5 @@
-name: Sui Version Bump
-run-name: "Sui Version Bump (${{ inputs.type }})"
+name: Rtd Version Bump
+run-name: "Rtd Version Bump (${{ inputs.type }})"
 
 on:
   workflow_call:
@@ -113,13 +113,13 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           STAMP="$(date +%Y%m%d%H%M%S)"
-          BRANCH="${GITHUB_ACTOR}/sui-v${NEW_VERSION}-version-bump-${STAMP}"
+          BRANCH="${GITHUB_ACTOR}/rtd-v${NEW_VERSION}-version-bump-${STAMP}"
 
           git checkout -b "$BRANCH"
           git add \
             Cargo.toml \
             Cargo.lock
-          BODY="Sui v${NEW_VERSION} Version Bump"
+          BODY="Rtd v${NEW_VERSION} Version Bump"
           git commit -m "$BODY"
           # Push using the app token URL so the push is attributed to the GitHub App,
           # not github-actions[bot]. Pushes with GITHUB_TOKEN don't trigger CI workflows.
@@ -144,7 +144,7 @@ jobs:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          BODY="Sui v${NEW_VERSION} Version Bump"
+          BODY="Rtd v${NEW_VERSION} Version Bump"
 
           git add \
             Cargo.toml \

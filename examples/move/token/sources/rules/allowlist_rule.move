@@ -1,12 +1,12 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// A simple allowlist rule - allows only the addresses on the allowlist to
 /// perform an Action.
 module examples::allowlist_rule;
 
-use sui::bag::{Self, Bag};
-use sui::token::{Self, TokenPolicy, TokenPolicyCap, ActionRequest};
+use rtd::bag::{Self, Bag};
+use rtd::token::{Self, TokenPolicy, TokenPolicyCap, ActionRequest};
 
 /// The `sender` or `recipient` is not on the allowlist.
 const EUserNotAllowed: u64 = 0;

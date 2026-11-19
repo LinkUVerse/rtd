@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 
 import { CONFIG } from '../config';
-import { ACTIVE_NETWORK, getActiveAddress, signAndExecute } from '../sui-utils';
+import { ACTIVE_NETWORK, getActiveAddress, signAndExecute } from '../rtd-utils';
 
 // a simple example of objects by creating N amount of bears.
 const createDemoLockedObjects = async (totalBears: number) => {

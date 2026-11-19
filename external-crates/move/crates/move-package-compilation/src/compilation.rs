@@ -394,7 +394,7 @@ pub fn make_deps_for_compiler<W: Write + Send, F: MoveFlavor>(
         let flavor = build_config
             .default_flavor
             .or(pkg.flavor().map(Flavor::from_str).transpose()?)
-            .unwrap_or(Flavor::Sui);
+            .unwrap_or(Flavor::Rtd);
         let config = PackageConfig::default()
             .set_is_dependency(!pkg.is_root())
             .set_edition(

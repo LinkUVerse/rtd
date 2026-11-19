@@ -10,7 +10,7 @@ optimizer_runs = 200
 build_info = true
 extra_output = ["storageLayout"]
 fs_permissions = [{ access = "read", path = "/"}]
-gas_reports = ["SuiBridge"]
+gas_reports = ["RtdBridge"]
 ffi = true
 allow_internal_expect_revert = true
 

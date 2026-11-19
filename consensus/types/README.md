@@ -1,2 +1,2 @@
-This crate contains types shared between Sui and Consensus.
+This crate contains types shared between Rtd and Consensus.
 It should be kept with minimal dependencies.

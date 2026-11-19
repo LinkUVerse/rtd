@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#markets
-import type { ActiveMarket, MarketSummary } from '@mysten/deepbook-v3/predict';
+import type { ActiveMarket, MarketSummary } from '@linku/deepbook-v3/predict';
 import { client } from './client.js';
 import { UNDERLYING } from './config.js';
 

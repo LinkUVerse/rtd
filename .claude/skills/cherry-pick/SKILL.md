@@ -1,6 +1,6 @@
 ---
 name: cherry-pick
-description: Cherry-pick a commit from main to a Sui release branch, create the release PR, and report the PR URL.
+description: Cherry-pick a commit from main to a Rtd release branch, create the release PR, and report the PR URL.
 ---
 
 # Cherry-pick to Release Branch
@@ -34,10 +34,10 @@ git show --oneline --no-patch <commit-sha>
 Save the commit message for use in the PR title.
 
 ### 2. Fetch and checkout the release branch
-The release branch naming convention is `releases/sui-v<version>.0-release`.
+The release branch naming convention is `releases/rtd-v<version>.0-release`.
 ```bash
-git fetch origin releases/sui-v<version>.0-release
-git checkout releases/sui-v<version>.0-release
+git fetch origin releases/rtd-v<version>.0-release
+git checkout releases/rtd-v<version>.0-release
 ```
 
 ### 3. Cherry-pick the commit
@@ -64,7 +64,7 @@ git push -u origin cherry-pick-<short-sha>-to-<version>
 ### 6. Create the PR
 Create a PR targeting the release branch:
 ```bash
-gh pr create --base releases/sui-v<version>.0-release \
+gh pr create --base releases/rtd-v<version>.0-release \
   --title "[<version>] <original-commit-message>" \
   --body "## Summary
 Cherry-pick of <original-pr-link-if-available> to the <version> release branch.

@@ -2,13 +2,13 @@
 # Run clippy on all targets and features. The project-wide lint set comes from
 # `[workspace.lints]` in the root Cargo.toml; every workspace member opts in with
 # `[lints] workspace = true` (enforced by `cargo xlint`). Extra cargo options can
-# be appended, e.g. `cargo xclippy -p sui-core` or `cargo xclippy -- -D warnings`.
+# be appended, e.g. `cargo xclippy -p rtd-core` or `cargo xclippy -- -D warnings`.
 xclippy = ["clippy", "--all-targets", "--all-features"]
 xlint = "run --package x --bin x -- lint"
 xtest = "run --package x --bin x -- external-crates-tests"
 
 # Configuration specifically for running clippy on `external-crates/move/`.
-# Some of these allows are to avoid code churn; others are filed as issues on the `sui` repo now.
+# Some of these allows are to avoid code churn; others are filed as issues on the `rtd` repo now.
 move-clippy = [
     "clippy",
     "--all-targets",

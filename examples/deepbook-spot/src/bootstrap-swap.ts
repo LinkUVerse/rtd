@@ -1,32 +1,32 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#bootstrap-swap
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookTestnetClient } from './client.js';
 
-// Swap SUI for DEEP on the DEEP_SUI Testnet pool. That pool is whitelisted
+// Swap RTD for DEEP on the DEEP_RTD Testnet pool. That pool is whitelisted
 // (zero fee) and the swap needs no BalanceManager, so it bootstraps DEEP from
-// faucet SUI. DEEP is the base and SUI the quote, so a quote-for-base swap
-// spends SUI and returns DEEP. Set `minDeepOut` to a nonzero value (for example
+// faucet RTD. DEEP is the base and RTD the quote, so a quote-for-base swap
+// spends RTD and returns DEEP. Set `minDeepOut` to a nonzero value (for example
 // 99% of getQuantityOut's `baseOut`): with `minOut: 0`, a thin or empty book
-// silently returns your SUI unfilled instead of reverting.
-export function swapSuiForDeep(
+// silently returns your RTD unfilled instead of reverting.
+export function swapRtdForDeep(
 	client: DeepBookTestnetClient,
-	suiAmount: number,
+	rtdAmount: number,
 	minDeepOut: number,
 	recipient: string,
 ): Transaction {
 	const tx = new Transaction();
-	const [deepOut, suiRemainder, deepFee] = tx.add(
+	const [deepOut, rtdRemainder, deepFee] = tx.add(
 		client.deepbook.deepBook.swapExactQuoteForBase({
-			poolKey: 'DEEP_SUI',
-			amount: suiAmount,
+			poolKey: 'DEEP_RTD',
+			amount: rtdAmount,
 			deepAmount: 0,
 			minOut: minDeepOut,
 		}),
 	);
-	tx.transferObjects([deepOut, suiRemainder, deepFee], recipient);
+	tx.transferObjects([deepOut, rtdRemainder, deepFee], recipient);
 	return tx;
 }
 // docs::/#bootstrap-swap

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// A thin demo consumer that reads a price through the adapter and emits it as an
@@ -9,8 +9,8 @@ module oracle_adapter::demo;
 
 use oracle_adapter::price_adapter;
 use pyth::price_info::PriceInfoObject;
-use sui::clock::Clock;
-use sui::event;
+use rtd::clock::Clock;
+use rtd::event;
 
 public struct PriceRead has copy, drop {
     magnitude: u64,

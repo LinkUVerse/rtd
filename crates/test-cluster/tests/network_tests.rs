@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use sui_framework::BuiltInFramework;
-use sui_macros::sim_test;
-use sui_types::{
-    MOVE_STDLIB_PACKAGE_ID, SUI_FRAMEWORK_PACKAGE_ID, SUI_SYSTEM_ADDRESS, SUI_SYSTEM_PACKAGE_ID,
+use rtd_framework::BuiltInFramework;
+use rtd_macros::sim_test;
+use rtd_types::{
+    MOVE_STDLIB_PACKAGE_ID, RTD_FRAMEWORK_PACKAGE_ID, RTD_SYSTEM_ADDRESS, RTD_SYSTEM_PACKAGE_ID,
     base_types::ObjectID, digests::TransactionDigest, object::Object,
 };
 use test_cluster::TestClusterBuilder;
@@ -28,21 +28,21 @@ async fn test_package_override() {
     let framework_ref = {
         let default_cluster = TestClusterBuilder::new().build().await;
         let mut client = default_cluster.grpc_client();
-        let obj = client.get_object(SUI_SYSTEM_PACKAGE_ID).await.unwrap();
+        let obj = client.get_object(RTD_SYSTEM_PACKAGE_ID).await.unwrap();
         obj.compute_object_reference()
     };
 
     let modified_ref = {
-        let mut framework_modules = BuiltInFramework::get_package_by_id(&SUI_SYSTEM_PACKAGE_ID)
+        let mut framework_modules = BuiltInFramework::get_package_by_id(&RTD_SYSTEM_PACKAGE_ID)
             .modules()
             .to_vec();
 
-        // Create an empty module that is pretending to be part of the sui framework.
+        // Create an empty module that is pretending to be part of the rtd framework.
         let mut test_module = move_binary_format::file_format::empty_module();
         let address_idx = test_module.self_handle().address.0 as usize;
-        test_module.address_identifiers[address_idx] = SUI_SYSTEM_ADDRESS;
+        test_module.address_identifiers[address_idx] = RTD_SYSTEM_ADDRESS;
 
-        // Add the dummy module to the rest of the sui-frameworks.  We can't replace the framework
+        // Add the dummy module to the rest of the rtd-frameworks.  We can't replace the framework
         // entirely because we will call into it for genesis.
         framework_modules.push(test_module);
 
@@ -51,7 +51,7 @@ async fn test_package_override() {
             TransactionDigest::genesis_marker(),
             [
                 BuiltInFramework::get_package_by_id(&MOVE_STDLIB_PACKAGE_ID).genesis_move_package(),
-                BuiltInFramework::get_package_by_id(&SUI_FRAMEWORK_PACKAGE_ID)
+                BuiltInFramework::get_package_by_id(&RTD_FRAMEWORK_PACKAGE_ID)
                     .genesis_move_package(),
             ],
         )
@@ -63,7 +63,7 @@ async fn test_package_override() {
             .await;
 
         let mut client = modified_cluster.grpc_client();
-        let obj = client.get_object(SUI_SYSTEM_PACKAGE_ID).await.unwrap();
+        let obj = client.get_object(RTD_SYSTEM_PACKAGE_ID).await.unwrap();
 
         obj.compute_object_reference()
     };

@@ -1,0 +1,19 @@
+[package]
+name = "rtd-transaction-checks"
+version = "0.1.0"
+authors = ["LinkU Labs <build@linkuverse.com>"]
+license = "Apache-2.0"
+publish = false
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+rtd-macros.workspace = true
+rtd-config.workspace = true
+rtd-protocol-config.workspace = true
+rtd-types.workspace = true
+tracing.workspace = true
+rtd-execution.workspace = true
+fastcrypto-zkp.workspace = true

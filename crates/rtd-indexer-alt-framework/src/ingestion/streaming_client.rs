@@ -1,0 +1,506 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::Context;
+use anyhow::anyhow;
+use async_trait::async_trait;
+use futures::StreamExt;
+use futures::stream::BoxStream;
+use rtd_rpc::headers::X_RTD_CHAIN_ID;
+use rtd_rpc::proto::rtd::rpc::v2::SubscribeCheckpointsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::subscription_service_client::SubscriptionServiceClient;
+use rtd_types::digests::ChainIdentifier;
+use rtd_types::messages_checkpoint::CheckpointDigest;
+use tokio_stream::adapters::Peekable;
+use tonic::Code;
+use tonic::Status;
+use tonic::transport::Endpoint;
+use tonic::transport::Uri;
+use tracing::warn;
+use url::Url;
+
+use crate::ingestion::MAX_GRPC_MESSAGE_SIZE_BYTES;
+use crate::ingestion::error::Error;
+use crate::ingestion::error::Result;
+use crate::ingestion::ingestion_client::IngestionClient;
+use crate::metrics::IngestionMetrics;
+use crate::types::full_checkpoint_content::Checkpoint;
+
+pub struct CheckpointStream {
+    pub stream: Peekable<BoxStream<'static, Result<Checkpoint>>>,
+    pub chain_id: ChainIdentifier,
+}
+
+/// Trait representing a client for streaming checkpoint data.
+#[async_trait]
+pub trait CheckpointStreamingClient {
+    /// Returns the CheckpointStream and chain id.
+    async fn connect(&self) -> Result<CheckpointStream>;
+
+    /// Returns the latest checkpoint number available from the streaming source.
+    async fn latest_checkpoint_number(&self) -> Result<u64> {
+        let mut stream = self.connect().await?;
+
+        match stream.stream.next().await {
+            Some(Ok(checkpoint)) => Ok(checkpoint.summary.sequence_number),
+            Some(Err(e)) => Err(e),
+            None => Err(Error::StreamingError(anyhow!("Stream ended unexpectedly"))),
+        }
+    }
+}
+
+#[derive(clap::Args, Clone, Debug, Default)]
+pub struct StreamingClientArgs {
+    /// gRPC endpoint for streaming checkpoints. If it also serves `LedgerService`, the checkpoints
+    /// between the indexer and the start of a newly connected stream are fetched from it, rather
+    /// than from the ingestion source.
+    #[clap(long, env)]
+    pub streaming_url: Option<Uri>,
+}
+
+/// gRPC-based implementation of the CheckpointStreamingClient trait.
+#[derive(Clone)]
+pub struct GrpcStreamingClient {
+    uri: Uri,
+    connection_timeout: Duration,
+    statement_timeout: Duration,
+}
+
+impl StreamingClientArgs {
+    /// The client that fills the gap in front of a newly connected stream, fetching checkpoints
+    /// from the streaming endpoint's `LedgerService` and reporting to `metrics`.
+    ///
+    /// `None` if there is no streaming endpoint, or if it refuses a ledger request (because it
+    /// does not serve `LedgerService`, or requires credentials), in which case stream gaps are
+    /// filled from the ingestion source. An endpoint that does not answer within
+    /// `connection_timeout` keeps its client, because the client is only used right after a
+    /// stream to that endpoint connects.
+    pub async fn gap_fill_client(
+        &self,
+        connection_timeout: Duration,
+        metrics: Arc<IngestionMetrics>,
+    ) -> Result<Option<IngestionClient>> {
+        let Some(uri) = &self.streaming_url else {
+            return Ok(None);
+        };
+
+        let url = Url::parse(&uri.to_string())
+            .with_context(|| format!("Invalid streaming URL for gap filling: {uri}"))
+            .map_err(Error::StreamingError)?;
+
+        let client = IngestionClient::with_grpc(url, None, None, metrics)?;
+        match tokio::time::timeout(connection_timeout, client.latest_checkpoint_number()).await {
+            Ok(Err(error)) if refuses_ledger_requests(&error) => {
+                warn!(
+                    %uri,
+                    "Streaming endpoint refused a ledger request, filling stream gaps from the \
+                     ingestion source instead: {error}"
+                );
+                Ok(None)
+            }
+            _ => Ok(Some(client)),
+        }
+    }
+}
+
+impl GrpcStreamingClient {
+    pub fn new(uri: Uri, connection_timeout: Duration, statement_timeout: Duration) -> Self {
+        Self {
+            uri,
+            connection_timeout,
+            statement_timeout,
+        }
+    }
+}
+
+#[async_trait]
+impl CheckpointStreamingClient for GrpcStreamingClient {
+    async fn connect(&self) -> Result<CheckpointStream> {
+        let endpoint = Endpoint::from(self.uri.clone())
+            .connect_timeout(self.connection_timeout)
+            .timeout(self.connection_timeout);
+
+        let mut client = SubscriptionServiceClient::connect(endpoint)
+            .await
+            .map_err(|err| Error::RpcClientError(Status::from_error(err.into())))?
+            .max_decoding_message_size(MAX_GRPC_MESSAGE_SIZE_BYTES);
+
+        let mut request = SubscribeCheckpointsRequest::default();
+        request.read_mask = Some(Checkpoint::proto_field_mask());
+
+        let response = client
+            .subscribe_checkpoints(request)
+            .await
+            .map_err(Error::RpcClientError)?;
+
+        let chain_id_value = response.metadata().get(X_RTD_CHAIN_ID).ok_or_else(|| {
+            Error::StreamingError(anyhow!("Chain ID not found in response metadata"))
+        })?;
+        let chain_id: ChainIdentifier = chain_id_value
+            .to_str()
+            .map_err(|e| Error::StreamingError(anyhow!("Chain ID is not valid ASCII: {e}")))?
+            .parse::<CheckpointDigest>()
+            .map_err(|e| Error::StreamingError(anyhow!("Chain ID parse error: {e}")))?
+            .into();
+
+        let stream = response
+            .into_inner()
+            .map(|result| async move {
+                match result {
+                    Ok(response) => {
+                        let checkpoint = response
+                            .checkpoint
+                            .context("Checkpoint data missing in response")
+                            .map_err(Error::StreamingError)?;
+                        // Proto -> Checkpoint conversion is multi-ms of CPU work;
+                        // offload to the blocking pool so it doesn't stall the reactor.
+                        // Combined with `.buffered(4)` below, up to 4 decodes can run
+                        // concurrently while new bytes keep flowing from gRPC.
+                        tokio::task::spawn_blocking(move || {
+                            Checkpoint::try_from(&checkpoint).context("Failed to parse checkpoint")
+                        })
+                        .await
+                        .map_err(|e| Error::StreamingError(anyhow!("decode task panicked: {e}")))?
+                        .map_err(Error::StreamingError)
+                    }
+                    Err(e) => Err(Error::RpcClientError(e)),
+                }
+            })
+            .buffered(4);
+        let stream = wrap_stream(stream, self.statement_timeout);
+
+        Ok(CheckpointStream { stream, chain_id })
+    }
+}
+
+/// Wraps a stream with a per-item timeout. Converts the resulting `Err(Elapsed)` into
+/// `Err(StreamingError)` if it occurs.
+fn wrap_stream(
+    stream: impl futures::Stream<Item = Result<Checkpoint>> + Send + 'static,
+    statement_timeout: Duration,
+) -> Peekable<BoxStream<'static, Result<Checkpoint>>> {
+    let stream = tokio_stream::StreamExt::timeout(stream, statement_timeout)
+        .map(move |result| match result {
+            Err(_elapsed) => Err(Error::StreamingError(anyhow!(
+                "Statement timeout after {statement_timeout:?}"
+            ))),
+            Ok(result) => result,
+        })
+        .boxed();
+    tokio_stream::StreamExt::peekable(stream)
+}
+
+/// Whether `error` (from a ledger request) means the endpoint will never serve ledger requests to
+/// this client, as opposed to failing transiently.
+fn refuses_ledger_requests(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<Status>().is_some_and(|status| {
+        matches!(
+            status.code(),
+            Code::Unimplemented | Code::PermissionDenied | Code::Unauthenticated
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::SocketAddr;
+    use std::time::Duration;
+
+    use rtd_rpc::proto::rtd::rpc::v2::SubscribeCheckpointsRequest;
+    use rtd_rpc::proto::rtd::rpc::v2::SubscribeCheckpointsResponse;
+    use rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionService;
+    use rtd_rpc::proto::rtd::rpc::v2::subscription_service_server::SubscriptionServiceServer;
+    use tonic::transport::Server;
+
+    use crate::metrics::tests::test_ingestion_metrics;
+
+    use super::*;
+
+    /// A gRPC server that accepts connections but never responds to
+    /// subscribe_checkpoints, simulating a stalled RPC handshake.
+    struct HangingSubscriptionService;
+
+    #[tonic::async_trait]
+    impl SubscriptionService for HangingSubscriptionService {
+        async fn subscribe_checkpoints(
+            &self,
+            _request: tonic::Request<SubscribeCheckpointsRequest>,
+        ) -> std::result::Result<
+            tonic::Response<
+                BoxStream<'static, std::result::Result<SubscribeCheckpointsResponse, Status>>,
+            >,
+            Status,
+        > {
+            futures::future::pending().await
+        }
+    }
+
+    #[tokio::test]
+    async fn subscribe_checkpoints_times_out_on_stalled_server() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+            Server::builder()
+                .add_service(SubscriptionServiceServer::new(HangingSubscriptionService))
+                .serve_with_incoming(incoming)
+                .await
+                .unwrap();
+        });
+
+        let timeout = Duration::from_millis(200);
+        let uri: Uri = format!("http://{addr}").parse().unwrap();
+        let client = GrpcStreamingClient::new(uri, timeout, timeout);
+
+        let start = std::time::Instant::now();
+        let result = client.connect().await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "expected timeout error");
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "connect() took {elapsed:?}, should have timed out in ~200ms"
+        );
+    }
+
+    /// A streaming endpoint without `LedgerService` yields no gap-fill client, so stream gaps
+    /// are filled from the ingestion source.
+    #[tokio::test]
+    async fn no_gap_fill_client_without_ledger_service() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr: SocketAddr = listener.local_addr().unwrap();
+
+        tokio::spawn(async move {
+            let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+            Server::builder()
+                .add_service(SubscriptionServiceServer::new(HangingSubscriptionService))
+                .serve_with_incoming(incoming)
+                .await
+                .unwrap();
+        });
+
+        let args = StreamingClientArgs {
+            streaming_url: Some(format!("http://{addr}").parse().unwrap()),
+        };
+        let client = args
+            .gap_fill_client(Duration::from_secs(5), test_ingestion_metrics())
+            .await
+            .unwrap();
+
+        assert!(client.is_none());
+    }
+
+    /// An unreachable streaming endpoint keeps its gap-fill client, because it is only used
+    /// right after a stream to that endpoint connects.
+    #[tokio::test]
+    async fn gap_fill_client_kept_when_endpoint_unreachable() {
+        // Bind and immediately release a port, so connections to it are refused.
+        let addr = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap()
+            .local_addr()
+            .unwrap();
+
+        let args = StreamingClientArgs {
+            streaming_url: Some(format!("http://{addr}").parse().unwrap()),
+        };
+        let client = args
+            .gap_fill_client(Duration::from_secs(5), test_ingestion_metrics())
+            .await
+            .unwrap();
+
+        assert!(client.is_some());
+    }
+}
+
+#[cfg(test)]
+pub mod test_utils {
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+    use std::time::Instant;
+
+    use futures::Stream;
+
+    use crate::types::test_checkpoint_data_builder::TestCheckpointBuilder;
+
+    use super::*;
+
+    enum StreamAction {
+        Checkpoint(u64),
+        Error,
+        Timeout {
+            deadline: Option<Instant>,
+            duration: Duration,
+        },
+    }
+
+    struct MockStreamState {
+        actions: Arc<Mutex<Vec<StreamAction>>>,
+    }
+
+    impl Stream for MockStreamState {
+        type Item = Result<Checkpoint>;
+
+        fn poll_next(
+            self: Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            let mut actions = self.actions.lock().unwrap();
+            if actions.is_empty() {
+                return std::task::Poll::Ready(None);
+            }
+
+            match &actions[0] {
+                StreamAction::Checkpoint(seq) => {
+                    let seq = *seq;
+                    actions.remove(0);
+                    let mut builder = TestCheckpointBuilder::new(seq);
+                    std::task::Poll::Ready(Some(Ok(builder.build_checkpoint())))
+                }
+                StreamAction::Error => {
+                    actions.remove(0);
+                    std::task::Poll::Ready(Some(Err(Error::StreamingError(anyhow::anyhow!(
+                        "Mock streaming error"
+                    )))))
+                }
+                StreamAction::Timeout { deadline, duration } => match deadline {
+                    None => {
+                        let deadline = Instant::now() + *duration;
+                        actions[0] = StreamAction::Timeout {
+                            deadline: Some(deadline),
+                            duration: *duration,
+                        };
+                        std::task::Poll::Pending
+                    }
+                    Some(deadline_instant) => {
+                        if Instant::now() >= *deadline_instant {
+                            actions.remove(0);
+                            drop(actions);
+                            self.poll_next(_cx)
+                        } else {
+                            std::task::Poll::Pending
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+    /// Mock streaming client for testing with predefined checkpoints.
+    pub struct MockStreamingClient {
+        actions: Arc<Mutex<Vec<StreamAction>>>,
+        connection_failures_remaining: AtomicUsize,
+        connection_timeouts_remaining: AtomicUsize,
+        /// How long mock timeout actions hang (must be > statement_timeout for timeouts to fire).
+        timeout_duration: Duration,
+        /// Statement timeout applied to the stream wrapper.
+        statement_timeout: Duration,
+    }
+
+    impl MockStreamingClient {
+        pub fn mock_chain_id() -> ChainIdentifier {
+            CheckpointDigest::new([1; 32]).into()
+        }
+
+        pub fn new<I>(checkpoint_range: I, timeout_duration: Option<Duration>) -> Self
+        where
+            I: IntoIterator<Item = u64>,
+        {
+            let timeout_duration = timeout_duration.unwrap_or(Duration::from_secs(5));
+            Self {
+                actions: Arc::new(Mutex::new(
+                    checkpoint_range
+                        .into_iter()
+                        .map(StreamAction::Checkpoint)
+                        .collect(),
+                )),
+                connection_failures_remaining: AtomicUsize::new(0),
+                connection_timeouts_remaining: AtomicUsize::new(0),
+                statement_timeout: timeout_duration / 2,
+                timeout_duration,
+            }
+        }
+
+        /// Make `connect` fail for the next N calls
+        pub fn fail_connection_times(mut self, times: usize) -> Self {
+            self.connection_failures_remaining = AtomicUsize::new(times);
+            self
+        }
+
+        /// Make `connect` timeout for the next N calls
+        pub fn fail_connection_with_timeout(mut self, times: usize) -> Self {
+            self.connection_timeouts_remaining = AtomicUsize::new(times);
+            self
+        }
+
+        /// Insert an error at the back of the queue.
+        pub fn insert_error(&mut self) {
+            self.actions.lock().unwrap().push(StreamAction::Error);
+        }
+
+        /// Insert a timeout at the back of the queue (causes poll_next to return Pending).
+        pub fn insert_timeout(&mut self) {
+            self.insert_timeout_with_duration(self.timeout_duration)
+        }
+
+        /// Insert a timeout with custom duration.
+        pub fn insert_timeout_with_duration(&mut self, duration: Duration) {
+            self.actions.lock().unwrap().push(StreamAction::Timeout {
+                deadline: None,
+                duration,
+            });
+        }
+
+        /// Insert a checkpoint at the back of the queue.
+        pub fn insert_checkpoint(&mut self, sequence_number: u64) {
+            self.insert_checkpoint_range([sequence_number])
+        }
+
+        pub fn insert_checkpoint_range<I>(&mut self, checkpoint_range: I)
+        where
+            I: IntoIterator<Item = u64>,
+        {
+            let mut actions = self.actions.lock().unwrap();
+            for sequence_number in checkpoint_range {
+                actions.push(StreamAction::Checkpoint(sequence_number));
+            }
+        }
+    }
+
+    #[async_trait]
+    impl CheckpointStreamingClient for MockStreamingClient {
+        async fn connect(&self) -> Result<CheckpointStream> {
+            if self.connection_timeouts_remaining.load(Ordering::Relaxed) > 0 {
+                self.connection_timeouts_remaining
+                    .fetch_sub(1, Ordering::Relaxed);
+                // Simulate a connection timeout
+                tokio::time::sleep(self.timeout_duration).await;
+                return Err(Error::StreamingError(anyhow::anyhow!(
+                    "Mock connection timeout"
+                )));
+            }
+            if self.connection_failures_remaining.load(Ordering::Relaxed) > 0 {
+                self.connection_failures_remaining
+                    .fetch_sub(1, Ordering::Relaxed);
+                return Err(Error::StreamingError(anyhow::anyhow!(
+                    "Mock connection failure"
+                )));
+            }
+            let stream_state = MockStreamState {
+                actions: Arc::clone(&self.actions),
+            };
+            Ok(CheckpointStream {
+                stream: wrap_stream(stream_state, self.statement_timeout),
+                chain_id: Self::mock_chain_id(),
+            })
+        }
+    }
+}

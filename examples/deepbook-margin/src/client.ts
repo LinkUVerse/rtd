@@ -1,22 +1,22 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#client
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { Ed25519Keypair } from '@linku/rtd/keypairs/ed25519';
+import { decodeRtdPrivateKey } from '@linku/rtd/cryptography';
 import {
 	deepbook,
 	type DeepBookClient,
 	type MarginManager,
 	type BalanceManager,
-} from '@mysten/deepbook-v3';
-import type { ClientWithExtensions } from '@mysten/sui/client';
+} from '@linku/deepbook-v3';
+import type { ClientWithExtensions } from '@linku/rtd/client';
 
 export type DeepBookMarginClient = ClientWithExtensions<{ deepbook: DeepBookClient }>;
 
 export function getKeypair(privateKey: string): Ed25519Keypair {
-	const { secretKey } = decodeSuiPrivateKey(privateKey);
+	const { secretKey } = decodeRtdPrivateKey(privateKey);
 	return Ed25519Keypair.fromSecretKey(secretKey);
 }
 
@@ -33,9 +33,9 @@ export function marginClient(
 		balanceManagers?: { [key: string]: BalanceManager };
 	},
 ): DeepBookMarginClient {
-	return new SuiGrpcClient({
+	return new RtdGrpcClient({
 		network: 'testnet',
-		baseUrl: 'https://fullnode.testnet.sui.io:443',
+		baseUrl: 'https://fullnode.testnet.rtd.io:443',
 	}).$extend(deepbook({ address, ...options }));
 }
 // docs::/#client

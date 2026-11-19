@@ -1,0 +1,37 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use rtd_types::{
+    TypeTag, accumulator_root::AccumulatorValue, balance::Balance, base_types::RtdAddress,
+    error::RtdResult, storage::RuntimeObjectResolver,
+};
+
+/// Get the balance for a given owner address (which can be a wallet or an object)
+/// and currency type (e.g. 0x2::rtd::RTD)
+pub fn get_balance(
+    owner: RtdAddress,
+    runtime_object_resolver: &dyn RuntimeObjectResolver,
+    currency_type: TypeTag,
+) -> RtdResult<u64> {
+    let balance_type = Balance::type_tag(currency_type);
+    let address_balance =
+        AccumulatorValue::load(runtime_object_resolver, None, owner, &balance_type)?
+            .and_then(|b| b.as_u128())
+            .unwrap_or(0);
+
+    let u64_balance = if address_balance > u64::MAX as u128 {
+        // This will not happen with normal currency types which have a max supply of u64::MAX
+        // But you can create "fake" supplies (with no metadata or treasury cap) and overlow
+        // the u64 limit.
+        tracing::warn!(
+            "address balance for {} {} is greater than u64::MAX",
+            owner,
+            balance_type.to_canonical_string(true)
+        );
+        u64::MAX
+    } else {
+        address_balance as u64
+    };
+
+    Ok(u64_balance)
+}

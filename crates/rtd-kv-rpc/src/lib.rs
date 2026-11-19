@@ -1,0 +1,876 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use prometheus::HistogramVec;
+use prometheus::IntCounterVec;
+use prometheus::IntGauge;
+use prometheus::Registry;
+use prometheus::register_histogram_vec_with_registry;
+use prometheus::register_int_counter_vec_with_registry;
+use prometheus::register_int_gauge_with_registry;
+use rtd_kvstore::BigTableClient;
+use rtd_kvstore::BitmapSchema;
+use rtd_kvstore::CHECKPOINTS_BY_DIGEST_PIPELINE;
+use rtd_kvstore::CHECKPOINTS_PIPELINE;
+pub use rtd_kvstore::ChannelHealthConfig;
+use rtd_kvstore::EPOCH_END_PIPELINE;
+use rtd_kvstore::EPOCH_START_PIPELINE;
+use rtd_kvstore::KeyValueStoreReader;
+use rtd_kvstore::OBJECTS_PIPELINE;
+use rtd_kvstore::PACKAGES_BY_ID_PIPELINE;
+use rtd_kvstore::PACKAGES_PIPELINE;
+pub use rtd_kvstore::PoolConfig;
+pub use rtd_kvstore::ReadRowsRetryConfig;
+use rtd_kvstore::TRANSACTIONS_PIPELINE;
+use rtd_kvstore::TX_SEQ_DIGEST_PIPELINE;
+use rtd_package_resolver::PackageStore;
+use rtd_package_resolver::PackageStoreWithLruCache;
+use rtd_package_resolver::Resolver;
+use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoResponse;
+use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerService;
+use rtd_rpc::proto::rtd::rpc::v2::ledger_service_server::LedgerServiceServer;
+use rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageService;
+use rtd_rpc::proto::rtd::rpc::v2::move_package_service_server::MovePackageServiceServer;
+use rtd_rpc_api::ServerVersion;
+use rtd_types::digests::ChainIdentifier;
+use rtd_types::message_envelope::Message;
+use tokio::sync::watch;
+use tokio::time::Duration;
+use tokio::time::sleep;
+use tonic::transport::Identity;
+use tonic::transport::Server;
+use tonic::transport::ServerTlsConfig;
+use tonic::transport::server::TcpIncoming;
+use tracing::error;
+
+mod admission;
+mod bigtable_client;
+mod config;
+mod error_log;
+mod indexer_streams;
+mod object_cache;
+mod operation;
+mod package_store;
+mod pipeline;
+mod render;
+mod request_cache;
+mod resolve;
+mod served_height;
+mod v2;
+
+use admission::AdmissionLayer;
+pub use admission::X_RTD_MIN_CHECKPOINT;
+use bigtable_client::Metrics as BigTableLimiterMetrics;
+pub use config::KvRpcConfig;
+pub use config::LedgerHistoryConfig;
+pub use config::LedgerHistoryMethodConfig;
+pub use config::PipelineStage;
+pub use config::ResolvedLedgerHistoryMethodConfig;
+pub use config::ResolvedStageConfig;
+pub use config::StageConfig;
+pub use config::StagesConfig;
+pub use indexer_streams::WatermarkSource;
+use package_store::BigTablePackageStore;
+
+pub type PackageResolver = Arc<Resolver<Arc<dyn PackageStore>>>;
+
+#[derive(Clone)]
+pub(crate) struct KvRpcMetrics {
+    bigtable_limiter: Arc<BigTableLimiterMetrics>,
+    response_render_latency_ms: HistogramVec,
+    response_page_bytes: HistogramVec,
+    stream_first_frame_latency_ms: HistogramVec,
+    stream_frame_yield_wait_ms: HistogramVec,
+    stream_watermark_frames_total: IntCounterVec,
+    final_stream_poll_wait_ms: HistogramVec,
+    bitmap_buckets_evaluated: HistogramVec,
+    bitmap_buckets_discarded: HistogramVec,
+    bitmap_leaf_seeks: HistogramVec,
+    served_checkpoint: IntGauge,
+    served_checkpoint_timestamp_ms: IntGauge,
+}
+
+impl KvRpcMetrics {
+    fn new(registry: &Registry) -> Arc<Self> {
+        Arc::new(Self {
+            bigtable_limiter: BigTableLimiterMetrics::new(registry),
+            response_render_latency_ms: register_histogram_vec_with_registry!(
+                "kv_rpc_response_render_latency_ms",
+                "Wall time spent rendering one consumed or emitted List response item. Histogram sums across concurrent render work are not an additive request critical-path waterfall. The resolution label is the coarse response detail selected from the read mask; it does not describe filter or scan complexity.",
+                &["method", "resolution"],
+                prometheus::exponential_buckets(0.01, 2.0, 24).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            response_page_bytes: register_histogram_vec_with_registry!(
+                "kv_rpc_response_page_bytes",
+                "Protobuf encoded size of data-bearing List response frames, measured with encoded_len without serializing or copying the response for metrics. Watermark-only and terminal-only frames are excluded and counted by kv_rpc_stream_watermark_frames_total. The histogram sum reports data-page byte throughput. The resolution label is the coarse response detail selected from the read mask; it does not describe filter or scan complexity.",
+                &["method", "resolution"],
+                prometheus::exponential_buckets(1_024.0, 2.0, 17).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            stream_first_frame_latency_ms: register_histogram_vec_with_registry!(
+                "kv_rpc_stream_first_frame_latency_ms",
+                "Wall time from List request start to the first response frame of any kind, the client's first actionable signal; a watermark carries the resume cursor. Do not treat it as purely server-owned latency or page on it alone without checking yield-wait and backpressure. The resolution label is the coarse response detail selected from the read mask; it does not describe filter or scan complexity.",
+                &["method", "resolution"],
+                prometheus::exponential_buckets(1.0, 2.0, 17).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            stream_frame_yield_wait_ms: register_histogram_vec_with_registry!(
+                "kv_rpc_stream_frame_yield_wait_ms",
+                "Wall time from yielding one List response frame of any kind until the handler stream is polled again. It may include mpsc blocking, tonic/protobuf/Hyper/H2 work, executor scheduling, network flow control, and client drain. It is a broad downstream transport-consumption and backpressure signal, not proof of a slow client; correlate it with payload bytes, client telemetry, and network metrics. The resolution label is the coarse response detail selected from the read mask; it does not describe filter or scan complexity.",
+                &["method", "resolution"],
+                prometheus::exponential_buckets(0.01, 2.0, 24).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            stream_watermark_frames_total: register_int_counter_vec_with_registry!(
+                "kv_rpc_stream_watermark_frames_total",
+                "Total non-data List response frames (watermark-only and terminal-only) emitted by streaming List APIs.",
+                &["method"],
+                registry,
+            )
+            .unwrap(),
+            final_stream_poll_wait_ms: register_histogram_vec_with_registry!(
+                "kv_rpc_final_stream_poll_wait_ms",
+                "Wall time from polling the final resolved response stream until the poll returns data, a watermark, an error, or EOF. Excludes time when downstream backpressure prevents the response producer from being polled. May include hydration, scheduling, and render work performed inside the upstream stream. The resolution label is the coarse response detail selected from the read mask; it does not describe filter or scan complexity.",
+                &["method", "resolution"],
+                prometheus::exponential_buckets(0.01, 2.0, 24).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            bitmap_buckets_evaluated: register_histogram_vec_with_registry!(
+                "kv_rpc_bitmap_buckets_evaluated",
+                "Buckets evaluated against the per-request bitmap scan budget. Caps at the effective budget (the configured budget, raised to the query's unique leaf count when that is larger); actual backend bucket reads may exceed it by up to the number of Bigtable-backed leaves (one extra fetched-and-discarded bucket per leaf stream at exhaustion; at most twice max_bitmap_filter_literals). Tail near the per-request cap means clients are hitting SCAN_LIMIT and paging.",
+                &["method"],
+                // Exponential 1..2048: many requests evaluate few buckets
+                // (small or empty scans), a tail saturates at the default 1k cap.
+                prometheus::exponential_buckets(1.0, 2.0, 12).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            bitmap_buckets_discarded: register_histogram_vec_with_registry!(
+                "kv_rpc_bitmap_buckets_discarded",
+                "Charged dead bucket rows discarded while bitmap leaves catch up across provably unmatchable gaps.",
+                &["method"],
+                prometheus::exponential_buckets(1.0, 2.0, 12).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            bitmap_leaf_seeks: register_histogram_vec_with_registry!(
+                "kv_rpc_bitmap_leaf_seeks",
+                "Bitmap leaf scans abandoned and reopened beyond provably unmatchable gaps.",
+                &["method"],
+                prometheus::exponential_buckets(1.0, 2.0, 12).unwrap(),
+                registry,
+            )
+            .unwrap(),
+            served_checkpoint: register_int_gauge_with_registry!(
+                "kv_rpc_served_checkpoint",
+                "Highest checkpoint this replica serves: the checkpoint height GetServiceInfo reports, i.e. the lowest checkpoint_hi_inclusive across the watermarks of the pipelines this replica serves. The watermarks are read from Bigtable's watermark rows, or, when indexer-urls lists any indexer, are the highest each pipeline has reached in the kvstore indexers' watermark streams. Set in the background, so it is reported without request traffic. Keeps its last value while Bigtable reads fail or every indexer stream is down. It is 0 until the first successful refresh: when polling, the first Bigtable read that returns a readable watermark for every served pipeline; when following indexers, the first time every served pipeline has a streamed watermark.",
+                registry,
+            )
+            .unwrap(),
+            served_checkpoint_timestamp_ms: register_int_gauge_with_registry!(
+                "kv_rpc_served_checkpoint_timestamp_ms",
+                "Consensus timestamp (Unix ms) of kv_rpc_served_checkpoint, read from the same watermark; time() - value / 1000 is how stale this replica's data is. Set together with kv_rpc_served_checkpoint, so it is reported without request traffic, keeps its last value whenever that gauge does, and is 0 until that gauge's first successful refresh.",
+                registry,
+            )
+            .unwrap(),
+        })
+    }
+
+    /// Record the checkpoint `info` (a `GetServiceInfo` answer) says this replica serves.
+    fn observe_served_service_info(&self, info: &GetServiceInfoResponse) {
+        if let Some(checkpoint) = info.checkpoint_height {
+            self.served_checkpoint.set(checkpoint as i64);
+        }
+        if let Some(timestamp) = &info.timestamp {
+            self.served_checkpoint_timestamp_ms
+                .set(timestamp.seconds * 1_000 + i64::from(timestamp.nanos) / 1_000_000);
+        }
+    }
+
+    fn observe_response_render(
+        &self,
+        method: &'static str,
+        resolution: &'static str,
+        elapsed: std::time::Duration,
+    ) {
+        self.response_render_latency_ms
+            .with_label_values(&[method, resolution])
+            .observe(elapsed.as_secs_f64() * 1000.0);
+    }
+
+    fn observe_response_page_bytes(
+        &self,
+        method: &'static str,
+        resolution: &'static str,
+        bytes: usize,
+    ) {
+        self.response_page_bytes
+            .with_label_values(&[method, resolution])
+            .observe(bytes as f64);
+    }
+
+    fn observe_stream_first_frame_latency(
+        &self,
+        method: &'static str,
+        resolution: &'static str,
+        elapsed: std::time::Duration,
+    ) {
+        self.stream_first_frame_latency_ms
+            .with_label_values(&[method, resolution])
+            .observe(elapsed.as_secs_f64() * 1000.0);
+    }
+
+    fn observe_stream_frame_yield_wait(
+        &self,
+        method: &'static str,
+        resolution: &'static str,
+        elapsed: std::time::Duration,
+    ) {
+        self.stream_frame_yield_wait_ms
+            .with_label_values(&[method, resolution])
+            .observe(elapsed.as_secs_f64() * 1000.0);
+    }
+
+    fn inc_stream_watermark_frames(&self, method: &'static str) {
+        self.stream_watermark_frames_total
+            .with_label_values(&[method])
+            .inc();
+    }
+
+    fn observe_final_stream_poll_wait(
+        &self,
+        method: &'static str,
+        resolution: &'static str,
+        elapsed: std::time::Duration,
+    ) {
+        self.final_stream_poll_wait_ms
+            .with_label_values(&[method, resolution])
+            .observe(elapsed.as_secs_f64() * 1000.0);
+    }
+
+    fn observe_bitmap_buckets_evaluated(&self, method: &'static str, buckets: u64) {
+        self.bitmap_buckets_evaluated
+            .with_label_values(&[method])
+            .observe(buckets as f64);
+    }
+    fn observe_bitmap_buckets_discarded(&self, method: &'static str, buckets: u64) {
+        self.bitmap_buckets_discarded
+            .with_label_values(&[method])
+            .observe(buckets as f64);
+    }
+
+    fn observe_bitmap_leaf_seeks(&self, method: &'static str, seeks: u64) {
+        self.bitmap_leaf_seeks
+            .with_label_values(&[method])
+            .observe(seeks as f64);
+    }
+}
+
+#[derive(Clone)]
+pub struct KvRpcServer {
+    chain_id: ChainIdentifier,
+    client: BigTableClient,
+    server_version: Option<ServerVersion>,
+    service_info_watermark_pipelines: Vec<&'static str>,
+    /// Latest service info this replica serves, `None` until the first successful refresh.
+    /// Refreshed from Bigtable's watermark rows by the task spawned in
+    /// [`KvRpcServer::init`], or from indexer watermark streams by the service started in
+    /// [`KvRpcServer::start_service`], as `watermark_source` selects.
+    /// A `watch` channel so a monotonic read can await a refresh rather than poll for one, and
+    /// behind an `Arc` so admitting a request records the info it is served at without copying it
+    /// (see [`admission`]).
+    cache: Arc<watch::Sender<Option<Arc<GetServiceInfoResponse>>>>,
+    watermark_source: WatermarkSource,
+    package_resolver: PackageResolver,
+    metrics: Arc<KvRpcMetrics>,
+    pub(crate) ledger_history: LedgerHistoryConfig,
+    pub(crate) request_bigtable_concurrency: usize,
+    pub(crate) monotonic_read_wait_timeout: Duration,
+    pub(crate) stages: StagesConfig,
+}
+
+/// Answers whether a replica is ready for traffic, for its `/health` endpoint.
+#[derive(Clone)]
+pub struct Health {
+    served: watch::Receiver<Option<Arc<GetServiceInfoResponse>>>,
+}
+
+impl Health {
+    /// Whether the replica is ready: once it knows the checkpoint it serves, from its first
+    /// successful watermark refresh or, following indexer watermark streams, once every served
+    /// pipeline has a streamed watermark. It stays ready after that, because its served checkpoint
+    /// is never cleared.
+    pub fn is_ready(&self) -> bool {
+        self.served.borrow().is_some()
+    }
+}
+
+/// Optional configuration for the gRPC server (TLS, metrics, reflection, and
+/// an optional second plaintext listener).
+#[derive(Default)]
+pub struct ServerConfig {
+    pub tls_identity: Option<Identity>,
+    pub metrics_registry: Option<Registry>,
+    pub enable_reflection: bool,
+    /// Address a second, unencrypted gRPC listener binds to, serving the
+    /// same `LedgerService` as the primary listener without TLS. See
+    /// [`KvRpcConfig::plaintext_address`] for the rationale.
+    pub plaintext_address: Option<SocketAddr>,
+}
+
+fn ledger_service_with_response_compression<T>(service: T) -> LedgerServiceServer<T>
+where
+    T: LedgerService,
+{
+    LedgerServiceServer::new(service).send_compressed(tonic::codec::CompressionEncoding::Zstd)
+}
+
+fn move_package_service_with_response_compression<T>(service: T) -> MovePackageServiceServer<T>
+where
+    T: MovePackageService,
+{
+    MovePackageServiceServer::new(service).send_compressed(tonic::codec::CompressionEncoding::Zstd)
+}
+
+/// Build and start one gRPC listener serving `ledger`'s `LedgerService` and `MovePackageService`,
+/// wired with the given (shared, already-constructed) metrics/logging layers and optional reflection.
+/// `builder` carries whatever TLS config the caller wants for this listener (or none, for a plaintext
+/// listener).
+///
+/// Used once per listener -- the primary listener, and the optional second plaintext one -- so
+/// that expensive shared pieces (metrics, allowlist, request-log layer) are constructed once by
+/// the caller and passed in here, rather than rebuilt (and, for `RpcMetrics`, re-registered against
+/// the same `Registry`, which panics) per listener.
+fn spawn_listener(
+    listen_address: SocketAddr,
+    builder: Server,
+    ledger: KvRpcServer,
+    rpc_metrics: Arc<rtd_rpc_api::RpcMetrics>,
+    grpc_method_allowlist: rtd_rpc_api::GrpcMethodAllowlist,
+    request_log_layer: linku_network::request_log::GrpcRequestLogLayer,
+    enable_reflection: bool,
+    file_descriptor_sets: &[&'static [u8]],
+) -> anyhow::Result<rtd_futures::service::Service> {
+    use rtd_http::middleware::callback::CallbackLayer;
+    use rtd_rpc_api::RpcMetricsMakeCallbackHandler;
+
+    let mut router = builder
+        .layer(CallbackLayer::new(
+            RpcMetricsMakeCallbackHandler::with_grpc_method_allowlist(
+                rpc_metrics,
+                grpc_method_allowlist,
+            ),
+        ))
+        // Logs each response that ends in a server-side error; outside the admission layer so its
+        // rejections are logged too.
+        .layer(CallbackLayer::new(error_log::MakeServerErrorLog))
+        .layer(request_log_layer)
+        // Innermost, so a request held or rejected here is still counted by the metrics layer and
+        // recorded by the request log above it.
+        .layer(AdmissionLayer::new(
+            ledger.cache.subscribe(),
+            ledger.monotonic_read_wait_timeout,
+        ))
+        .add_service(move_package_service_with_response_compression(
+            ledger.clone(),
+        ))
+        .add_service(ledger_service_with_response_compression(ledger));
+
+    if enable_reflection {
+        let mut reflection_v1_builder = tonic_reflection::server::Builder::configure();
+        let mut reflection_v1alpha_builder = tonic_reflection::server::Builder::configure();
+        for &fds in file_descriptor_sets {
+            reflection_v1_builder = reflection_v1_builder.register_encoded_file_descriptor_set(fds);
+            reflection_v1alpha_builder =
+                reflection_v1alpha_builder.register_encoded_file_descriptor_set(fds);
+        }
+        router = router
+            .add_service(reflection_v1_builder.build_v1()?)
+            .add_service(reflection_v1alpha_builder.build_v1alpha()?);
+    }
+
+    // Bind here rather than inside the spawned task. `serve_with_shutdown` binds
+    // within the future it returns, so the caller would get a `Service` back while
+    // the address still refuses connections, and anything that dials immediately
+    // races the bind. Binding first also turns an unusable address into an error
+    // from `start_service` instead of a task that dies after start-up.
+    //
+    // `serve_with_incoming_shutdown` discards the builder's TCP configuration, so
+    // restate the `TCP_NODELAY` that `serve_with_shutdown` would have applied from
+    // its default. Keepalive stays off, which is also tonic's default.
+    let incoming = TcpIncoming::bind(listen_address)
+        .map_err(|e| anyhow::anyhow!("Failed to bind kv-rpc listener on {listen_address}: {e}"))?
+        .with_nodelay(Some(true));
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let server_future = router.serve_with_incoming_shutdown(incoming, async {
+        let _ = rx.await;
+    });
+
+    Ok(rtd_futures::service::Service::new()
+        .spawn(async move {
+            server_future.await?;
+            Ok(())
+        })
+        .with_shutdown_signal(async move {
+            let _ = tx.send(());
+        }))
+}
+
+impl KvRpcServer {
+    pub async fn new(
+        instance_id: String,
+        project_id: Option<String>,
+        app_profile_id: Option<String>,
+        channel_timeout: Option<Duration>,
+        server_version: Option<ServerVersion>,
+        registry: &Registry,
+        credentials_path: Option<String>,
+        pool_config: PoolConfig,
+        read_rows_retry: ReadRowsRetryConfig,
+        ledger_history: LedgerHistoryConfig,
+        request_bigtable_concurrency: usize,
+        monotonic_read_wait_timeout: Duration,
+        stages: StagesConfig,
+        watermark_source: WatermarkSource,
+    ) -> anyhow::Result<Self> {
+        ledger_history.validate()?;
+        let mut client = BigTableClient::new_remote_with_credentials(
+            instance_id,
+            project_id,
+            false,
+            channel_timeout,
+            None,
+            "rtd-kv-rpc".to_string(),
+            Some(registry),
+            app_profile_id,
+            pool_config,
+            credentials_path,
+            false,
+        )
+        .await?
+        .with_read_rows_retry(read_rows_retry);
+        let genesis = client
+            .get_checkpoints(&[0])
+            .await?
+            .pop()
+            .expect("failed to fetch genesis checkpoint from the KV store");
+        let summary = genesis.summary.expect("genesis checkpoint missing summary");
+        let chain_id = ChainIdentifier::from(summary.digest());
+        let metrics = KvRpcMetrics::new(registry);
+        Self::init(
+            client,
+            chain_id,
+            server_version,
+            metrics,
+            ledger_history,
+            request_bigtable_concurrency,
+            monotonic_read_wait_timeout,
+            stages,
+            watermark_source,
+        )
+    }
+
+    /// Construct a KvRpcServer backed by a local BigTable emulator with explicit
+    /// ledger-history and per-stage configuration. Tests use this to exercise
+    /// scan-budget / read-size behaviour (e.g. small `tx_seq_digest` reads)
+    /// against a modest synthetic dataset.
+    pub async fn new_local_with_config(
+        host: String,
+        instance_id: String,
+        server_version: Option<ServerVersion>,
+        ledger_history: LedgerHistoryConfig,
+        request_bigtable_concurrency: usize,
+        monotonic_read_wait_timeout: Duration,
+        stages: StagesConfig,
+        watermark_source: WatermarkSource,
+    ) -> anyhow::Result<Self> {
+        let client = BigTableClient::new_local(host, instance_id).await?;
+        // Emulator/test path: metrics are inert (no scrape endpoint), but the
+        // request-scoped BigTable wrapper still expects a handle.
+        let metrics = KvRpcMetrics::new(&Registry::default());
+        Self::init(
+            client,
+            ChainIdentifier::from(rtd_types::digests::CheckpointDigest::default()),
+            server_version,
+            metrics,
+            ledger_history,
+            request_bigtable_concurrency,
+            monotonic_read_wait_timeout,
+            stages,
+            watermark_source,
+        )
+    }
+
+    fn init(
+        client: BigTableClient,
+        chain_id: ChainIdentifier,
+        server_version: Option<ServerVersion>,
+        metrics: Arc<KvRpcMetrics>,
+        ledger_history: LedgerHistoryConfig,
+        request_bigtable_concurrency: usize,
+        monotonic_read_wait_timeout: Duration,
+        stages: StagesConfig,
+        watermark_source: WatermarkSource,
+    ) -> anyhow::Result<Self> {
+        ledger_history.validate()?;
+
+        let cache = Arc::new(watch::Sender::new(None));
+
+        let package_store: Arc<dyn PackageStore> = Arc::new(PackageStoreWithLruCache::new(
+            BigTablePackageStore::new(client.clone()),
+        ));
+        let package_resolver = Arc::new(Resolver::new(package_store));
+
+        let server = Self {
+            chain_id,
+            client,
+            server_version,
+            service_info_watermark_pipelines: service_info_watermark_pipelines(
+                ledger_history.bitmap_schema(),
+            ),
+            cache,
+            watermark_source,
+            package_resolver,
+            metrics,
+            ledger_history,
+            request_bigtable_concurrency,
+            monotonic_read_wait_timeout,
+            stages,
+        };
+
+        if server.watermark_source == WatermarkSource::Bigtable {
+            let server_clone = server.clone();
+            tokio::spawn(async move {
+                loop {
+                    match v2::get_service_info(
+                        server_clone.client.clone(),
+                        server_clone.chain_id,
+                        server_clone.server_version.clone(),
+                        &server_clone.service_info_watermark_pipelines,
+                    )
+                    .await
+                    {
+                        Ok(info) => {
+                            server_clone.metrics.observe_served_service_info(&info);
+                            server_clone.cache.send_replace(Some(Arc::new(info)));
+                        }
+                        Err(e) => error!("Failed to update service info cache: {:?}", e),
+                    }
+                    sleep(Duration::from_millis(10)).await;
+                }
+            });
+        }
+
+        Ok(server)
+    }
+
+    /// The readiness this replica reports on its `/health` endpoint.
+    pub fn health(&self) -> Health {
+        Health {
+            served: self.cache.subscribe(),
+        }
+    }
+
+    /// Start this server as a tonic gRPC service on the given address, and start following the
+    /// indexer watermark streams if `watermark_source` names them.
+    /// Returns a `Service` handle for lifecycle management.
+    pub async fn start_service(
+        self,
+        listen_address: SocketAddr,
+        config: ServerConfig,
+    ) -> anyhow::Result<rtd_futures::service::Service> {
+        use rtd_rpc_api::{RpcMetrics, grpc_method_paths_from_file_descriptor_sets};
+
+        // Started before the listeners, so that an invalid indexer URL fails startup before any
+        // address is bound.
+        let indexer_streams = match &self.watermark_source {
+            WatermarkSource::Bigtable => None,
+            WatermarkSource::IndexerStreams(indexer_urls) => {
+                Some(indexer_streams::follow(&self, indexer_urls)?)
+            }
+        };
+
+        // Single source of truth for every encoded FileDescriptorSet that
+        // backs a gRPC service mounted below. Consumed by both the
+        // reflection services and the metrics allowlist so they cannot drift
+        // out of sync, and shared by the optional second (plaintext)
+        // listener below.
+        let file_descriptor_sets: Vec<&'static [u8]> = vec![
+            rtd_rpc_api::proto::google::protobuf::FILE_DESCRIPTOR_SET,
+            rtd_rpc_api::proto::google::rpc::FILE_DESCRIPTOR_SET,
+            rtd_rpc::proto::rtd::rpc::v2::FILE_DESCRIPTOR_SET,
+        ];
+
+        let registry = config.metrics_registry.unwrap_or_default();
+        let grpc_method_allowlist = Arc::new(grpc_method_paths_from_file_descriptor_sets(
+            &file_descriptor_sets,
+        )?);
+        // Constructed once and shared (via `Arc`/`Clone`) across both
+        // listeners below: `RpcMetrics::new` registers Prometheus collectors
+        // against `registry`, and doing that twice would panic on duplicate
+        // registration.
+        let rpc_metrics = Arc::new(RpcMetrics::new(&registry));
+        let request_log_layer =
+            linku_network::request_log::GrpcRequestLogLayer::from_encoded_file_descriptor_sets(
+                file_descriptor_sets.iter().copied(),
+            )?;
+
+        let mut builder = Server::builder();
+        if let Some(identity) = config.tls_identity {
+            builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
+        }
+
+        // Cloned up-front (before `self` is consumed below) only when the
+        // second listener is actually being started.
+        let ledger_for_plaintext = config.plaintext_address.is_some().then(|| self.clone());
+
+        let mut service = spawn_listener(
+            listen_address,
+            builder,
+            self,
+            rpc_metrics.clone(),
+            grpc_method_allowlist.clone(),
+            request_log_layer.clone(),
+            config.enable_reflection,
+            &file_descriptor_sets,
+        )?;
+
+        // Second, unencrypted listener for trusted internal callers (e.g.
+        // other in-cluster services) that should not need to negotiate TLS
+        // to reach this server. Serves the same `LedgerService` and `MovePackageService`.
+        if let Some(plaintext_address) = config.plaintext_address {
+            let ledger =
+                ledger_for_plaintext.expect("cloned above whenever plaintext_address is set");
+            let plaintext_service = spawn_listener(
+                plaintext_address,
+                Server::builder(),
+                ledger,
+                rpc_metrics,
+                grpc_method_allowlist,
+                request_log_layer,
+                config.enable_reflection,
+                &file_descriptor_sets,
+            )?;
+            service = service.merge(plaintext_service);
+        }
+
+        if let Some(indexer_streams) = indexer_streams {
+            service = service.attach(indexer_streams);
+        }
+
+        Ok(service)
+    }
+}
+
+/// Pipelines whose watermarks bound the checkpoint height reported by `GetServiceInfo`, so an
+/// instance does not advertise a height it cannot serve.
+pub fn service_info_watermark_pipelines(bitmap_schema: BitmapSchema) -> Vec<&'static str> {
+    let [transaction_bitmap, event_bitmap] = rtd_kvstore::bitmap_index_pipelines(bitmap_schema);
+    vec![
+        // Point lookups.
+        CHECKPOINTS_PIPELINE,
+        CHECKPOINTS_BY_DIGEST_PIPELINE,
+        TRANSACTIONS_PIPELINE,
+        OBJECTS_PIPELINE,
+        EPOCH_START_PIPELINE,
+        EPOCH_END_PIPELINE,
+        PACKAGES_PIPELINE,
+        PACKAGES_BY_ID_PIPELINE,
+        // List APIs, which read the bitmap tables of `bitmap_schema`.
+        TX_SEQ_DIGEST_PIPELINE,
+        transaction_bitmap,
+        event_bitmap,
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+    use rtd_kvstore::WatermarkV1;
+    use rtd_kvstore::tables::watermarks;
+    use rtd_kvstore::testing::MockBigtableServer;
+    use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoRequest;
+    use tokio::time::timeout;
+
+    use super::*;
+
+    const WAIT: Duration = Duration::from_secs(5);
+
+    fn u64_be(value: u64) -> Bytes {
+        Bytes::copy_from_slice(&value.to_be_bytes())
+    }
+
+    /// Number of reads the mock has served from the watermarks table.
+    pub(crate) async fn watermark_reads(mock: &MockBigtableServer) -> usize {
+        mock.read_rows_calls()
+            .await
+            .iter()
+            .filter(|call| call.table == watermarks::NAME)
+            .count()
+    }
+
+    /// List-API configuration that reads the v2 bitmap tables.
+    pub(crate) fn v2_ledger_history() -> LedgerHistoryConfig {
+        LedgerHistoryConfig {
+            bitmap_schema: Some(BitmapSchema::V2),
+            ..Default::default()
+        }
+    }
+
+    async fn wait_for_served_checkpoint(server: &KvRpcServer, checkpoint: i64) {
+        timeout(WAIT, async {
+            while server.metrics.served_checkpoint.get() != checkpoint {
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("served checkpoint never reached {checkpoint}"));
+    }
+
+    /// Start a replica that polls Bigtable for watermarks and reads the v2 bitmap tables.
+    async fn start_v2_server(bigtable: SocketAddr) -> KvRpcServer {
+        KvRpcServer::new_local_with_config(
+            bigtable.to_string(),
+            "test".to_string(),
+            None,
+            v2_ledger_history(),
+            KvRpcConfig::default().request_bigtable_concurrency(),
+            KvRpcConfig::default().monotonic_read_wait_timeout(),
+            StagesConfig::default(),
+            WatermarkSource::Bigtable,
+        )
+        .await
+        .expect("start kv-rpc server")
+    }
+
+    /// Write a watermark row for every pipeline a v2 replica serves, at the checkpoint
+    /// `checkpoint_of` names for it.
+    pub(crate) async fn seed_watermarks(
+        client: &mut BigTableClient,
+        checkpoint_of: impl Fn(&str) -> u64,
+    ) {
+        for pipeline in service_info_watermark_pipelines(BitmapSchema::V2) {
+            let checkpoint = checkpoint_of(pipeline);
+            client
+                .create_pipeline_watermark_if_absent(
+                    pipeline,
+                    &WatermarkV1 {
+                        epoch_hi_inclusive: 0,
+                        checkpoint_hi_inclusive: Some(checkpoint),
+                        tx_hi: 0,
+                        timestamp_ms_hi_inclusive: checkpoint * 1_000,
+                        reader_lo: 0,
+                        pruner_hi: 0,
+                        pruner_timestamp_ms: 0,
+                        bucket_start_cp: None,
+                    },
+                )
+                .await
+                .expect("seed watermark");
+        }
+    }
+
+    pub(crate) async fn get_service_info(
+        server: &KvRpcServer,
+    ) -> Result<GetServiceInfoResponse, tonic::Status> {
+        LedgerService::get_service_info(
+            server,
+            server.admitted_request(GetServiceInfoRequest::default()),
+        )
+        .await
+        .map(tonic::Response::into_inner)
+    }
+
+    #[tokio::test]
+    async fn polling_replica_is_ready_from_its_first_refresh() {
+        let mock = MockBigtableServer::new();
+        let (addr, _mock_server) = mock.start().await.expect("start mock BigTable");
+        let mut client = BigTableClient::new_local(addr.to_string(), "test".to_string())
+            .await
+            .expect("connect to mock BigTable");
+        let server = start_v2_server(addr).await;
+
+        // Without watermark rows no refresh succeeds, so the served checkpoint stays unknown.
+        sleep(Duration::from_millis(50)).await;
+        assert!(!server.health().is_ready());
+        let error = get_service_info(&server).await.unwrap_err();
+        assert_eq!(error.code(), tonic::Code::Unavailable);
+
+        seed_watermarks(&mut client, |_| 20).await;
+        timeout(WAIT, server.cache.subscribe().wait_for(Option::is_some))
+            .await
+            .expect("service info never refreshed")
+            .expect("service info sender dropped");
+        assert!(server.health().is_ready());
+        let info = get_service_info(&server).await.unwrap();
+        assert_eq!(info.checkpoint_height, Some(20));
+    }
+
+    #[tokio::test]
+    async fn served_checkpoint_gauges_follow_refresh_and_survive_failed_refresh() {
+        let mock = MockBigtableServer::new();
+        let (addr, _mock_server) = mock.start().await.expect("start mock BigTable");
+        let mut client = BigTableClient::new_local(addr.to_string(), "test".to_string())
+            .await
+            .expect("connect to mock BigTable");
+
+        // The objects pipeline lags, so it bounds the served checkpoint, and the timestamp must
+        // come from its watermark rather than from a pipeline that is further ahead.
+        seed_watermarks(&mut client, |pipeline| {
+            if pipeline == OBJECTS_PIPELINE { 20 } else { 25 }
+        })
+        .await;
+
+        let server = start_v2_server(addr).await;
+        timeout(WAIT, server.cache.subscribe().wait_for(Option::is_some))
+            .await
+            .expect("service info never refreshed")
+            .expect("service info sender dropped");
+        assert_eq!(server.metrics.served_checkpoint.get(), 20);
+        assert_eq!(server.metrics.served_checkpoint_timestamp_ms.get(), 20_000);
+
+        // Hide the objects watermark (checkpoint_hi_inclusive < reader_lo), so every refresh
+        // fails. Once a second watermark read arrives, the refresh behind the first has finished.
+        let objects_key = Bytes::from(watermarks::encode_key(OBJECTS_PIPELINE));
+        mock.insert_row(
+            watermarks::NAME,
+            objects_key.clone(),
+            [(watermarks::col::READER_LO, u64_be(21))],
+        )
+        .await;
+        mock.clear_read_rows_calls().await;
+        timeout(WAIT, async {
+            while watermark_reads(&mock).await < 2 {
+                sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("service info refresh stopped polling");
+        assert_eq!(server.metrics.served_checkpoint.get(), 20);
+        assert_eq!(server.metrics.served_checkpoint_timestamp_ms.get(), 20_000);
+        assert!(server.health().is_ready());
+
+        // Once the objects pipeline catches up past the others, they bound the served checkpoint.
+        mock.insert_row(
+            watermarks::NAME,
+            objects_key,
+            [
+                (watermarks::col::CHECKPOINT_HI, u64_be(30)),
+                (watermarks::col::TIMESTAMP_MS_HI, u64_be(30_000)),
+            ],
+        )
+        .await;
+        wait_for_served_checkpoint(&server, 25).await;
+        assert_eq!(server.metrics.served_checkpoint_timestamp_ms.get(), 25_000);
+    }
+}

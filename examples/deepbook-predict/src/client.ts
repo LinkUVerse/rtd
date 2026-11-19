@@ -1,15 +1,15 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#client
-import { SuiGrpcClient } from '@mysten/sui/grpc';
-import { predict } from '@mysten/deepbook-v3/predict';
+import { RtdGrpcClient } from '@linku/rtd/grpc';
+import { predict } from '@linku/deepbook-v3/predict';
 import { FULLNODE_URL, NETWORK } from './config.js';
 
-// `$extend` registers the Predict facade on the Sui client, so everything below
+// `$extend` registers the Predict facade on the Rtd client, so everything below
 // reaches it at `client.predict`. Any client exposing the core API works,
 // whether gRPC or JSON-RPC.
-export const client = new SuiGrpcClient({
+export const client = new RtdGrpcClient({
 	network: NETWORK,
 	baseUrl: FULLNODE_URL,
 }).$extend(predict({ network: NETWORK }));

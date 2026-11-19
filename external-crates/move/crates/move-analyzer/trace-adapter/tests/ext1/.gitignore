@@ -18,7 +18,7 @@
 **/vdf.*
 **/zklogin_verified_id.*
 **/zklogin_verified_issuer.*
-# ingore sui framework packages not commonly used in simpler tests
+# ingore rtd framework packages not commonly used in simpler tests
 **/authenticator_state.*
 **/bag.*
 **/bcs.*
@@ -32,7 +32,7 @@
 **/party.*
 **/priority_queue.*
 **/prover.*
-**/sui.*
+**/rtd.*
 **/table.*
 **/table_vec.*
 **/token.*

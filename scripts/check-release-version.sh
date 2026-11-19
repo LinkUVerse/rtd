@@ -1,8 +1,8 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
-# One Sui version must map to one released commit. release.yml reuses release
+# One Rtd version must map to one released commit. release.yml reuses release
 # archives by version, so devnet/testnet/mainnet tags that share a version but
 # point at different commits ship the wrong binaries for one of them.
 #
@@ -15,7 +15,7 @@ set -euo pipefail
 
 version=${1:-}
 commit=${2:-}
-remote=${SUI_REMOTE:-https://github.com/MystenLabs/sui.git}
+remote=${RTD_REMOTE:-https://github.com/LinkUVerse/rtd.git}
 
 if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "invalid version '$version' (expected X.Y.Z)"

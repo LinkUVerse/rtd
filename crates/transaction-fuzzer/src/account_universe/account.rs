@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // Copyright (c) The Diem Core Contributors
@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use proptest::prelude::*;
-use sui_types::{
-    base_types::{ObjectID, SuiAddress},
+use rtd_types::{
+    base_types::{ObjectID, RtdAddress},
     crypto::{AccountKeyPair, get_key_pair},
     object::Object,
 };
@@ -16,13 +16,13 @@ use sui_types::{
 use crate::executor::Executor;
 
 pub const INITIAL_BALANCE: u64 = 100_000_000_000_000;
-// Covers the publish charge of 1 SUI plus 0.01 SUI per module and per dependency.
+// Covers the publish charge of 1 RTD plus 0.01 RTD per module and per dependency.
 pub const PUBLISH_BUDGET: u64 = 2_000_000_000;
 pub const NUM_GAS_OBJECTS: usize = 1;
 
 #[derive(Debug)]
 pub struct Account {
-    pub address: SuiAddress,
+    pub address: RtdAddress,
     pub key: AccountKeyPair,
 }
 

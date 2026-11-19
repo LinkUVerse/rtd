@@ -86,7 +86,7 @@ pub fn compile_packages_in_file(filename: &str, dependencies: &[&str]) -> Vec<St
     )
     .set_default_config(
         PackageConfig::default()
-            .set_flavor(Flavor::Sui)
+            .set_flavor(Flavor::Rtd)
             .set_edition(Edition::E2024_ALPHA),
     )
     .set_diagnostic_filters(LintSelection::None, DiagnosticFilterSettings::for_testing())

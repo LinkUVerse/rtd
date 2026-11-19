@@ -1,11 +1,11 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 #[test_only]
 module groth16::example_tests;
 
 use groth16::example::{create_verifying_key, create_proof, verify};
-use sui::bls12381;
+use rtd::bls12381;
 
 #[test]
 fun test_verification() {

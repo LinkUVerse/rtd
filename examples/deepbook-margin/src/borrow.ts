@@ -1,13 +1,13 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
+import { Transaction } from '@linku/rtd/transactions';
 import type { DeepBookMarginClient } from './client.js';
 
 // docs::#borrow
-// Borrow against your collateral. This example opens a leveraged long on SUI:
-// with SUI collateral deposited, borrow the quote asset (DBUSDC) so you can buy
-// more SUI than your own funds cover. A MarginManager borrows from one margin
+// Borrow against your collateral. This example opens a leveraged long on RTD:
+// with RTD collateral deposited, borrow the quote asset (DBUSDC) so you can buy
+// more RTD than your own funds cover. A MarginManager borrows from one margin
 // pool at a time, base or quote, not both.
 //
 // The borrow is rejected unless the resulting risk ratio stays at or above the

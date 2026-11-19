@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 //! Tests commit logic with randomized DAGs containing reject votes.
@@ -11,7 +11,7 @@ mod consensus_dag_tests {
         assert_commit_sequences_match,
     };
     use rand::{SeedableRng as _, rngs::StdRng};
-    use sui_macros::sim_test;
+    use rtd_macros::sim_test;
 
     const MAX_STEP: u32 = 3;
 
@@ -99,7 +99,7 @@ mod consensus_dag_tests {
     ) -> Vec<CommittedSubDag> {
         // The commit finalizer runs indirect finalization in spawn_blocking. With sim-time latency
         // on each call, the many runs below exceed the sim_test timeout.
-        sui_simulator::task::set_blocking_latency(None);
+        rtd_simulator::task::set_blocking_latency(None);
 
         let mut rng = StdRng::from_entropy();
 

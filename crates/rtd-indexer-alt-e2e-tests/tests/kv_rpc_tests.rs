@@ -1,0 +1,6270 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+use std::time::Duration;
+
+use move_core_types::ident_str;
+use prost::Message;
+use simulacrum::Simulacrum;
+use rtd_indexer_alt_e2e_tests::FullCluster;
+use rtd_indexer_alt_e2e_tests::OffchainClusterConfig;
+use rtd_kv_rpc::KvRpcConfig;
+use rtd_kv_rpc::LedgerHistoryConfig;
+use rtd_kv_rpc::LedgerHistoryMethodConfig;
+use rtd_kv_rpc::StageConfig;
+use rtd_kv_rpc::StagesConfig;
+use rtd_rpc::field::FieldMask;
+use rtd_rpc::field::FieldMaskUtil;
+use rtd_rpc::proto::google::rpc::ErrorInfo;
+use rtd_rpc::proto::rtd::rpc::v2::AffectedAddressFilter;
+use rtd_rpc::proto::rtd::rpc::v2::AffectedObjectFilter;
+use rtd_rpc::proto::rtd::rpc::v2::BatchGetObjectsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::EmitModuleFilter;
+use rtd_rpc::proto::rtd::rpc::v2::ErrorReason;
+use rtd_rpc::proto::rtd::rpc::v2::EventFilter;
+use rtd_rpc::proto::rtd::rpc::v2::EventLiteral;
+use rtd_rpc::proto::rtd::rpc::v2::EventStreamHeadFilter;
+use rtd_rpc::proto::rtd::rpc::v2::EventTerm;
+use rtd_rpc::proto::rtd::rpc::v2::EventTypeFilter;
+use rtd_rpc::proto::rtd::rpc::v2::GetCheckpointRequest;
+use rtd_rpc::proto::rtd::rpc::v2::GetObjectRequest;
+use rtd_rpc::proto::rtd::rpc::v2::GetServiceInfoRequest;
+use rtd_rpc::proto::rtd::rpc::v2::GetTransactionRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListCheckpointsResponse;
+use rtd_rpc::proto::rtd::rpc::v2::ListEventsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListEventsResponse;
+use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsRequest;
+use rtd_rpc::proto::rtd::rpc::v2::ListTransactionsResponse;
+use rtd_rpc::proto::rtd::rpc::v2::MoveCallFilter;
+use rtd_rpc::proto::rtd::rpc::v2::Ordering;
+use rtd_rpc::proto::rtd::rpc::v2::PackageWriteFilter;
+use rtd_rpc::proto::rtd::rpc::v2::QueryEndReason;
+use rtd_rpc::proto::rtd::rpc::v2::QueryOptions;
+use rtd_rpc::proto::rtd::rpc::v2::SenderFilter;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionFilter;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionLiteral;
+use rtd_rpc::proto::rtd::rpc::v2::TransactionTerm;
+use rtd_rpc::proto::rtd::rpc::v2::Watermark;
+use rtd_rpc::proto::rtd::rpc::v2::event_literal;
+use rtd_rpc::proto::rtd::rpc::v2::get_checkpoint_request::CheckpointId;
+use rtd_rpc::proto::rtd::rpc::v2::get_object_result;
+use rtd_rpc::proto::rtd::rpc::v2::ledger_service_client::LedgerServiceClient;
+use rtd_rpc::proto::rtd::rpc::v2::transaction_literal;
+use rtd_rpc_api::ledger_history::cursor::CursorKind;
+use rtd_rpc_api::ledger_history::cursor::CursorToken;
+use rtd_rpc_api::ledger_history::cursor::LedgerPoint;
+use rtd_rpc_api::ledger_history::cursor::Position;
+use rtd_test_transaction_builder::TestTransactionBuilder;
+use rtd_types::base_types::ObjectID;
+use rtd_types::base_types::ObjectRef;
+use rtd_types::base_types::RtdAddress;
+use rtd_types::crypto::AccountKeyPair;
+use rtd_types::effects::TransactionEffectsAPI;
+use rtd_types::object::Owner;
+use rtd_types::programmable_transaction_builder::ProgrammableTransactionBuilder;
+use rtd_types::transaction::Transaction;
+use rtd_types::transaction::TransactionData;
+use tonic::transport::Channel;
+
+/// 5 RTD gas budget
+const DEFAULT_GAS_BUDGET: u64 = 5_000_000_000;
+const DEFAULT_CHECKPOINT_RANGE_END: u64 = 3_000_000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WmFrame {
+    /// Frame carrying a payload and its watermark.
+    Item,
+    /// Payload-less frame carrying a watermark: progress beacons and the
+    /// natural-completion / ScanLimit terminal frames.
+    Standalone,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalFrame {
+    Item,
+    Standalone,
+    Bare,
+}
+
+struct TransactionsResult {
+    transactions: Vec<ListTransactionsResponse>,
+    end: bool,
+    end_cursor: Option<prost::bytes::Bytes>,
+    end_reason: Option<QueryEndReason>,
+    terminal_frame: Option<TerminalFrame>,
+    ordering: Ordering,
+    frames: Vec<(WmFrame, Watermark)>,
+}
+
+struct EventsResult {
+    events: Vec<ListEventsResponse>,
+    end: bool,
+    end_cursor: Option<prost::bytes::Bytes>,
+    end_reason: Option<QueryEndReason>,
+    terminal_frame: Option<TerminalFrame>,
+    ordering: Ordering,
+    frames: Vec<(WmFrame, Watermark)>,
+}
+
+struct CheckpointsResult {
+    checkpoints: Vec<ListCheckpointsResponse>,
+    end: bool,
+    end_cursor: Option<prost::bytes::Bytes>,
+    end_reason: Option<QueryEndReason>,
+    terminal_frame: Option<TerminalFrame>,
+    ordering: Ordering,
+    frames: Vec<(WmFrame, Watermark)>,
+}
+
+fn request_ordering(options: Option<&QueryOptions>) -> Ordering {
+    options.map(|o| o.ordering()).unwrap_or(Ordering::Ascending)
+}
+/// A cluster whose kv-rpc server serves the List APIs.
+async fn list_api_cluster() -> FullCluster {
+    list_api_cluster_with_config(KvRpcConfig::default()).await
+}
+
+/// [`list_api_cluster`] for tests that also need to tune the kv-rpc config.
+async fn list_api_cluster_with_config(kv_rpc_config: KvRpcConfig) -> FullCluster {
+    FullCluster::new_with_configs(
+        Simulacrum::new(),
+        OffchainClusterConfig {
+            kv_rpc_config,
+            ..Default::default()
+        },
+        &prometheus::Registry::new(),
+    )
+    .await
+    .expect("Failed to create cluster")
+}
+
+async fn wait_for_kv_checkpoint(cluster: &FullCluster, required_checkpoint: u64) {
+    cluster
+        .wait_for_kv_rpc(required_checkpoint, Duration::from_secs(30))
+        .await
+        .unwrap_or_else(|_| {
+            panic!("KV RPC did not advertise checkpoint {required_checkpoint} within 30s")
+        });
+}
+
+/// A cluster whose kv-rpc server also binds a second, unencrypted listener
+/// (`cluster.kv_rpc_plaintext_url()`), for tests that connect to it directly.
+async fn plaintext_kv_rpc_cluster() -> FullCluster {
+    FullCluster::new_with_configs(
+        Simulacrum::new(),
+        OffchainClusterConfig {
+            kv_rpc_plaintext_listener: true,
+            ..Default::default()
+        },
+        &prometheus::Registry::new(),
+    )
+    .await
+    .expect("Failed to create cluster")
+}
+
+/// The second, unencrypted listener independently serves the same `LedgerService` as the primary
+/// one -- confirmed here by dialing it directly, in case reaching it through a reader masks a
+/// failure to bind or serve the second listener at all.
+#[tokio::test]
+async fn test_plaintext_kv_rpc_listener_serves_get_service_info() {
+    let cluster = plaintext_kv_rpc_cluster().await;
+    let plaintext_url = cluster
+        .kv_rpc_plaintext_url()
+        .expect("plaintext listener must be configured");
+
+    let mut client = LedgerServiceClient::connect(plaintext_url.to_string())
+        .await
+        .expect("connect to KV RPC's plaintext listener");
+
+    // `GetServiceInfo` is served from a cache that kv-rpc populates asynchronously after start-up
+    // (see `wait_for_kv_checkpoint`), so retry past the initial `Unavailable` while it warms up.
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if client
+                .get_service_info(GetServiceInfoRequest::default())
+                .await
+                .is_ok()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("GetServiceInfo over the plaintext listener never succeeded within 30s");
+}
+
+/// A transaction executed and checkpointed while the cluster is up can be read back over the
+/// plaintext listener with a plain gRPC client, with no TLS/cert negotiated anywhere -- proving
+/// the listener serves real ledger data, not just `GetServiceInfo`.
+#[tokio::test]
+async fn test_get_transaction_over_plaintext_kv_rpc_listener() {
+    let mut cluster = plaintext_kv_rpc_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (digest, _) = transfer_self(&mut cluster, sender, &kp, gas).await;
+    cluster.create_checkpoint().await;
+
+    let plaintext_url = cluster
+        .kv_rpc_plaintext_url()
+        .expect("plaintext listener must be configured");
+    let mut client = LedgerServiceClient::connect(plaintext_url.to_string())
+        .await
+        .expect("connect to KV RPC's plaintext listener");
+
+    let tx = client
+        .get_transaction({
+            let mut req = GetTransactionRequest::default();
+            req.digest = Some(digest.to_string());
+            req.read_mask = Some(FieldMask::from_paths(["digest", "effects"]));
+            req
+        })
+        .await
+        .expect("GetTransaction over the plaintext listener")
+        .into_inner()
+        .transaction
+        .expect("transaction should be present");
+
+    assert_eq!(tx.digest.as_deref(), Some(digest.to_string().as_str()));
+    assert!(tx.effects.is_some(), "Missing effects: {tx:#?}");
+}
+
+/// The event's ledger position now lives on the embedded `Event`, not the
+/// response frame; these accessors read it back for assertions.
+fn event_transaction_digest(item: &ListEventsResponse) -> Option<String> {
+    item.event
+        .as_ref()
+        .and_then(|event| event.transaction_digest.clone())
+}
+
+fn event_index_of(item: &ListEventsResponse) -> Option<u32> {
+    item.event.as_ref().and_then(|event| event.event_index)
+}
+
+/// Event read mask requesting the event type plus the ledger-position fields
+/// (`checkpoint`, `transaction_digest`, `event_index`) that the list endpoint
+/// only populates when they are asked for. Used by the event tests, which
+/// assert on those positions.
+fn event_type_and_position_mask() -> FieldMask {
+    FieldMask::from_paths([
+        "event_type",
+        "checkpoint",
+        "transaction_digest",
+        "event_index",
+    ])
+}
+
+fn standalone_watermark_count<T>(frames: &[(WmFrame, T)]) -> usize {
+    frames
+        .iter()
+        .filter(|(k, _)| matches!(k, WmFrame::Standalone))
+        .count()
+}
+
+fn query_options(limit_items: u32) -> QueryOptions {
+    let mut options = QueryOptions::default();
+    options.limit = Some(limit_items);
+    options
+}
+
+fn query_options_after(limit_items: u32, after: prost::bytes::Bytes) -> QueryOptions {
+    let mut options = query_options(limit_items);
+    options.after = Some(after);
+    options
+}
+
+fn query_options_maybe_after(limit_items: u32, after: Option<prost::bytes::Bytes>) -> QueryOptions {
+    let mut options = query_options(limit_items);
+    options.after = after;
+    options
+}
+
+fn query_options_descending_before(limit_items: u32, before: prost::bytes::Bytes) -> QueryOptions {
+    let mut options = query_options(limit_items);
+    options.before = Some(before);
+    options.ordering = Some(Ordering::Descending as i32);
+    options
+}
+
+fn query_options_descending_maybe_before(
+    limit_items: u32,
+    before: Option<prost::bytes::Bytes>,
+) -> QueryOptions {
+    let mut options = query_options_descending(limit_items);
+    options.before = before;
+    options
+}
+
+fn query_options_descending(limit_items: u32) -> QueryOptions {
+    let mut options = query_options(limit_items);
+    options.ordering = Some(Ordering::Descending as i32);
+    options
+}
+
+fn query_options_between(
+    limit_items: u32,
+    after: prost::bytes::Bytes,
+    before: prost::bytes::Bytes,
+) -> QueryOptions {
+    let mut options = query_options(limit_items);
+    options.after = Some(after);
+    options.before = Some(before);
+    options
+}
+
+fn query_options_between_descending(
+    limit_items: u32,
+    after: prost::bytes::Bytes,
+    before: prost::bytes::Bytes,
+) -> QueryOptions {
+    let mut options = query_options_between(limit_items, after, before);
+    options.ordering = Some(Ordering::Descending as i32);
+    options
+}
+
+fn first_transaction_cursor(result: &TransactionsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .transactions
+        .first()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn last_transaction_cursor(result: &TransactionsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .transactions
+        .last()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn transaction_end_cursor(result: &TransactionsResult, message: &str) -> prost::bytes::Bytes {
+    result.end_cursor.clone().expect(message)
+}
+
+fn first_event_cursor(result: &EventsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .events
+        .first()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn last_event_cursor(result: &EventsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .events
+        .last()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn event_end_cursor(result: &EventsResult, message: &str) -> prost::bytes::Bytes {
+    result.end_cursor.clone().expect(message)
+}
+
+fn first_checkpoint_cursor(result: &CheckpointsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .checkpoints
+        .first()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn last_checkpoint_cursor(result: &CheckpointsResult, message: &str) -> prost::bytes::Bytes {
+    result
+        .checkpoints
+        .last()
+        .and_then(|item| item.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .expect(message)
+}
+
+fn checkpoint_end_cursor(result: &CheckpointsResult, message: &str) -> prost::bytes::Bytes {
+    result.end_cursor.clone().expect(message)
+}
+
+fn assert_item_limit_end(end: bool, reason: Option<QueryEndReason>) {
+    assert!(end, "item-limit response should include end frame");
+    assert_eq!(reason, Some(QueryEndReason::ItemLimit));
+}
+
+fn assert_item_limit_fused(terminal_frame: Option<TerminalFrame>, frames: &[(WmFrame, Watermark)]) {
+    assert_eq!(
+        terminal_frame,
+        Some(TerminalFrame::Item),
+        "ItemLimit must be fused onto the final payload"
+    );
+    assert!(
+        matches!(frames.last(), Some((WmFrame::Item, _))),
+        "ItemLimit must not append a standalone watermark frame"
+    );
+}
+
+fn assert_standalone_terminal(terminal_frame: Option<TerminalFrame>) {
+    assert_eq!(
+        terminal_frame,
+        Some(TerminalFrame::Standalone),
+        "natural and ScanLimit completion must use one payload-free watermark+end frame"
+    );
+}
+
+/// Walks every Watermark frame (item-embedded + standalone) in delivery order
+/// and asserts the per-frame wire contract:
+///   - `cursor` is always populated.
+///   - The single `checkpoint` boundary carries the direction-correct value
+///     (inclusive upper bound ascending, inclusive lower bound descending).
+///   - Where `checkpoint` is set, the sequence of values is monotonic
+///     (non-decreasing ascending, non-increasing descending). It may be `None`
+///     early in a scan that has not yet crossed a checkpoint boundary; those
+///     frames are skipped for the monotonicity check.
+fn assert_watermark_contract(frames: &[(WmFrame, Watermark)], ordering: Ordering) {
+    let mut last_bound: Option<u64> = None;
+    for (kind, wm) in frames {
+        assert!(
+            wm.cursor.is_some(),
+            "{kind:?} watermark must carry a cursor"
+        );
+        if let Some(bound) = wm.checkpoint {
+            if let Some(prev) = last_bound {
+                match ordering {
+                    Ordering::Ascending => assert!(
+                        bound >= prev,
+                        "ascending checkpoint boundary must be non-decreasing \
+                         (prev {prev}, got {bound} on {kind:?})"
+                    ),
+                    Ordering::Descending => assert!(
+                        bound <= prev,
+                        "descending checkpoint boundary must be non-increasing \
+                         (prev {prev}, got {bound} on {kind:?})"
+                    ),
+                    other => panic!("unexpected ordering: {other:?}"),
+                }
+            }
+            last_bound = Some(bound);
+        }
+    }
+}
+
+fn assert_transaction_cursors(result: &TransactionsResult) {
+    assert_watermark_contract(&result.frames, result.ordering);
+}
+
+fn assert_event_cursors(result: &EventsResult) {
+    assert_watermark_contract(&result.frames, result.ordering);
+}
+
+fn assert_checkpoint_cursors(result: &CheckpointsResult) {
+    assert_watermark_contract(&result.frames, result.ordering);
+}
+
+fn checkpoint_sequence(response: &ListCheckpointsResponse) -> u64 {
+    response
+        .checkpoint
+        .as_ref()
+        .and_then(|checkpoint| checkpoint.sequence_number)
+        .expect("checkpoint sequence number should be populated")
+}
+
+/// Asserts `status` is `OutOfRange` with an `ABOVE_LATEST_AVAILABLE` ErrorInfo for `bound` at
+/// `requested_checkpoint`, whose first unavailable checkpoint lies at or below the requested one.
+fn assert_above_latest_available(status: &tonic::Status, bound: &str, requested_checkpoint: u64) {
+    assert_eq!(status.code(), tonic::Code::OutOfRange, "{status:?}");
+    let error_info = rtd_rpc::proto::google::rpc::Status::decode(status.details())
+        .unwrap()
+        .details
+        .iter()
+        .find_map(|detail| detail.to_msg::<ErrorInfo>().ok())
+        .unwrap_or_else(|| panic!("no ErrorInfo in {status:?}"));
+    assert_eq!(
+        error_info.reason,
+        ErrorReason::AboveLatestAvailable.as_str_name()
+    );
+    assert_eq!(error_info.domain, ErrorReason::DOMAIN);
+    let metadata = &error_info.metadata;
+    assert_eq!(metadata.len(), 3, "{metadata:?}");
+    assert_eq!(metadata["bound"], bound);
+    assert_eq!(
+        metadata["requestedCheckpoint"],
+        requested_checkpoint.to_string()
+    );
+    let first_unavailable: u64 = metadata["firstUnavailableCheckpoint"].parse().unwrap();
+    assert!(first_unavailable <= requested_checkpoint, "{metadata:?}");
+}
+
+async fn list_transactions_result(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListTransactionsRequest,
+) -> TransactionsResult {
+    let ordering = request_ordering(request.options.as_ref());
+    let mut stream = client
+        .list_transactions(request)
+        .await
+        .unwrap()
+        .into_inner();
+    let mut transactions = Vec::new();
+    let mut frames = Vec::new();
+    let mut end = false;
+    let mut end_cursor = None;
+    let mut end_reason = None;
+    let mut terminal_frame = None;
+    while let Some(response) = stream.message().await.unwrap() {
+        assert!(!end, "frame after end");
+        if let Some(c) = response.watermark.as_ref().and_then(|w| w.cursor.clone()) {
+            end_cursor = Some(c);
+        }
+        if let Some(end_frame) = &response.end {
+            end = true;
+            end_reason = Some(end_frame.reason());
+            terminal_frame = Some(if response.transaction.is_some() {
+                TerminalFrame::Item
+            } else if response.watermark.is_some() {
+                TerminalFrame::Standalone
+            } else {
+                TerminalFrame::Bare
+            });
+        }
+        if response.transaction.is_some() {
+            let wm = response
+                .watermark
+                .clone()
+                .expect("transaction item must carry a watermark");
+            frames.push((WmFrame::Item, wm));
+            transactions.push(response);
+        } else if let Some(wm) = response.watermark {
+            frames.push((WmFrame::Standalone, wm));
+        }
+    }
+    TransactionsResult {
+        transactions,
+        end,
+        end_cursor,
+        end_reason,
+        terminal_frame,
+        ordering,
+        frames,
+    }
+}
+
+async fn list_events_result(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListEventsRequest,
+) -> EventsResult {
+    let ordering = request_ordering(request.options.as_ref());
+    let mut stream = client.list_events(request).await.unwrap().into_inner();
+    let mut events = Vec::new();
+    let mut frames = Vec::new();
+    let mut end = false;
+    let mut end_cursor = None;
+    let mut end_reason = None;
+    let mut terminal_frame = None;
+    while let Some(response) = stream.message().await.unwrap() {
+        assert!(!end, "frame after end");
+        if let Some(c) = response.watermark.as_ref().and_then(|w| w.cursor.clone()) {
+            end_cursor = Some(c);
+        }
+        if let Some(end_frame) = &response.end {
+            end = true;
+            end_reason = Some(end_frame.reason());
+            terminal_frame = Some(if response.event.is_some() {
+                TerminalFrame::Item
+            } else if response.watermark.is_some() {
+                TerminalFrame::Standalone
+            } else {
+                TerminalFrame::Bare
+            });
+        }
+        if response.event.is_some() {
+            let wm = response
+                .watermark
+                .clone()
+                .expect("event item must carry a watermark");
+            frames.push((WmFrame::Item, wm));
+            events.push(response);
+        } else if let Some(wm) = response.watermark {
+            frames.push((WmFrame::Standalone, wm));
+        }
+    }
+    EventsResult {
+        events,
+        end,
+        end_cursor,
+        end_reason,
+        terminal_frame,
+        ordering,
+        frames,
+    }
+}
+
+async fn list_checkpoints_result(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListCheckpointsRequest,
+) -> CheckpointsResult {
+    let ordering = request_ordering(request.options.as_ref());
+    let mut stream = client.list_checkpoints(request).await.unwrap().into_inner();
+    let mut checkpoints = Vec::new();
+    let mut frames = Vec::new();
+    let mut end = false;
+    let mut end_cursor = None;
+    let mut end_reason = None;
+    let mut terminal_frame = None;
+    while let Some(response) = stream.message().await.unwrap() {
+        assert!(!end, "frame after end");
+        if let Some(c) = response.watermark.as_ref().and_then(|w| w.cursor.clone()) {
+            end_cursor = Some(c);
+        }
+        if let Some(end_frame) = &response.end {
+            end = true;
+            end_reason = Some(end_frame.reason());
+            terminal_frame = Some(if response.checkpoint.is_some() {
+                TerminalFrame::Item
+            } else if response.watermark.is_some() {
+                TerminalFrame::Standalone
+            } else {
+                TerminalFrame::Bare
+            });
+        }
+        if response.checkpoint.is_some() {
+            let wm = response
+                .watermark
+                .clone()
+                .expect("checkpoint item must carry a watermark");
+            frames.push((WmFrame::Item, wm));
+            checkpoints.push(response);
+        } else if let Some(wm) = response.watermark {
+            frames.push((WmFrame::Standalone, wm));
+        }
+    }
+    CheckpointsResult {
+        checkpoints,
+        end,
+        end_cursor,
+        end_reason,
+        terminal_frame,
+        ordering,
+        frames,
+    }
+}
+
+async fn expect_invalid_list_transactions(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListTransactionsRequest,
+) {
+    let err = client
+        .list_transactions(request)
+        .await
+        .expect_err("request should be InvalidArgument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+}
+
+async fn expect_invalid_list_events(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListEventsRequest,
+) {
+    let err = client
+        .list_events(request)
+        .await
+        .expect_err("request should be InvalidArgument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+}
+
+async fn expect_invalid_list_checkpoints(
+    client: &mut LedgerServiceClient<Channel>,
+    request: ListCheckpointsRequest,
+) {
+    let err = client
+        .list_checkpoints(request)
+        .await
+        .expect_err("request should be InvalidArgument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+}
+
+/// Publish a Move package and return `(pkg_id, updated_gas_ref)`.
+async fn publish_package(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    gas: ObjectRef,
+    path: PathBuf,
+) -> (ObjectID, ObjectRef) {
+    let (fx, _) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(
+            TestTransactionBuilder::new(sender, gas, cluster.reference_gas_price())
+                .with_gas_budget(DEFAULT_GAS_BUDGET)
+                .publish(path)
+                .build(),
+            vec![kp],
+        ))
+        .expect("publish failed");
+
+    let pkg_id = fx
+        .created()
+        .into_iter()
+        .find_map(|((id, v, _), owner)| {
+            (v.value() == 1 && matches!(owner, Owner::Immutable)).then_some(id)
+        })
+        .expect("package id");
+
+    let new_gas = fx
+        .mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated");
+
+    (pkg_id, new_gas)
+}
+
+fn emit_test_event_pkg_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/event/emit_test_event")
+}
+
+fn authenticated_event_pkg_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/event/authenticated_event")
+}
+
+fn generic_event_pkg_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("packages/event/generic_event")
+}
+
+/// Execute a no-arg, no-type-arg Move call and return `(tx_digest, updated_gas_ref)`.
+async fn call_move(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    gas: ObjectRef,
+    pkg: ObjectID,
+    module: &str,
+    function: &str,
+) -> (rtd_types::digests::TransactionDigest, ObjectRef) {
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder.programmable_move_call(
+        pkg,
+        move_core_types::identifier::Identifier::new(module).unwrap(),
+        move_core_types::identifier::Identifier::new(function).unwrap(),
+        vec![],
+        vec![],
+    );
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx, err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![kp]))
+        .expect("move call failed");
+    assert!(err.is_none(), "move call failed: {err:?}");
+    let digest = *fx.transaction_digest();
+    let new_gas = fx
+        .mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated");
+    (digest, new_gas)
+}
+
+/// Execute a `transfer_rtd(sender, None)` self-transfer and return `(tx_digest, updated_gas_ref)`.
+async fn transfer_self(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    gas: ObjectRef,
+) -> (rtd_types::digests::TransactionDigest, ObjectRef) {
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder.transfer_rtd(sender, None);
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx, err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![kp]))
+        .expect("transfer failed");
+    assert!(err.is_none(), "transfer failed: {err:?}");
+    let digest = *fx.transaction_digest();
+    let new_gas = fx
+        .mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated");
+    (digest, new_gas)
+}
+
+/// Run a transfer tx from `sender` and seal it into its own checkpoint.
+/// Returns the new gas ObjectRef after the transfer.
+async fn transfer_in_own_checkpoint(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    gas: ObjectRef,
+) -> ObjectRef {
+    let (_, new_gas) = transfer_self(cluster, sender, kp, gas).await;
+    cluster.create_checkpoint().await;
+    new_gas
+}
+
+// --- Filter builders ---
+
+fn tx_filter(literals: Vec<TransactionLiteral>) -> TransactionFilter {
+    tx_filter_terms(vec![literals])
+}
+
+fn tx_filter_terms(terms: Vec<Vec<TransactionLiteral>>) -> TransactionFilter {
+    let terms = terms
+        .into_iter()
+        .map(|literals| {
+            let mut term = TransactionTerm::default();
+            term.literals = literals;
+            term
+        })
+        .collect();
+    let mut filter = TransactionFilter::default();
+    filter.terms = terms;
+    filter
+}
+
+fn tx_or(terms: Vec<Vec<TransactionLiteral>>) -> TransactionFilter {
+    tx_filter_terms(terms)
+}
+
+fn ev_filter(literals: Vec<EventLiteral>) -> EventFilter {
+    ev_filter_terms(vec![literals])
+}
+
+fn ev_filter_terms(terms: Vec<Vec<EventLiteral>>) -> EventFilter {
+    let terms = terms
+        .into_iter()
+        .map(|literals| {
+            let mut term = EventTerm::default();
+            term.literals = literals;
+            term
+        })
+        .collect();
+    let mut filter = EventFilter::default();
+    filter.terms = terms;
+    filter
+}
+
+fn ev_or(terms: Vec<Vec<EventLiteral>>) -> EventFilter {
+    ev_filter_terms(terms)
+}
+
+fn tx_not_sender_only_filter(addr: RtdAddress) -> TransactionFilter {
+    let mut term = TransactionTerm::default();
+    term.literals = vec![tx_not_sender_literal(addr)];
+    let mut filter = TransactionFilter::default();
+    filter.terms = vec![term];
+    filter
+}
+
+fn ev_not_sender_only_filter(addr: RtdAddress) -> EventFilter {
+    let mut term = EventTerm::default();
+    term.literals = vec![ev_not_sender_literal(addr)];
+    let mut filter = EventFilter::default();
+    filter.terms = vec![term];
+    filter
+}
+
+fn tx_include(predicate: transaction_literal::Predicate) -> TransactionLiteral {
+    let mut literal = TransactionLiteral::default();
+    literal.predicate = Some(predicate);
+    literal
+}
+
+fn tx_exclude(predicate: transaction_literal::Predicate) -> TransactionLiteral {
+    let mut literal = TransactionLiteral::default();
+    literal.predicate = Some(predicate);
+    literal.negated = true;
+    literal
+}
+
+fn tx_sender_literal(addr: RtdAddress) -> TransactionLiteral {
+    let mut s = SenderFilter::default();
+    s.address = Some(addr.to_string());
+    tx_include(transaction_literal::Predicate::Sender(s))
+}
+
+fn tx_not_sender_literal(addr: RtdAddress) -> TransactionLiteral {
+    let mut s = SenderFilter::default();
+    s.address = Some(addr.to_string());
+    tx_exclude(transaction_literal::Predicate::Sender(s))
+}
+
+fn tx_move_call_literal(path: &str) -> TransactionLiteral {
+    let mut mc = MoveCallFilter::default();
+    mc.function = Some(path.to_string());
+    tx_include(transaction_literal::Predicate::MoveCall(mc))
+}
+
+fn tx_emit_module_literal(path: &str) -> TransactionLiteral {
+    let mut em = EmitModuleFilter::default();
+    em.module = Some(path.to_string());
+    tx_include(transaction_literal::Predicate::EmitModule(em))
+}
+
+fn tx_event_type_literal(path: &str) -> TransactionLiteral {
+    let mut et = EventTypeFilter::default();
+    et.event_type = Some(path.to_string());
+    tx_include(transaction_literal::Predicate::EventType(et))
+}
+
+fn tx_event_stream_head_literal(stream_id: ObjectID) -> TransactionLiteral {
+    let mut esh = EventStreamHeadFilter::default();
+    esh.stream_id = Some(stream_id.to_canonical_string(true));
+    tx_include(transaction_literal::Predicate::EventStreamHead(esh))
+}
+
+fn tx_package_write_literal() -> TransactionLiteral {
+    tx_include(transaction_literal::Predicate::PackageWrite(
+        PackageWriteFilter::default(),
+    ))
+}
+
+fn tx_sender(addr: RtdAddress) -> TransactionFilter {
+    tx_filter(vec![tx_sender_literal(addr)])
+}
+
+fn tx_move_call(path: &str) -> TransactionFilter {
+    tx_filter(vec![tx_move_call_literal(path)])
+}
+
+fn tx_emit_module(path: &str) -> TransactionFilter {
+    tx_filter(vec![tx_emit_module_literal(path)])
+}
+
+fn tx_event_type(path: &str) -> TransactionFilter {
+    tx_filter(vec![tx_event_type_literal(path)])
+}
+
+fn tx_event_stream_head(stream_id: ObjectID) -> TransactionFilter {
+    tx_filter(vec![tx_event_stream_head_literal(stream_id)])
+}
+
+fn tx_package_write() -> TransactionFilter {
+    tx_filter(vec![tx_package_write_literal()])
+}
+
+fn tx_and(filters: Vec<TransactionFilter>) -> TransactionFilter {
+    let mut literals = Vec::new();
+    for filter in filters {
+        for term in filter.terms {
+            literals.extend(term.literals);
+        }
+    }
+    tx_filter(literals)
+}
+
+fn ev_include(predicate: event_literal::Predicate) -> EventLiteral {
+    let mut literal = EventLiteral::default();
+    literal.predicate = Some(predicate);
+    literal
+}
+
+fn ev_exclude(predicate: event_literal::Predicate) -> EventLiteral {
+    let mut literal = EventLiteral::default();
+    literal.predicate = Some(predicate);
+    literal.negated = true;
+    literal
+}
+
+fn ev_sender_literal(addr: RtdAddress) -> EventLiteral {
+    let mut s = SenderFilter::default();
+    s.address = Some(addr.to_string());
+    ev_include(event_literal::Predicate::Sender(s))
+}
+
+fn ev_not_sender_literal(addr: RtdAddress) -> EventLiteral {
+    let mut s = SenderFilter::default();
+    s.address = Some(addr.to_string());
+    ev_exclude(event_literal::Predicate::Sender(s))
+}
+
+fn ev_event_stream_head_literal(stream_id: ObjectID) -> EventLiteral {
+    let mut esh = EventStreamHeadFilter::default();
+    esh.stream_id = Some(stream_id.to_canonical_string(true));
+    ev_include(event_literal::Predicate::EventStreamHead(esh))
+}
+
+fn ev_sender(addr: RtdAddress) -> EventFilter {
+    ev_filter(vec![ev_sender_literal(addr)])
+}
+
+fn ev_emit_module(path: &str) -> EventFilter {
+    let mut em = EmitModuleFilter::default();
+    em.module = Some(path.to_string());
+    ev_filter(vec![ev_include(event_literal::Predicate::EmitModule(em))])
+}
+
+fn ev_event_type(path: &str) -> EventFilter {
+    let mut et = EventTypeFilter::default();
+    et.event_type = Some(path.to_string());
+    ev_filter(vec![ev_include(event_literal::Predicate::EventType(et))])
+}
+
+fn ev_event_stream_head(stream_id: ObjectID) -> EventFilter {
+    ev_filter(vec![ev_event_stream_head_literal(stream_id)])
+}
+
+fn ev_and(filters: Vec<EventFilter>) -> EventFilter {
+    let mut literals = Vec::new();
+    for filter in filters {
+        for term in filter.terms {
+            literals.extend(term.literals);
+        }
+    }
+    ev_filter(literals)
+}
+
+// --- Tests ---
+
+#[tokio::test]
+async fn test_json_read_mask() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg_id, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    let (event_tx_digest, _) = call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg_id,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // -- Object JSON: requested --
+    {
+        let object = client
+            .get_object({
+                let mut req = GetObjectRequest::default();
+                req.object_id = Some(gas.0.to_canonical_string(true));
+                req.read_mask = Some(FieldMask::from_paths(["json", "object_id"]));
+                req
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .object
+            .expect("object should be present");
+
+        // Coin<RTD> renders as a struct with `id` (UID as hex string) and `balance` (u64 as string).
+        let json = object
+            .json
+            .expect("json should be populated for a Move object");
+        let fields = match json.kind {
+            Some(prost_types::value::Kind::StructValue(s)) => s.fields,
+            other => panic!("expected struct value, got: {other:?}"),
+        };
+        assert_eq!(
+            fields.len(),
+            2,
+            "Coin<RTD> should have exactly 2 fields (id, balance), got: {:?}",
+            fields.keys().collect::<Vec<_>>()
+        );
+        assert!(fields.contains_key("id"), "missing 'id' field");
+        assert!(fields.contains_key("balance"), "missing 'balance' field");
+
+        // The id should be the object's hex address.
+        let id_value = fields["id"].kind.as_ref().unwrap();
+        match id_value {
+            prost_types::value::Kind::StringValue(s) => {
+                assert_eq!(s, &gas.0.to_canonical_string(true));
+            }
+            other => panic!("expected id to be a string, got: {other:?}"),
+        }
+    }
+
+    // -- Object JSON: not requested --
+    {
+        let object = client
+            .get_object({
+                let mut req = GetObjectRequest::default();
+                req.object_id = Some(gas.0.to_canonical_string(true));
+                req.read_mask = Some(FieldMask::from_paths(["object_id", "version"]));
+                req
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .object
+            .expect("object should be present");
+
+        assert!(
+            object.json.is_none(),
+            "json should not be populated when not requested"
+        );
+    }
+
+    // -- Transaction event JSON --
+    {
+        let tx = client
+            .get_transaction({
+                let mut req = GetTransactionRequest::default();
+                req.digest = Some(event_tx_digest.to_string());
+                req.read_mask = Some(FieldMask::from_paths([
+                    "digest",
+                    "events.events.json",
+                    "events.events.event_type",
+                ]));
+                req
+            })
+            .await
+            .unwrap()
+            .into_inner()
+            .transaction
+            .expect("transaction should be present");
+
+        assert_eq!(tx.digest(), event_tx_digest.to_string());
+
+        let events = tx.events.expect("events should be present");
+        assert_eq!(events.events.len(), 1, "expected exactly 1 event");
+
+        let event = &events.events[0];
+        assert!(
+            event.event_type().contains("emit_test_event::TestEvent"),
+            "unexpected event type: {}",
+            event.event_type()
+        );
+
+        // The event JSON should be a struct with a single `value: 1` field.
+        let json = event.json.as_ref().expect("event json should be populated");
+        let fields = match &json.kind {
+            Some(prost_types::value::Kind::StructValue(s)) => &s.fields,
+            other => panic!("expected struct value, got: {other:?}"),
+        };
+        assert_eq!(fields.len(), 1, "TestEvent has one field");
+        let value = fields["value"].kind.as_ref().unwrap();
+        match value {
+            prost_types::value::Kind::StringValue(s) => {
+                assert_eq!(s, "1", "TestEvent.value should be 1");
+            }
+            other => panic!("expected value to be a string, got: {other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_batch_get_objects() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg_id, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let non_existent_id_1 = ObjectID::random();
+    let non_existent_id_2 = ObjectID::random();
+
+    let make_req = |id: &ObjectID, version: Option<u64>| {
+        let mut req = GetObjectRequest::default();
+        req.object_id = Some(id.to_canonical_string(true));
+        req.version = version;
+        req
+    };
+
+    // 1. A batch containing only unversioned (version: None) requests.
+    {
+        let mut req = BatchGetObjectsRequest::default();
+        req.requests = vec![make_req(&pkg_id, None), make_req(&gas.0, None)];
+        req.read_mask = Some(FieldMask::from_paths(["object_id", "version"]));
+
+        let response = client.batch_get_objects(req).await.unwrap().into_inner();
+
+        assert_eq!(response.objects.len(), 2);
+
+        match &response.objects[0].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(pkg_id.to_canonical_string(true).as_str())
+                );
+            }
+            other => panic!("expected object for pkg_id, got: {other:?}"),
+        }
+
+        match &response.objects[1].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(gas.0.to_canonical_string(true).as_str())
+                );
+                assert_eq!(obj.version, Some(gas.1.value()));
+            }
+            other => panic!("expected object for gas, got: {other:?}"),
+        }
+    }
+
+    // 2. A mixed batch containing both exact-version and unversioned requests.
+    {
+        let mut req = BatchGetObjectsRequest::default();
+        req.requests = vec![
+            make_req(&pkg_id, None),
+            make_req(&gas.0, Some(gas.1.value())),
+        ];
+        req.read_mask = Some(FieldMask::from_paths(["object_id", "version"]));
+
+        let response = client.batch_get_objects(req).await.unwrap().into_inner();
+
+        assert_eq!(response.objects.len(), 2);
+
+        match &response.objects[0].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(pkg_id.to_canonical_string(true).as_str())
+                );
+            }
+            other => panic!("expected object for unversioned pkg_id, got: {other:?}"),
+        }
+
+        match &response.objects[1].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(gas.0.to_canonical_string(true).as_str())
+                );
+                assert_eq!(obj.version, Some(gas.1.value()));
+            }
+            other => panic!("expected object for versioned gas, got: {other:?}"),
+        }
+    }
+
+    // 3. Proper error reporting for non-existent objects in both versioned and unversioned modes.
+    {
+        let wrong_version = gas.1.value() + 100;
+        let mut req = BatchGetObjectsRequest::default();
+        req.requests = vec![
+            // unversioned existing
+            make_req(&pkg_id, None),
+            // unversioned non-existent
+            make_req(&non_existent_id_1, None),
+            // exact-version existing
+            make_req(&gas.0, Some(gas.1.value())),
+            // exact-version non-existent object ID
+            make_req(&non_existent_id_2, Some(1)),
+            // exact-version non-existent version for existing object
+            make_req(&gas.0, Some(wrong_version)),
+        ];
+        req.read_mask = Some(FieldMask::from_paths(["object_id", "version"]));
+
+        let response = client.batch_get_objects(req).await.unwrap().into_inner();
+
+        assert_eq!(response.objects.len(), 5);
+
+        // 0: unversioned existing
+        match &response.objects[0].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(pkg_id.to_canonical_string(true).as_str())
+                );
+            }
+            other => panic!("expected object at index 0, got: {other:?}"),
+        }
+
+        // 1: unversioned non-existent -> NotFound error
+        match &response.objects[1].result {
+            Some(get_object_result::Result::Error(status)) => {
+                assert_eq!(status.code, tonic::Code::NotFound as i32);
+                assert!(
+                    status
+                        .message
+                        .contains(&non_existent_id_1.to_canonical_string(true))
+                );
+            }
+            other => panic!("expected NotFound error at index 1, got: {other:?}"),
+        }
+
+        // 2: exact-version existing
+        match &response.objects[2].result {
+            Some(get_object_result::Result::Object(obj)) => {
+                assert_eq!(
+                    obj.object_id.as_deref(),
+                    Some(gas.0.to_canonical_string(true).as_str())
+                );
+                assert_eq!(obj.version, Some(gas.1.value()));
+            }
+            other => panic!("expected object at index 2, got: {other:?}"),
+        }
+
+        // 3: exact-version non-existent object ID -> NotFound error
+        match &response.objects[3].result {
+            Some(get_object_result::Result::Error(status)) => {
+                assert_eq!(status.code, tonic::Code::NotFound as i32);
+                assert!(
+                    status
+                        .message
+                        .contains(&non_existent_id_2.to_canonical_string(true))
+                );
+                assert!(status.message.contains("version 1"));
+            }
+            other => panic!("expected NotFound error at index 3, got: {other:?}"),
+        }
+
+        // 4: exact-version non-existent version for existing object -> NotFound error
+        match &response.objects[4].result {
+            Some(get_object_result::Result::Error(status)) => {
+                assert_eq!(status.code, tonic::Code::NotFound as i32);
+                assert!(status.message.contains(&gas.0.to_canonical_string(true)));
+                assert!(status.message.contains(&format!("version {wrong_version}")));
+            }
+            other => panic!("expected NotFound error at index 4, got: {other:?}"),
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_list_transactions_unfiltered() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (tx_digest, _) = transfer_self(&mut cluster, sender, &kp, gas).await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest", "checkpoint"]));
+    req.options = Some(query_options(100));
+
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_transaction_cursors(&resp);
+
+    // Should have at least the genesis tx + our transfer.
+    assert!(
+        resp.transactions.len() >= 2,
+        "expected at least 2 transactions, got {}",
+        resp.transactions.len()
+    );
+
+    // Our transaction should be in the results.
+    let digests: Vec<_> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.as_ref()))
+        .collect();
+    assert!(
+        digests.contains(&&tx_digest.to_string()),
+        "expected to find tx {tx_digest} in results"
+    );
+    for result in &resp.transactions {
+        assert!(
+            result
+                .transaction
+                .as_ref()
+                .and_then(|tx| tx.checkpoint)
+                .is_some(),
+            "transaction checkpoint should be present when requested"
+        );
+    }
+
+    // Results should be ordered by checkpoint; transaction sequence ordering
+    // within the checkpoint is covered by options/resume tests below.
+    for w in resp.transactions.windows(2) {
+        let a_checkpoint = w[0]
+            .transaction
+            .as_ref()
+            .and_then(|tx| tx.checkpoint)
+            .expect("transaction checkpoint should be present");
+        let b_checkpoint = w[1]
+            .transaction
+            .as_ref()
+            .and_then(|tx| tx.checkpoint)
+            .expect("transaction checkpoint should be present");
+        assert!(
+            a_checkpoint <= b_checkpoint,
+            "results should be ordered by checkpoint: {a_checkpoint} > {b_checkpoint}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_transactions_with_sender_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    transfer_self(&mut cluster, sender, &kp, gas).await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Filter by our sender.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_sender(sender));
+    req.options = Some(query_options(100));
+
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_transaction_cursors(&resp);
+    assert!(
+        !resp.transactions.is_empty(),
+        "expected at least 1 transaction from sender"
+    );
+}
+
+#[tokio::test]
+async fn test_list_package_write_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Publish a Move package (a package write); capture its digest directly off
+    // the effects since the `publish_package` helper discards it.
+    let (publish_fx, publish_err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(
+            TestTransactionBuilder::new(sender, gas, cluster.reference_gas_price())
+                .with_gas_budget(DEFAULT_GAS_BUDGET)
+                .publish(emit_test_event_pkg_path())
+                .build(),
+            vec![&kp],
+        ))
+        .expect("publish failed");
+    assert!(publish_err.is_none(), "publish failed: {publish_err:?}");
+    let publish_digest = publish_fx.transaction_digest().to_string();
+    let new_gas = publish_fx
+        .mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated");
+
+    // A self-transfer writes no package; it shares the checkpoint below so the
+    // filter has a non-package-write sibling to exclude.
+    let (_transfer_digest, _) = transfer_self(&mut cluster, sender, &kp, new_gas).await;
+
+    // Seal both txns into one checkpoint and scope the query to it. This excludes
+    // genesis (which publishes the framework packages and so also matches a
+    // package-write filter), leaving our publish as the only package write in
+    // range — letting us assert an exact count.
+    let checkpoint = cluster.create_checkpoint().await;
+    let cp = checkpoint.sequence_number;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(cp);
+    req.end_checkpoint = Some(cp + 1);
+    req.filter = Some(tx_package_write());
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_transaction_cursors(&resp);
+
+    let digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    assert_eq!(
+        digests,
+        vec![publish_digest],
+        "package_write filter should return exactly the publish tx in this checkpoint, got {digests:?}"
+    );
+
+    // Checkpoint-level: scoped to the same range, only the publish's checkpoint
+    // matches the package-write filter.
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.start_checkpoint = Some(cp);
+    req.end_checkpoint = Some(cp + 1);
+    req.filter = Some(tx_package_write());
+    req.options = Some(query_options(100));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+    let seqs: Vec<u64> = resp.checkpoints.iter().map(checkpoint_sequence).collect();
+    assert_eq!(
+        seqs,
+        vec![cp],
+        "package_write filter should return exactly the publish checkpoint, got {seqs:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_query_options() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, mut gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Execute several transactions to ensure options.
+    for _ in 0..3 {
+        let (_, new_gas) = transfer_self(&mut cluster, sender, &kp, gas).await;
+        gas = new_gas;
+    }
+
+    let tx_checkpoint = cluster.create_checkpoint().await;
+    let tx_start = tx_checkpoint.sequence_number;
+    let tx_end = tx_start + 1;
+    // `tx_end` is exclusive and intentionally has no transaction row. Wait for
+    // the last in-range checkpoint while preserving that missing-boundary shape.
+    wait_for_kv_checkpoint(&cluster, tx_start).await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // First response: limit_items=2
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(tx_start);
+    req.end_checkpoint = Some(tx_end);
+    req.filter = Some(tx_sender(sender));
+    req.options = Some(query_options(2));
+
+    let response1 = list_transactions_result(&mut client, req).await;
+    assert_eq!(
+        response1.transactions.len(),
+        2,
+        "first response should have 2 items"
+    );
+    assert_item_limit_end(response1.end, response1.end_reason);
+    assert_transaction_cursors(&response1);
+    assert_item_limit_fused(response1.terminal_frame, &response1.frames);
+    let cursor = transaction_end_cursor(&response1, "first response should have an end cursor");
+
+    // Second response using the last item cursor.
+    let mut req2 = ListTransactionsRequest::default();
+    req2.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req2.start_checkpoint = Some(tx_start);
+    req2.end_checkpoint = Some(tx_end);
+    req2.filter = Some(tx_sender(sender));
+    req2.options = Some(query_options_after(2, cursor));
+
+    let response2 = list_transactions_result(&mut client, req2).await;
+    assert_eq!(
+        response2.transactions.len(),
+        1,
+        "final response should have 1 item"
+    );
+    assert!(
+        response2.end,
+        "short final transaction response should include end frame"
+    );
+    assert_eq!(response2.end_reason, Some(QueryEndReason::CheckpointBound));
+    assert_transaction_cursors(&response2);
+    assert_standalone_terminal(response2.terminal_frame);
+    let final_cursor = last_transaction_cursor(&response2, "final response should have a cursor");
+
+    let mut req3 = ListTransactionsRequest::default();
+    req3.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req3.start_checkpoint = Some(tx_start);
+    req3.end_checkpoint = Some(tx_end);
+    req3.filter = Some(tx_sender(sender));
+    req3.options = Some(query_options_after(2, final_cursor));
+    let response3 = list_transactions_result(&mut client, req3).await;
+    assert!(
+        response3.transactions.is_empty(),
+        "cursor after final transaction should return no items"
+    );
+    assert!(
+        response3.end,
+        "cursor after final transaction should include end frame"
+    );
+    assert_eq!(response3.end_reason, Some(QueryEndReason::CheckpointBound));
+
+    // No overlap between responses.
+    let response1_digests: Vec<_> = response1
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    let response2_digests: Vec<_> = response2
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    for d in &response2_digests {
+        assert!(
+            !response1_digests.contains(d),
+            "response2 should not overlap with response1"
+        );
+    }
+
+    // Reverse options reads descending of the same bounded result set.
+    let mut reverse_req = ListTransactionsRequest::default();
+    reverse_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    reverse_req.start_checkpoint = Some(tx_start);
+    reverse_req.end_checkpoint = Some(tx_end);
+    reverse_req.filter = Some(tx_sender(sender));
+    reverse_req.options = Some(query_options_descending(2));
+    let reverse1 = list_transactions_result(&mut client, reverse_req).await;
+    assert_eq!(reverse1.transactions.len(), 2, "reverse response size");
+    assert_item_limit_end(reverse1.end, reverse1.end_reason);
+    assert!(
+        reverse1.end,
+        "descending transaction request must complete without Internal when the exclusive tx_end row is absent"
+    );
+    assert_transaction_cursors(&reverse1);
+    let cursor = transaction_end_cursor(
+        &reverse1,
+        "first reverse response should have an end cursor",
+    );
+    let mut reverse_req2 = ListTransactionsRequest::default();
+    reverse_req2.read_mask = Some(FieldMask::from_paths(["digest"]));
+    reverse_req2.start_checkpoint = Some(tx_start);
+    reverse_req2.end_checkpoint = Some(tx_end);
+    reverse_req2.filter = Some(tx_sender(sender));
+    reverse_req2.options = Some(query_options_descending_before(2, cursor));
+    let reverse2 = list_transactions_result(&mut client, reverse_req2).await;
+    assert_eq!(
+        reverse2.transactions.len(),
+        1,
+        "final reverse response should have 1 item"
+    );
+    assert!(
+        reverse2.end,
+        "short final reverse transaction response should include end frame"
+    );
+    assert_transaction_cursors(&reverse2);
+    let reverse1_digests: Vec<_> = reverse1
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    let reverse2_digests: Vec<_> = reverse2
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    for d in &reverse2_digests {
+        assert!(
+            !reverse1_digests.contains(d),
+            "second reverse response should not overlap with response1"
+        );
+    }
+
+    let mut exact_req = ListTransactionsRequest::default();
+    exact_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    exact_req.start_checkpoint = Some(tx_start);
+    exact_req.end_checkpoint = Some(tx_end);
+    exact_req.filter = Some(tx_sender(sender));
+    exact_req.options = Some(query_options(3));
+    let exact_result = list_transactions_result(&mut client, exact_req).await;
+    assert_eq!(exact_result.transactions.len(), 3, "exact response size");
+    assert_item_limit_end(exact_result.end, exact_result.end_reason);
+    assert_item_limit_fused(exact_result.terminal_frame, &exact_result.frames);
+    let exact_first_cursor = first_transaction_cursor(
+        &exact_result,
+        "exact transaction response should have a first cursor",
+    );
+    let exact_cursor = last_transaction_cursor(
+        &exact_result,
+        "exact transaction response should have a cursor",
+    );
+
+    let mut bounded_req = ListTransactionsRequest::default();
+    bounded_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    bounded_req.start_checkpoint = Some(tx_start);
+    bounded_req.end_checkpoint = Some(tx_end);
+    bounded_req.filter = Some(tx_sender(sender));
+    bounded_req.options = Some(query_options_between(
+        3,
+        exact_first_cursor.clone(),
+        exact_cursor.clone(),
+    ));
+    let bounded = list_transactions_result(&mut client, bounded_req).await;
+    assert_eq!(
+        bounded.transactions.len(),
+        1,
+        "exclusive transaction cursor bounds should leave the middle item"
+    );
+    assert_eq!(bounded.end_reason, Some(QueryEndReason::CursorBound));
+
+    let mut bounded_desc_req = ListTransactionsRequest::default();
+    bounded_desc_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    bounded_desc_req.start_checkpoint = Some(tx_start);
+    bounded_desc_req.end_checkpoint = Some(tx_end);
+    bounded_desc_req.filter = Some(tx_sender(sender));
+    bounded_desc_req.options = Some(query_options_between_descending(
+        3,
+        exact_first_cursor,
+        exact_cursor.clone(),
+    ));
+    let bounded_desc = list_transactions_result(&mut client, bounded_desc_req).await;
+    assert_eq!(
+        bounded_desc.transactions.len(),
+        1,
+        "descending exclusive transaction cursor bounds should leave the middle item"
+    );
+    assert_eq!(bounded_desc.end_reason, Some(QueryEndReason::CursorBound));
+
+    let mut exact_next_req = ListTransactionsRequest::default();
+    exact_next_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    exact_next_req.start_checkpoint = Some(tx_start);
+    exact_next_req.end_checkpoint = Some(tx_end);
+    exact_next_req.filter = Some(tx_sender(sender));
+    exact_next_req.options = Some(query_options_after(3, exact_cursor));
+    let exact_next_result = list_transactions_result(&mut client, exact_next_req).await;
+    assert!(
+        exact_next_result.transactions.is_empty(),
+        "response after exact-size transaction result should be empty"
+    );
+    assert!(
+        exact_next_result.end,
+        "response after exact-size transaction result should include end frame"
+    );
+    assert_eq!(
+        exact_next_result.end_reason,
+        Some(QueryEndReason::CheckpointBound)
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_unfiltered() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg_id, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    let (event_tx_digest, _) = call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg_id,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.options = Some(query_options(100));
+
+    let resp = list_events_result(&mut client, req).await;
+    assert_event_cursors(&resp);
+
+    // Should find at least our emitted event.
+    assert!(!resp.events.is_empty(), "expected at least 1 event");
+
+    let found = resp.events.iter().any(|e| {
+        e.event
+            .as_ref()
+            .and_then(|ev| ev.transaction_digest.as_ref())
+            .is_some_and(|d| d == &event_tx_digest.to_string())
+    });
+    assert!(found, "expected to find event from tx {event_tx_digest}");
+
+    // Verify event type contains our module.
+    let our_event = resp
+        .events
+        .iter()
+        .find(|e| {
+            e.event
+                .as_ref()
+                .and_then(|ev| ev.transaction_digest.as_ref())
+                .is_some_and(|d| d == &event_tx_digest.to_string())
+        })
+        .unwrap();
+    let event_type = our_event
+        .event
+        .as_ref()
+        .and_then(|e| e.event_type.as_ref())
+        .expect("event_type should be present");
+    assert!(
+        event_type.contains("emit_test_event::TestEvent"),
+        "unexpected event type: {event_type}"
+    );
+}
+
+/// Archival wire-level `SCAN_LIMIT` smoke for the typed bitmap-scan terminal
+/// channel. The unfiltered `list_events` path scans `tx_seq_digest` rows bounded
+/// by `endpoint.max_limit_items` (the *source* limit, NOT the request's
+/// `limit_items`); when the event-derived tx range exceeds that bound,
+/// `clamp_tx_scan_range` flags `scan_limited`, and the handler returns a folded
+/// final frame carrying both the frontier watermark and
+/// `QueryEndReason::ScanLimit` with a resume cursor. This
+/// is the one full-stack path that drives a real `ScanLimit` terminal end to end
+/// (a genuine multi-leaf bitmap-bucket `SCAN_LIMIT` is unreachable in a feasible
+/// dataset; the merge/collapse path is covered by evaluator unit tests).
+#[tokio::test]
+async fn test_list_events_unfiltered_row_cap_scan_limit_resumes() {
+    // Cap the unfiltered tx-row scan at 2 rows per request, well below the
+    // seeded tx span, so the scan truncates and reports SCAN_LIMIT.
+    let kv_rpc_config = KvRpcConfig {
+        ledger_history: Some(LedgerHistoryConfig {
+            list_events: Some(LedgerHistoryMethodConfig {
+                max_limit_items: Some(2),
+                default_limit_items: Some(2),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut cluster = list_api_cluster_with_config(kv_rpc_config).await;
+
+    // Seed a tx span wider than the two-row source cap, with real events
+    // interleaved among event-less transfers. This makes resume coverage
+    // non-vacuous: every event must survive pagination exactly once.
+    let (sender, kp, mut gas) = cluster.funded_account(30 * DEFAULT_GAS_BUDGET).unwrap();
+    gas = transfer_in_own_checkpoint(&mut cluster, sender, &kp, gas).await;
+    let (pkg_id, next_gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    gas = next_gas;
+    cluster.create_checkpoint().await;
+    let mut emitted_digests = Vec::new();
+    for _ in 0..3 {
+        gas = transfer_in_own_checkpoint(&mut cluster, sender, &kp, gas).await;
+        let (digest, next_gas) = call_move(
+            &mut cluster,
+            sender,
+            &kp,
+            gas,
+            pkg_id,
+            "emit_test_event",
+            "emit_test_event",
+        )
+        .await;
+        emitted_digests.push(digest.to_string());
+        gas = next_gas;
+        cluster.create_checkpoint().await;
+    }
+    let _ = transfer_in_own_checkpoint(&mut cluster, sender, &kp, gas).await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // First page: an unfiltered scan over the whole indexed range. The request
+    // limit is large; the SCAN_LIMIT is driven by the source row cap, not it.
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.options = Some(query_options(100));
+    let first = list_events_result(&mut client, req).await;
+    assert_eq!(
+        first.end_reason,
+        Some(QueryEndReason::ScanLimit),
+        "unfiltered scan past the row cap must terminate with SCAN_LIMIT"
+    );
+    assert_standalone_terminal(first.terminal_frame);
+    assert_event_cursors(&first);
+    let resume = first
+        .end_cursor
+        .clone()
+        .expect("SCAN_LIMIT page must carry a resume cursor");
+    let mut ascending_events: Vec<_> = first
+        .events
+        .iter()
+        .map(|response| {
+            (
+                event_transaction_digest(response).expect("event digest populated"),
+                event_index_of(response).expect("event index populated"),
+            )
+        })
+        .collect();
+
+    // Resume from the frontier cursor: the scan must advance (no replay) and
+    // terminate on a reached-end reason once the remaining rows fit the cap.
+    let mut reason = QueryEndReason::ScanLimit;
+    let mut cursor = Some(resume);
+    let mut iterations = 0;
+    while reason == QueryEndReason::ScanLimit {
+        iterations += 1;
+        assert!(iterations <= 16, "resume loop did not terminate");
+        let mut req = ListEventsRequest::default();
+        req.read_mask = Some(event_type_and_position_mask());
+        req.options = Some(query_options_maybe_after(100, cursor.clone()));
+        let page = list_events_result(&mut client, req).await;
+        ascending_events.extend(page.events.iter().map(|response| {
+            (
+                event_transaction_digest(response).expect("event digest populated"),
+                event_index_of(response).expect("event index populated"),
+            )
+        }));
+        reason = page.end_reason.expect("each page carries an end reason");
+        match reason {
+            QueryEndReason::ScanLimit => {
+                let next = page
+                    .end_cursor
+                    .clone()
+                    .expect("SCAN_LIMIT page must carry a resume cursor");
+                assert_ne!(
+                    Some(&next),
+                    cursor.as_ref(),
+                    "resume cursor must strictly advance, not replay"
+                );
+                cursor = Some(next);
+            }
+            QueryEndReason::LedgerTip | QueryEndReason::CheckpointBound => break,
+            other => panic!("unexpected resume end_reason: {other:?}"),
+        }
+    }
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.options = Some(query_options_descending(100));
+    let first = list_events_result(&mut client, req).await;
+    assert_eq!(first.end_reason, Some(QueryEndReason::ScanLimit));
+    assert_standalone_terminal(first.terminal_frame);
+    assert_event_cursors(&first);
+    let mut descending_events: Vec<_> = first
+        .events
+        .iter()
+        .map(|response| {
+            (
+                event_transaction_digest(response).expect("event digest populated"),
+                event_index_of(response).expect("event index populated"),
+            )
+        })
+        .collect();
+
+    let mut reason = QueryEndReason::ScanLimit;
+    let mut cursor = first.end_cursor.clone();
+    let mut iterations = 0;
+    while reason == QueryEndReason::ScanLimit {
+        iterations += 1;
+        assert!(iterations <= 16, "descending resume loop did not terminate");
+        let mut req = ListEventsRequest::default();
+        req.read_mask = Some(event_type_and_position_mask());
+        req.options = Some(query_options_descending_maybe_before(100, cursor.clone()));
+        let page = list_events_result(&mut client, req).await;
+        assert_event_cursors(&page);
+        descending_events.extend(page.events.iter().map(|response| {
+            (
+                event_transaction_digest(response).expect("event digest populated"),
+                event_index_of(response).expect("event index populated"),
+            )
+        }));
+        reason = page
+            .end_reason
+            .expect("each descending page carries an end reason");
+        match reason {
+            QueryEndReason::ScanLimit => {
+                assert_standalone_terminal(page.terminal_frame);
+                let next = page
+                    .end_cursor
+                    .clone()
+                    .expect("descending SCAN_LIMIT page carries a resume cursor");
+                assert_ne!(
+                    Some(&next),
+                    cursor.as_ref(),
+                    "descending resume cursor must strictly retreat, not replay"
+                );
+                cursor = Some(next);
+            }
+            QueryEndReason::LedgerTip | QueryEndReason::CheckpointBound => break,
+            other => panic!("unexpected descending resume end_reason: {other:?}"),
+        }
+    }
+
+    let ascending_unique: std::collections::HashSet<_> = ascending_events.iter().cloned().collect();
+    assert_eq!(
+        ascending_unique.len(),
+        ascending_events.len(),
+        "ascending ScanLimit resume must not duplicate events"
+    );
+    let descending_unique: std::collections::HashSet<_> =
+        descending_events.iter().cloned().collect();
+    assert_eq!(
+        descending_unique.len(),
+        descending_events.len(),
+        "descending ScanLimit resume must not duplicate events"
+    );
+    descending_events.reverse();
+    assert_eq!(
+        descending_events, ascending_events,
+        "ascending and descending ScanLimit drains must cover the same events"
+    );
+    for digest in emitted_digests {
+        assert_eq!(
+            ascending_events
+                .iter()
+                .filter(|(event_digest, _)| event_digest == &digest)
+                .count(),
+            1,
+            "emitted event transaction {digest} must appear exactly once"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_events_with_emit_module_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg_id, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg_id,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Filter by emit_module matching our package.
+    let mut emit_mod = rtd_rpc::proto::rtd::rpc::v2::EmitModuleFilter::default();
+    emit_mod.module = Some(format!(
+        "{}::emit_test_event",
+        pkg_id.to_canonical_string(true)
+    ));
+    let filter = ev_filter(vec![ev_include(event_literal::Predicate::EmitModule(
+        emit_mod,
+    ))]);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_events_result(&mut client, req).await;
+    assert_event_cursors(&resp);
+    assert!(
+        !resp.events.is_empty(),
+        "expected at least 1 event matching emit_module filter"
+    );
+
+    for event_result in &resp.events {
+        let event_type = event_result
+            .event
+            .as_ref()
+            .and_then(|e| e.event_type.as_ref())
+            .expect("event_type should be present");
+        assert!(
+            event_type.contains("emit_test_event"),
+            "all events should be from emit_test_event module, got: {event_type}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_events_query_options() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg_id, mut gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+
+    // Emit events from 3 separate transactions.
+    for _ in 0..3 {
+        let (_, new_gas) = call_move(
+            &mut cluster,
+            sender,
+            &kp,
+            gas,
+            pkg_id,
+            "emit_test_event",
+            "emit_test_event",
+        )
+        .await;
+        gas = new_gas;
+    }
+
+    let event_checkpoint = cluster.create_checkpoint().await;
+    let event_start = event_checkpoint.sequence_number;
+    let event_end = event_start + 1;
+    // `event_end` is exclusive and intentionally has no transaction row. Wait for
+    // the last in-range checkpoint while preserving that missing-boundary shape.
+    wait_for_kv_checkpoint(&cluster, event_start).await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Use emit_module filter to find only events from our package.
+    let mut emit_mod = rtd_rpc::proto::rtd::rpc::v2::EmitModuleFilter::default();
+    emit_mod.module = Some(pkg_id.to_canonical_string(true));
+    let ev_filter = ev_filter(vec![ev_include(event_literal::Predicate::EmitModule(
+        emit_mod,
+    ))]);
+
+    // Paginate with limit_items=1.
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.start_checkpoint = Some(event_start);
+    req.end_checkpoint = Some(event_end);
+    req.filter = Some(ev_filter.clone());
+    req.options = Some(query_options(1));
+
+    let response1 = list_events_result(&mut client, req).await;
+    assert_eq!(
+        response1.events.len(),
+        1,
+        "first response should have 1 event"
+    );
+    assert_item_limit_end(response1.end, response1.end_reason);
+    assert_event_cursors(&response1);
+    assert_item_limit_fused(response1.terminal_frame, &response1.frames);
+    let cursor = event_end_cursor(&response1, "first response should have an end cursor");
+
+    let mut req2 = ListEventsRequest::default();
+    req2.read_mask = Some(event_type_and_position_mask());
+    req2.start_checkpoint = Some(event_start);
+    req2.end_checkpoint = Some(event_end);
+    req2.filter = Some(ev_filter.clone());
+    req2.options = Some(query_options_after(1, cursor));
+
+    let response2 = list_events_result(&mut client, req2).await;
+    assert_eq!(
+        response2.events.len(),
+        1,
+        "second response should have 1 event"
+    );
+    assert_event_cursors(&response2);
+
+    // Events on response2 should be different from response1.
+    let response1_cursor = response1.events[0]
+        .watermark
+        .as_ref()
+        .and_then(|w| w.cursor.as_ref());
+    let response2_cursor = response2.events[0]
+        .watermark
+        .as_ref()
+        .and_then(|w| w.cursor.as_ref());
+    assert_ne!(
+        response1_cursor, response2_cursor,
+        "responses should have different cursors"
+    );
+
+    let mut reverse_req = ListEventsRequest::default();
+    reverse_req.read_mask = Some(event_type_and_position_mask());
+    reverse_req.start_checkpoint = Some(event_start);
+    reverse_req.end_checkpoint = Some(event_end);
+    reverse_req.filter = Some(ev_filter.clone());
+    reverse_req.options = Some(query_options_descending(1));
+    let reverse1 = list_events_result(&mut client, reverse_req).await;
+    assert_eq!(reverse1.events.len(), 1, "first reverse response size");
+    assert_item_limit_end(reverse1.end, reverse1.end_reason);
+    assert!(
+        reverse1.end,
+        "descending event request must complete without Internal when the exclusive event_end row is absent"
+    );
+    assert_event_cursors(&reverse1);
+    let cursor = event_end_cursor(
+        &reverse1,
+        "first reverse response should have an end cursor",
+    );
+    let mut reverse_req2 = ListEventsRequest::default();
+    reverse_req2.read_mask = Some(event_type_and_position_mask());
+    reverse_req2.start_checkpoint = Some(event_start);
+    reverse_req2.end_checkpoint = Some(event_end);
+    reverse_req2.filter = Some(ev_filter.clone());
+    reverse_req2.options = Some(query_options_descending_before(1, cursor));
+    let reverse2 = list_events_result(&mut client, reverse_req2).await;
+    assert_eq!(reverse2.events.len(), 1, "second reverse response size");
+    assert_event_cursors(&reverse2);
+
+    assert_ne!(
+        event_transaction_digest(&reverse1.events[0]),
+        event_transaction_digest(&reverse2.events[0]),
+        "reverse responses should move backward"
+    );
+
+    let mut exact_req = ListEventsRequest::default();
+    exact_req.read_mask = Some(event_type_and_position_mask());
+    exact_req.start_checkpoint = Some(event_start);
+    exact_req.end_checkpoint = Some(event_end);
+    exact_req.filter = Some(ev_filter.clone());
+    exact_req.options = Some(query_options(3));
+    let exact_result = list_events_result(&mut client, exact_req).await;
+    assert_eq!(exact_result.events.len(), 3, "exact event response size");
+    assert_item_limit_end(exact_result.end, exact_result.end_reason);
+    assert_item_limit_fused(exact_result.terminal_frame, &exact_result.frames);
+    let exact_first_cursor = first_event_cursor(
+        &exact_result,
+        "exact event response should have a first cursor",
+    );
+    let exact_cursor =
+        last_event_cursor(&exact_result, "exact event response should have a cursor");
+
+    let mut bounded_req = ListEventsRequest::default();
+    bounded_req.read_mask = Some(event_type_and_position_mask());
+    bounded_req.start_checkpoint = Some(event_start);
+    bounded_req.end_checkpoint = Some(event_end);
+    bounded_req.filter = Some(ev_filter.clone());
+    bounded_req.options = Some(query_options_between(
+        3,
+        exact_first_cursor.clone(),
+        exact_cursor.clone(),
+    ));
+    let bounded = list_events_result(&mut client, bounded_req).await;
+    assert_eq!(
+        bounded.events.len(),
+        1,
+        "exclusive event cursor bounds should leave the middle event"
+    );
+    assert_eq!(bounded.end_reason, Some(QueryEndReason::CursorBound));
+    assert_standalone_terminal(bounded.terminal_frame);
+
+    let mut bounded_desc_req = ListEventsRequest::default();
+    bounded_desc_req.read_mask = Some(event_type_and_position_mask());
+    bounded_desc_req.start_checkpoint = Some(event_start);
+    bounded_desc_req.end_checkpoint = Some(event_end);
+    bounded_desc_req.filter = Some(ev_filter.clone());
+    bounded_desc_req.options = Some(query_options_between_descending(
+        3,
+        exact_first_cursor,
+        exact_cursor.clone(),
+    ));
+    let bounded_desc = list_events_result(&mut client, bounded_desc_req).await;
+    assert_eq!(
+        bounded_desc.events.len(),
+        1,
+        "descending exclusive event cursor bounds should leave the middle event"
+    );
+    assert_eq!(bounded_desc.end_reason, Some(QueryEndReason::CursorBound));
+    assert_standalone_terminal(bounded_desc.terminal_frame);
+    assert_event_cursors(&bounded_desc);
+
+    let mut exact_next_req = ListEventsRequest::default();
+    exact_next_req.read_mask = Some(event_type_and_position_mask());
+    exact_next_req.start_checkpoint = Some(event_start);
+    exact_next_req.end_checkpoint = Some(event_end);
+    exact_next_req.filter = Some(ev_filter);
+    exact_next_req.options = Some(query_options_after(3, exact_cursor));
+    let exact_next_result = list_events_result(&mut client, exact_next_req).await;
+    assert!(
+        exact_next_result.events.is_empty(),
+        "response after exact-size event result should be empty"
+    );
+    assert!(
+        exact_next_result.end,
+        "response after exact-size event result should include end frame"
+    );
+    assert_eq!(
+        exact_next_result.end_reason,
+        Some(QueryEndReason::CheckpointBound)
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_or_prefix_and_event_predicates() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_c, kp_c, gas_c) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        generic_event_pkg_path(),
+    )
+    .await;
+    let (digest_a, _) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "generic_event",
+        "emit_u64",
+    )
+    .await;
+    let (digest_b, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "generic_event",
+        "emit_address",
+    )
+    .await;
+
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder.transfer_rtd(sender_c, None);
+    let data = TransactionData::new_programmable(
+        sender_c,
+        vec![gas_c],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx_c, _) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![&kp_c]))
+        .expect("C transfer failed");
+    let digest_c = *fx_c.transaction_digest();
+
+    cluster.create_checkpoint().await;
+
+    let client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let fetch = |filter: TransactionFilter| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListTransactionsRequest::default();
+            req.read_mask = Some(FieldMask::from_paths(["digest"]));
+            req.filter = Some(filter);
+            req.options = Some(query_options(100));
+            list_transactions_result(&mut c, req).await
+        }
+    };
+    let digest_set = |result: TransactionsResult| {
+        result
+            .transactions
+            .iter()
+            .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+            .collect::<std::collections::HashSet<_>>()
+    };
+
+    let resp = fetch(tx_or(vec![
+        vec![tx_sender_literal(sender_a)],
+        vec![tx_sender_literal(sender_b)],
+    ]))
+    .await;
+    let digests = digest_set(resp);
+    assert!(
+        digests.contains(&digest_a.to_string()) && digests.contains(&digest_b.to_string()),
+        "sender OR should include A and B calls, got {digests:?}"
+    );
+    assert!(
+        !digests.contains(&digest_c.to_string()),
+        "sender OR should not include C transfer"
+    );
+
+    let pkg_path = pkg.to_canonical_string(true);
+    let module_path = format!("{pkg_path}::generic_event");
+    let emit_u64_path = format!("{module_path}::emit_u64");
+
+    for filter in [tx_move_call(&pkg_path), tx_move_call(&module_path)] {
+        let digests = digest_set(fetch(filter).await);
+        assert!(
+            digests.contains(&digest_a.to_string()) && digests.contains(&digest_b.to_string()),
+            "package/module move-call prefixes should match both functions, got {digests:?}"
+        );
+        assert!(
+            !digests.contains(&digest_c.to_string()),
+            "move-call prefix should not include C transfer"
+        );
+    }
+
+    let digests = digest_set(fetch(tx_move_call(&emit_u64_path)).await);
+    assert!(
+        digests.contains(&digest_a.to_string()) && !digests.contains(&digest_b.to_string()),
+        "function-level move-call filter should match only emit_u64, got {digests:?}"
+    );
+
+    for filter in [tx_emit_module(&pkg_path), tx_emit_module(&module_path)] {
+        let digests = digest_set(fetch(filter).await);
+        assert!(
+            digests.contains(&digest_a.to_string()) && digests.contains(&digest_b.to_string()),
+            "tx emit_module package/module prefixes should match event-emitting txs, got {digests:?}"
+        );
+        assert!(
+            !digests.contains(&digest_c.to_string()),
+            "tx emit_module filter should not include C transfer"
+        );
+    }
+
+    let u64_event_type = format!("{module_path}::GenericEvent<u64>");
+    let digests = digest_set(fetch(tx_event_type(&u64_event_type)).await);
+    assert!(
+        digests.contains(&digest_a.to_string()) && !digests.contains(&digest_b.to_string()),
+        "tx event_type filter should match only GenericEvent<u64>, got {digests:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_sender_or_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_c, kp_c, gas_c) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    let (digest_a, _) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    let (digest_b, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    let (digest_c, _) = call_move(
+        &mut cluster,
+        sender_c,
+        &kp_c,
+        gas_c,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let fetch = |filter: EventFilter| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.filter = Some(filter);
+            req.options = Some(query_options(100));
+            list_events_result(&mut c, req).await
+        }
+    };
+    let digest_set = |result: EventsResult| {
+        result
+            .events
+            .iter()
+            .filter_map(event_transaction_digest)
+            .collect::<std::collections::HashSet<_>>()
+    };
+
+    let resp = fetch(ev_or(vec![
+        vec![ev_sender_literal(sender_a)],
+        vec![ev_sender_literal(sender_b)],
+    ]))
+    .await;
+    let digests = digest_set(resp);
+    assert!(
+        digests.contains(&digest_a.to_string()) && digests.contains(&digest_b.to_string()),
+        "event sender OR should include A and B events, got {digests:?}"
+    );
+    assert!(
+        !digests.contains(&digest_c.to_string()),
+        "event sender OR should not include C event"
+    );
+}
+
+#[tokio::test]
+async fn test_list_event_stream_head_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas) = publish_package(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        authenticated_event_pkg_path(),
+    )
+    .await;
+    let (digest, _) = call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg,
+        "authenticated_event",
+        "emit_both",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(ev_event_stream_head(pkg));
+    req.options = Some(query_options(100));
+    let resp = list_events_result(&mut client, req).await;
+
+    assert_eq!(
+        resp.events.len(),
+        1,
+        "event_stream_head should return only the authenticated event"
+    );
+    let event = &resp.events[0];
+    let digest_string = digest.to_string();
+    assert_eq!(
+        event_transaction_digest(event).as_deref(),
+        Some(digest_string.as_str())
+    );
+    let event_type = event
+        .event
+        .as_ref()
+        .and_then(|event| event.event_type.as_deref())
+        .expect("event_type should be present");
+    assert!(
+        event_type.contains("authenticated_event::AuthenticatedEvent"),
+        "unexpected authenticated event type: {event_type}"
+    );
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_event_stream_head(pkg));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    let digests: std::collections::HashSet<_> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    assert!(
+        digests.contains(&digest.to_string()),
+        "tx event_stream_head should include authenticated event tx, got {digests:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_combinator_and() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    // (a) sender A + matching move call — should be the only match.
+    let (digest_a_call, gas_a) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    // (b) sender A + transfer (no move call).
+    let (digest_a_transfer, _) = transfer_self(&mut cluster, sender_a, &kp_a, gas_a).await;
+
+    // (c) sender B + matching move call.
+    let (digest_b_call, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let move_call_path = format!(
+        "{}::emit_test_event::emit_test_event",
+        pkg.to_canonical_string(true)
+    );
+    let filter = tx_and(vec![tx_sender(sender_a), tx_move_call(&move_call_path)]);
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_transactions_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+
+    assert!(
+        digests.contains(&digest_a_call.to_string()),
+        "expected A+call to match"
+    );
+    assert!(
+        !digests.contains(&digest_a_transfer.to_string()),
+        "A's transfer should not match (no move call)"
+    );
+    assert!(
+        !digests.contains(&digest_b_call.to_string()),
+        "B's call should not match (wrong sender)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_combinator_or_not() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (digest_a, _) = transfer_self(&mut cluster, sender_a, &kp_a, gas_a).await;
+    let (digest_b, _) = transfer_self(&mut cluster, sender_b, &kp_b, gas_b).await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Anchored DNF: sender A and not sender B.
+    let filter = tx_filter(vec![
+        tx_sender_literal(sender_a),
+        tx_not_sender_literal(sender_b),
+    ]);
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_transactions_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+
+    assert!(
+        digests.contains(&digest_a.to_string()),
+        "A's tx should match"
+    );
+    assert!(
+        !digests.contains(&digest_b.to_string()),
+        "B's tx should be excluded by Not(Sender(B))"
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_unanchored_negation() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (digest_a, _) = transfer_self(&mut cluster, sender_a, &kp_a, gas_a).await;
+    let (digest_b, _) = transfer_self(&mut cluster, sender_b, &kp_b, gas_b).await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Exclude-only term: `NOT sender = B` anchors on the scan-time-synthesized
+    // TxUniverse leaf and returns the dense complement — A's tx plus every
+    // other tx in range (funding transfers, genesis).
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_not_sender_only_filter(sender_b));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    assert!(
+        digests.contains(&digest_a.to_string()),
+        "A's tx should match unanchored Not(Sender=B)"
+    );
+    assert!(
+        !digests.contains(&digest_b.to_string()),
+        "B's tx should be excluded by unanchored Not(Sender=B)"
+    );
+    assert!(
+        digests.len() >= 2,
+        "complement includes funding/genesis transactions"
+    );
+
+    // Symmetric case: `NOT sender = A` returns B's tx.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_not_sender_only_filter(sender_a));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    assert!(
+        digests.contains(&digest_b.to_string()),
+        "B's tx should match unanchored Not(Sender=A)"
+    );
+    assert!(
+        !digests.contains(&digest_a.to_string()),
+        "A's tx should be excluded by unanchored Not(Sender=A)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_transactions_recipient_and_affected_object() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, _kp_b, _gas_b) = cluster.funded_account(DEFAULT_GAS_BUDGET).unwrap();
+
+    // A transfers a split coin to B.
+    let mut builder = ProgrammableTransactionBuilder::new();
+    builder.transfer_rtd(sender_b, Some(1_000_000));
+    let data = TransactionData::new_programmable(
+        sender_a,
+        vec![gas_a],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx, _) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![&kp_a]))
+        .expect("transfer failed");
+    let digest = *fx.transaction_digest();
+
+    // The freshly created coin going to B.
+    let transferred_coin_id = fx
+        .created()
+        .into_iter()
+        .find_map(|((id, _, _), owner)| {
+            matches!(owner, Owner::AddressOwner(addr) if addr == sender_b).then_some(id)
+        })
+        .expect("transferred coin");
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // AffectedAddress(B) should include the transfer.
+    let mut r = AffectedAddressFilter::default();
+    r.address = Some(sender_b.to_string());
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_filter(vec![tx_include(
+        transaction_literal::Predicate::AffectedAddress(r),
+    )]));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(
+        resp.transactions.iter().any(|t| t
+            .transaction
+            .as_ref()
+            .and_then(|tx| tx.digest.as_deref())
+            == Some(&digest.to_string())),
+        "recipient filter should include the transfer tx"
+    );
+
+    // AffectedObject(coin_id) should include the transfer.
+    let mut ao = AffectedObjectFilter::default();
+    ao.object_id = Some(transferred_coin_id.to_canonical_string(true));
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_filter(vec![tx_include(
+        transaction_literal::Predicate::AffectedObject(ao),
+    )]));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(
+        resp.transactions.iter().any(|t| t
+            .transaction
+            .as_ref()
+            .and_then(|tx| tx.digest.as_deref())
+            == Some(&digest.to_string())),
+        "affected_object filter should include the transfer tx"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_event_type_cascading_and_generics() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, generic_event_pkg_path()).await;
+
+    let (digest_u64, gas) = call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg,
+        "generic_event",
+        "emit_u64",
+    )
+    .await;
+    let (digest_addr, _) = call_move(
+        &mut cluster,
+        sender,
+        &kp,
+        gas,
+        pkg,
+        "generic_event",
+        "emit_address",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let pkg_hex = pkg.to_canonical_string(true);
+
+    let fetch = |filter: EventFilter| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.filter = Some(filter);
+            req.options = Some(query_options(100));
+            list_events_result(&mut c, req).await
+        }
+    };
+
+    // Name level (no generics) — matches both instantiations.
+    let name = format!("{pkg_hex}::generic_event::GenericEvent");
+    let resp = fetch(ev_event_type(&name)).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+    assert!(
+        digests.contains(&digest_u64.to_string()) && digests.contains(&digest_addr.to_string()),
+        "name-level filter should match both events, got {digests:?}"
+    );
+
+    // Fully instantiated — only the u64 variant.
+    let u64_type = format!("{pkg_hex}::generic_event::GenericEvent<u64>");
+    let resp = fetch(ev_event_type(&u64_type)).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+    assert!(
+        digests.contains(&digest_u64.to_string()) && !digests.contains(&digest_addr.to_string()),
+        "<u64> filter should match only the u64 event, got {digests:?}"
+    );
+
+    // Module-level cascading — matches both.
+    let module = format!("{pkg_hex}::generic_event");
+    let resp = fetch(ev_event_type(&module)).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+    assert!(
+        digests.contains(&digest_u64.to_string()) && digests.contains(&digest_addr.to_string()),
+        "module-level filter should match both events, got {digests:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_combinator_and() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    let (digest_a, _) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    let (digest_b, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let module = format!("{}::emit_test_event", pkg.to_canonical_string(true));
+    let filter = ev_and(vec![ev_sender(sender_a), ev_emit_module(&module)]);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_events_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+
+    assert!(
+        digests.contains(&digest_a.to_string()),
+        "A's event should match"
+    );
+    assert!(
+        !digests.contains(&digest_b.to_string()),
+        "B's event should be excluded by And(Sender=A, …)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_combinator_or_not() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    let (digest_a, _) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    let (digest_b, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Anchored DNF: sender A and not sender B — exercises a negated EventLiteral.
+    let filter = ev_filter(vec![
+        ev_sender_literal(sender_a),
+        ev_not_sender_literal(sender_b),
+    ]);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_events_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+
+    assert!(
+        digests.contains(&digest_a.to_string()),
+        "A's event should match"
+    );
+    assert!(
+        !digests.contains(&digest_b.to_string()),
+        "B's event should be excluded by Not(Sender=B)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_unanchored_negation() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    let (digest_a, _) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    let (digest_b, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Exclude-only term: `NOT sender = B` anchors on the stored EventExtant
+    // marker and returns every event whose sender is not B.
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(ev_not_sender_only_filter(sender_b));
+    req.options = Some(query_options(100));
+    let resp = list_events_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+    assert!(
+        digests.contains(&digest_a.to_string()),
+        "A's event should match unanchored Not(Sender=B)"
+    );
+    assert!(
+        !digests.contains(&digest_b.to_string()),
+        "B's event should be excluded by unanchored Not(Sender=B)"
+    );
+
+    // Symmetric case: `NOT sender = A` returns B's event.
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(ev_not_sender_only_filter(sender_a));
+    req.options = Some(query_options(100));
+    let resp = list_events_result(&mut client, req).await;
+    let digests: Vec<String> = resp
+        .events
+        .iter()
+        .filter_map(event_transaction_digest)
+        .collect();
+    assert!(
+        digests.contains(&digest_b.to_string()),
+        "B's event should match unanchored Not(Sender=A)"
+    );
+    assert!(
+        !digests.contains(&digest_a.to_string()),
+        "A's event should be excluded by unanchored Not(Sender=A)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_query_options_multi_event_tx() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    cluster.create_checkpoint().await;
+
+    // tx1: emit_many(5)
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let arg = builder.pure(5u64).unwrap();
+    builder.programmable_move_call(
+        pkg,
+        ident_str!("emit_test_event").to_owned(),
+        ident_str!("emit_many").to_owned(),
+        vec![],
+        vec![arg],
+    );
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx1, err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![&kp]))
+        .expect("emit_many(5) failed");
+    assert!(err.is_none(), "emit_many(5): {err:?}");
+    let gas = fx1
+        .mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated");
+
+    // tx2: emit_many(3)
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let arg = builder.pure(3u64).unwrap();
+    builder.programmable_move_call(
+        pkg,
+        ident_str!("emit_test_event").to_owned(),
+        ident_str!("emit_many").to_owned(),
+        vec![],
+        vec![arg],
+    );
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (_fx2, err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![&kp]))
+        .expect("emit_many(3) failed");
+    assert!(err.is_none(), "emit_many(3): {err:?}");
+
+    let emit_checkpoint = cluster.create_checkpoint().await;
+    let emit_start = emit_checkpoint.sequence_number;
+    let emit_end = emit_start + 1;
+
+    let client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let module = format!("{}::emit_test_event", pkg.to_canonical_string(true));
+
+    let response = |filter: EventFilter, cursor: Option<prost::bytes::Bytes>| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.start_checkpoint = Some(emit_start);
+            req.end_checkpoint = Some(emit_end);
+            req.filter = Some(filter);
+            req.options = Some(query_options_maybe_after(3, cursor));
+            list_events_result(&mut c, req).await
+        }
+    };
+
+    let f = ev_emit_module(&module);
+    let r1 = response(f.clone(), None).await;
+    assert_eq!(r1.events.len(), 3, "response 1 size");
+    assert_item_limit_end(r1.end, r1.end_reason);
+    assert_event_cursors(&r1);
+    let r1_token = event_end_cursor(&r1, "response 1 should have an end cursor");
+
+    let r2 = response(f.clone(), Some(r1_token)).await;
+    assert_eq!(r2.events.len(), 3, "response 2 size");
+    assert_item_limit_end(r2.end, r2.end_reason);
+    assert_event_cursors(&r2);
+    let r2_token = event_end_cursor(&r2, "response 2 should have an end cursor");
+
+    let r3 = response(f, Some(r2_token)).await;
+    assert_eq!(r3.events.len(), 2, "response 3 size");
+    assert!(r3.end, "short response 3 should include end frame");
+    assert_event_cursors(&r3);
+
+    // No duplicates across responses, ordered by cursor.
+    let mut all_cursors: Vec<_> = r1
+        .events
+        .iter()
+        .chain(r2.events.iter())
+        .chain(r3.events.iter())
+        .map(|e| e.watermark.as_ref().and_then(|w| w.cursor.clone()))
+        .collect();
+    let total = all_cursors.len();
+    all_cursors.sort();
+    all_cursors.dedup();
+    assert_eq!(
+        all_cursors.len(),
+        total,
+        "no duplicate cursors across responses"
+    );
+    assert_eq!(total, 8, "8 total events");
+
+    let unfiltered_response = |cursor: Option<prost::bytes::Bytes>| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.start_checkpoint = Some(emit_start);
+            req.end_checkpoint = Some(emit_end);
+            req.options = Some(query_options_maybe_after(3, cursor));
+            list_events_result(&mut c, req).await
+        }
+    };
+
+    let up1 = unfiltered_response(None).await;
+    assert_eq!(up1.events.len(), 3, "unfiltered response 1 size");
+    assert_item_limit_end(up1.end, up1.end_reason);
+    assert_event_cursors(&up1);
+    let up1_token = event_end_cursor(&up1, "unfiltered response 1 should have an end cursor");
+
+    let up2 = unfiltered_response(Some(up1_token)).await;
+    assert_eq!(up2.events.len(), 3, "unfiltered response 2 size");
+    assert_item_limit_end(up2.end, up2.end_reason);
+    assert_event_cursors(&up2);
+    let up2_token = event_end_cursor(&up2, "unfiltered response 2 should have an end cursor");
+
+    let up3 = unfiltered_response(Some(up2_token)).await;
+    assert_eq!(up3.events.len(), 2, "unfiltered response 3 size");
+    assert!(
+        up3.end,
+        "short unfiltered event response should include end frame"
+    );
+    assert_event_cursors(&up3);
+
+    let unfiltered_keys: Vec<_> = up1
+        .events
+        .iter()
+        .chain(up2.events.iter())
+        .chain(up3.events.iter())
+        .map(|e| (event_transaction_digest(e), event_index_of(e)))
+        .collect();
+    assert_eq!(unfiltered_keys.len(), 8, "8 total unfiltered events");
+    let mut deduped = unfiltered_keys.clone();
+    deduped.sort_unstable();
+    deduped.dedup();
+    assert_eq!(
+        deduped.len(),
+        unfiltered_keys.len(),
+        "no unfiltered duplicates"
+    );
+
+    let reverse_response = |filter: EventFilter, cursor: Option<prost::bytes::Bytes>| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.start_checkpoint = Some(emit_start);
+            req.end_checkpoint = Some(emit_end);
+            req.filter = Some(filter);
+            req.options = Some(query_options_descending_maybe_before(3, cursor));
+            list_events_result(&mut c, req).await
+        }
+    };
+
+    let f = ev_emit_module(&module);
+    let rp1 = reverse_response(f.clone(), None).await;
+    assert_eq!(rp1.events.len(), 3, "reverse response 1 size");
+    assert_item_limit_end(rp1.end, rp1.end_reason);
+    assert_event_cursors(&rp1);
+    let rp1_token = event_end_cursor(&rp1, "reverse response 1 should have an end cursor");
+
+    let rp2 = reverse_response(f.clone(), Some(rp1_token)).await;
+    assert_eq!(rp2.events.len(), 3, "reverse response 2 size");
+    assert_item_limit_end(rp2.end, rp2.end_reason);
+    assert_event_cursors(&rp2);
+    let rp2_token = event_end_cursor(&rp2, "reverse response 2 should have an end cursor");
+
+    let rp3 = reverse_response(f, Some(rp2_token)).await;
+    assert_eq!(rp3.events.len(), 2, "reverse response 3 size");
+    assert!(rp3.end, "short reverse response 3 should include end frame");
+    assert_event_cursors(&rp3);
+
+    let reverse_keys: Vec<_> = rp1
+        .events
+        .iter()
+        .chain(rp2.events.iter())
+        .chain(rp3.events.iter())
+        .map(|e| (event_transaction_digest(e), event_index_of(e)))
+        .collect();
+    assert_eq!(reverse_keys.len(), 8, "8 total reverse events");
+    let mut deduped = reverse_keys.clone();
+    deduped.sort_unstable();
+    deduped.dedup();
+    assert_eq!(deduped.len(), reverse_keys.len(), "no reverse duplicates");
+
+    let unfiltered_reverse_response = |cursor: Option<prost::bytes::Bytes>| {
+        let mut c = client.clone();
+        async move {
+            let mut req = ListEventsRequest::default();
+            req.read_mask = Some(event_type_and_position_mask());
+            req.start_checkpoint = Some(emit_start);
+            req.end_checkpoint = Some(emit_end);
+            req.options = Some(query_options_descending_maybe_before(3, cursor));
+            list_events_result(&mut c, req).await
+        }
+    };
+
+    let up1 = unfiltered_reverse_response(None).await;
+    assert_eq!(up1.events.len(), 3, "unfiltered reverse response 1 size");
+    assert_item_limit_end(up1.end, up1.end_reason);
+    assert_event_cursors(&up1);
+    let up1_token = event_end_cursor(
+        &up1,
+        "unfiltered reverse response 1 should have an end cursor",
+    );
+
+    let up2 = unfiltered_reverse_response(Some(up1_token)).await;
+    assert_eq!(up2.events.len(), 3, "unfiltered reverse response 2 size");
+    assert_item_limit_end(up2.end, up2.end_reason);
+    assert_event_cursors(&up2);
+    let up2_token = event_end_cursor(
+        &up2,
+        "unfiltered reverse response 2 should have an end cursor",
+    );
+
+    let up3 = unfiltered_reverse_response(Some(up2_token)).await;
+    assert_eq!(up3.events.len(), 2, "unfiltered reverse response 3 size");
+    assert!(
+        up3.end,
+        "short unfiltered reverse response 3 should include end frame"
+    );
+    assert_event_cursors(&up3);
+
+    let unfiltered_reverse_keys: Vec<_> = up1
+        .events
+        .iter()
+        .chain(up2.events.iter())
+        .chain(up3.events.iter())
+        .map(|e| (event_transaction_digest(e), event_index_of(e)))
+        .collect();
+    assert_eq!(
+        unfiltered_reverse_keys.len(),
+        8,
+        "8 total unfiltered reverse events"
+    );
+    let mut deduped = unfiltered_reverse_keys.clone();
+    deduped.sort_unstable();
+    deduped.dedup();
+    assert_eq!(
+        deduped.len(),
+        unfiltered_reverse_keys.len(),
+        "no unfiltered reverse duplicates"
+    );
+}
+
+#[tokio::test]
+async fn test_list_filter_edge_cases() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // One trivial tx to have something indexed.
+    transfer_self(&mut cluster, sender, &kp, gas).await;
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Checkpoint range beyond what's indexed returns an empty stream.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(9999);
+    req.options = Some(query_options(10));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(resp.transactions.is_empty(), "no txs beyond indexed range");
+    assert!(resp.end, "empty tx range should include end frame");
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_transaction_cursors(&resp);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.start_checkpoint = Some(9999);
+    req.options = Some(query_options(10));
+    let resp = list_events_result(&mut client, req).await;
+    assert!(resp.events.is_empty(), "no events beyond indexed range");
+    assert!(resp.end, "empty event range should include end frame");
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_event_cursors(&resp);
+
+    // A descending window reaching past the tip is out of range: the scan would start below
+    // checkpoints this server has not indexed.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(9999);
+    req.options = Some(query_options_descending(10));
+    let status = client.list_transactions(req).await.expect_err("OutOfRange");
+    assert_above_latest_available(&status, "start_checkpoint", 9999);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.end_checkpoint = Some(9999);
+    req.options = Some(query_options_descending(10));
+    let status = client.list_events(req).await.expect_err("OutOfRange");
+    assert_above_latest_available(&status, "end_checkpoint", 9999);
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.end_checkpoint = Some(9999);
+    req.options = Some(query_options_descending(10));
+    let status = client.list_checkpoints(req).await.expect_err("OutOfRange");
+    assert_above_latest_available(&status, "end_checkpoint", 9999);
+
+    // Filter that matches nothing returns an empty stream.
+    let never_sender: RtdAddress =
+        "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+            .parse()
+            .unwrap();
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_sender(never_sender));
+    req.options = Some(query_options(10));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(resp.transactions.is_empty(), "no-match filter");
+    assert!(resp.end, "no-match tx filter should include end frame");
+    assert_transaction_cursors(&resp);
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(ev_sender(never_sender));
+    req.options = Some(query_options(10));
+    let resp = list_events_result(&mut client, req).await;
+    assert!(resp.events.is_empty(), "no-match event filter");
+    assert!(resp.end, "no-match event filter should include end frame");
+    assert_event_cursors(&resp);
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.filter = Some(tx_sender(never_sender));
+    req.options = Some(query_options(10));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert!(resp.checkpoints.is_empty(), "no-match checkpoint filter");
+    assert!(
+        resp.end,
+        "no-match checkpoint filter should include end frame"
+    );
+    assert_checkpoint_cursors(&resp);
+
+    // Malformed MoveCall path (too many `::` parts) → InvalidArgument.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.filter = Some(tx_move_call("0x1::a::b::c"));
+    req.options = Some(query_options(10));
+    let err = client
+        .list_transactions(req)
+        .await
+        .expect_err("should be InvalidArgument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+    // Malformed EventType (generics without a name) → InvalidArgument.
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.filter = Some(ev_event_type("0x1<u64>"));
+    req.options = Some(query_options(10));
+    let err = client
+        .list_events(req)
+        .await
+        .expect_err("should be InvalidArgument");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.options = Some(query_options(10));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(
+        resp.end,
+        "missing start_checkpoint should default to genesis"
+    );
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.options = Some(query_options(10));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert!(resp.end, "missing end_checkpoint should default to tip");
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(10);
+    req.end_checkpoint = Some(9);
+    req.options = Some(query_options(10));
+    expect_invalid_list_transactions(&mut client, req).await;
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END + 1);
+    req.options = Some(query_options(10));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    let mut bad_options = query_options(10);
+    bad_options.after = Some(prost::bytes::Bytes::from_static(b"short"));
+    req.options = Some(bad_options);
+    expect_invalid_list_transactions(&mut client, req).await;
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    let mut bad_options = query_options(10);
+    bad_options.ordering = Some(99);
+    req.options = Some(bad_options);
+    expect_invalid_list_transactions(&mut client, req).await;
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.filter = Some(TransactionFilter::default());
+    req.options = Some(query_options(10));
+    expect_invalid_list_transactions(&mut client, req).await;
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.filter = Some(EventFilter::default());
+    req.options = Some(query_options(10));
+    expect_invalid_list_events(&mut client, req).await;
+
+    // ListCheckpoints: same validation contract as transactions/events.
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.options = Some(query_options(10));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert!(
+        resp.end,
+        "missing start_checkpoint should default to genesis"
+    );
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.start_checkpoint = Some(10);
+    req.end_checkpoint = Some(9);
+    req.options = Some(query_options(10));
+    expect_invalid_list_checkpoints(&mut client, req).await;
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.start_checkpoint = Some(0);
+    req.end_checkpoint = Some(DEFAULT_CHECKPOINT_RANGE_END);
+    req.filter = Some(TransactionFilter::default());
+    req.options = Some(query_options(10));
+    expect_invalid_list_checkpoints(&mut client, req).await;
+}
+
+/// An `after` cursor past this server's indexed tip comes from a newer view of the ledger, such as
+/// another replica's. An ascending scan resumes where that cursor does, so its page is empty and
+/// ends there with `LedgerTip` and no checkpoint claim, also in a window that starts past the tip.
+/// A `before` cursor at or below that position ends the page at `before` instead, and a window
+/// that ends at the tip ends it with `CheckpointBound`, claiming the window's last checkpoint. A
+/// cursor at the tip is not past it. A descending scan from a cursor past the tip is out of range.
+#[tokio::test]
+async fn test_list_after_cursor_past_the_tip() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    transfer_self(&mut cluster, sender, &kp, gas).await;
+    cluster.create_checkpoint().await;
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // An unbounded ascending scan ends at the tip: the first transaction not yet indexed, and the
+    // checkpoint that will hold it. It claims the last indexed checkpoint.
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.options = Some(query_options(1000));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    let tip = CursorToken::decode(&resp.end_cursor.unwrap()).unwrap();
+    assert_eq!(tip.kind, CursorKind::Boundary);
+    let Position::Transactions {
+        tx_seq: tip_tx,
+        public_position: tip_position,
+    } = tip.position
+    else {
+        panic!("unexpected tip cursor {tip:?}");
+    };
+    let tip_checkpoint = tip_position.checkpoint;
+    let last_indexed = Some(tip_checkpoint - 1);
+    assert_eq!(resp.frames.last().unwrap().1.checkpoint, last_indexed);
+
+    let request = |after: &CursorToken,
+                   before: Option<&CursorToken>,
+                   start_checkpoint: Option<u64>,
+                   end_checkpoint: Option<u64>| {
+        let mut options = query_options(10);
+        options.after = Some(after.encode());
+        options.before = before.map(|before| before.encode());
+        let mut req = ListTransactionsRequest::default();
+        req.read_mask = Some(FieldMask::from_paths(["digest"]));
+        req.start_checkpoint = start_checkpoint;
+        req.end_checkpoint = end_checkpoint;
+        req.options = Some(options);
+        req
+    };
+    // A transaction cursor at `tx_seq`, the transaction at `transaction_index` in `checkpoint`.
+    let tx = |tx_seq, checkpoint, transaction_index| Position::Transactions {
+        tx_seq,
+        public_position: LedgerPoint::transaction(checkpoint, transaction_index),
+    };
+    // Past the tip, `tip_checkpoint` holds two transactions and the next checkpoint the rest.
+    let past_tip = CursorToken::boundary(tx(tip_tx + 3, tip_checkpoint + 1, 1));
+    let crossing = CursorToken::boundary(tx(tip_tx + 2, tip_checkpoint + 1, 0));
+    // Each case: the request, then the page's end cursor, end reason, and checkpoint claim.
+    let cases = [
+        (
+            request(&tip, None, None, None),
+            tip.clone(),
+            QueryEndReason::LedgerTip,
+            last_indexed,
+        ),
+        // An Item resumes at the boundary after it.
+        (
+            request(
+                &CursorToken::item(tx(tip_tx, tip_checkpoint, 0)),
+                None,
+                None,
+                None,
+            ),
+            CursorToken::boundary(tx(tip_tx + 1, tip_checkpoint, 1)),
+            QueryEndReason::LedgerTip,
+            None,
+        ),
+        (
+            request(&past_tip, None, None, None),
+            past_tip.clone(),
+            QueryEndReason::LedgerTip,
+            None,
+        ),
+        // The window GraphQL sends for a cursor: from the cursor's checkpoint on.
+        (
+            request(&past_tip, None, Some(tip_checkpoint + 1), None),
+            past_tip.clone(),
+            QueryEndReason::LedgerTip,
+            None,
+        ),
+        (
+            request(&past_tip, Some(&crossing), None, None),
+            crossing.clone(),
+            QueryEndReason::CursorBound,
+            None,
+        ),
+        (
+            request(&past_tip, None, None, Some(tip_checkpoint)),
+            past_tip.clone(),
+            QueryEndReason::CheckpointBound,
+            last_indexed,
+        ),
+    ];
+    for (req, end, reason, claim) in cases {
+        let context = format!("{req:?}");
+        let resp = list_transactions_result(&mut client, req).await;
+        assert!(resp.transactions.is_empty(), "{context}");
+        assert_eq!(resp.end_reason, Some(reason), "{context}");
+        let end_cursor = CursorToken::decode(&resp.end_cursor.unwrap()).unwrap();
+        assert_eq!(end_cursor, end, "{context}");
+        assert_eq!(resp.frames.last().unwrap().1.checkpoint, claim, "{context}");
+    }
+
+    let mut options = query_options(10);
+    options.after = Some(
+        CursorToken::item(Position::Events {
+            tx_seq: tip_tx,
+            event_index: 0,
+            public_position: LedgerPoint::checkpoint_start(tip_checkpoint),
+        })
+        .encode(),
+    );
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.options = Some(options);
+    let resp = list_events_result(&mut client, req).await;
+    assert!(resp.events.is_empty());
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_eq!(
+        CursorToken::decode(&resp.end_cursor.unwrap()).unwrap(),
+        CursorToken::boundary(Position::Events {
+            tx_seq: tip_tx,
+            event_index: 1,
+            public_position: LedgerPoint::event(tip_checkpoint, 0, 1),
+        })
+    );
+    assert_eq!(resp.frames.last().unwrap().1.checkpoint, None);
+
+    let checkpoints_after = |options: QueryOptions| {
+        let mut req = ListCheckpointsRequest::default();
+        req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+        req.options = Some(options);
+        req
+    };
+    let unindexed_checkpoint = CursorToken::item(Position::Checkpoints {
+        checkpoint: tip_checkpoint,
+    })
+    .encode();
+    let req = checkpoints_after(query_options_after(10, unindexed_checkpoint.clone()));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert!(resp.checkpoints.is_empty());
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_eq!(
+        CursorToken::decode(&resp.end_cursor.unwrap()).unwrap(),
+        CursorToken::boundary(Position::Checkpoints {
+            checkpoint: tip_checkpoint + 1,
+        })
+    );
+    assert_eq!(resp.frames.last().unwrap().1.checkpoint, None);
+
+    let mut options = query_options_descending(10);
+    options.after = Some(unindexed_checkpoint);
+    let status = client
+        .list_checkpoints(checkpoints_after(options))
+        .await
+        .expect_err("OutOfRange");
+    assert_above_latest_available(&status, "cursor", tip_checkpoint);
+}
+
+#[tokio::test]
+async fn test_list_limit_items_over_cap_is_coerced() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    transfer_self(&mut cluster, sender, &kp, gas).await;
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Per proto, limit_items above each RPC's cap is coerced down, not rejected.
+    let oversized = u32::MAX;
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.options = Some(query_options(oversized));
+    list_checkpoints_result(&mut client, req).await;
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.options = Some(query_options(oversized));
+    list_transactions_result(&mut client, req).await;
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.options = Some(query_options(oversized));
+    list_events_result(&mut client, req).await;
+}
+
+// --- ListCheckpoints tests ---
+
+#[tokio::test]
+async fn test_list_checkpoints_unfiltered_range() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, mut gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Three checkpoints, each containing one transfer tx.
+    for _ in 0..3 {
+        gas = transfer_in_own_checkpoint(&mut cluster, sender, &kp, gas).await;
+    }
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+
+    // At least the genesis checkpoint plus the three we created.
+    assert!(
+        resp.checkpoints.len() >= 4,
+        "expected at least 4 checkpoints, got {}",
+        resp.checkpoints.len()
+    );
+
+    // Results should be ordered by sequence_number.
+    for w in resp.checkpoints.windows(2) {
+        let a = checkpoint_sequence(&w[0]);
+        let b = checkpoint_sequence(&w[1]);
+        assert!(
+            a < b,
+            "checkpoints should be strictly increasing: {a} >= {b}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_with_sender_filter() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Checkpoint with sender_a's tx.
+    transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    // Checkpoint with sender_b's tx.
+    transfer_in_own_checkpoint(&mut cluster, sender_b, &kp_b, gas_b).await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.filter = Some(tx_sender(sender_a));
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+    assert!(
+        !resp.checkpoints.is_empty(),
+        "sender_a should match at least one checkpoint"
+    );
+
+    // Sanity check: the same query with sender_b also matches at least one cp,
+    // and the matching cp seqs differ between the two queries.
+    let a_seqs: std::collections::HashSet<u64> =
+        resp.checkpoints.iter().map(checkpoint_sequence).collect();
+
+    let mut req_b = ListCheckpointsRequest::default();
+    req_b.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req_b.filter = Some(tx_sender(sender_b));
+    req_b.options = Some(query_options(100));
+    let resp_b = list_checkpoints_result(&mut client, req_b).await;
+    assert_checkpoint_cursors(&resp_b);
+    let b_seqs: std::collections::HashSet<u64> =
+        resp_b.checkpoints.iter().map(checkpoint_sequence).collect();
+
+    assert!(!b_seqs.is_empty(), "sender_b should match at least one cp");
+    assert!(
+        a_seqs.is_disjoint(&b_seqs),
+        "sender_a and sender_b matched cps should be disjoint (each tx is in its own cp)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_combinator_or() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_c, kp_c, gas_c) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    let cp_a = cluster.latest_checkpoint().await.unwrap().unwrap();
+    transfer_in_own_checkpoint(&mut cluster, sender_b, &kp_b, gas_b).await;
+    let cp_b = cluster.latest_checkpoint().await.unwrap().unwrap();
+    transfer_in_own_checkpoint(&mut cluster, sender_c, &kp_c, gas_c).await;
+    let cp_c = cluster.latest_checkpoint().await.unwrap().unwrap();
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.filter = Some(tx_or(vec![
+        vec![tx_sender_literal(sender_a)],
+        vec![tx_sender_literal(sender_b)],
+    ]));
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+    let seqs: std::collections::HashSet<u64> =
+        resp.checkpoints.iter().map(checkpoint_sequence).collect();
+
+    assert!(
+        seqs.contains(&cp_a) && seqs.contains(&cp_b),
+        "OR filter should include checkpoints for A and B, got {seqs:?}"
+    );
+    assert!(
+        !seqs.contains(&cp_c),
+        "OR filter should exclude checkpoint for C"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_unanchored_negation() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    let cp_a = cluster.latest_checkpoint().await.unwrap().unwrap();
+    transfer_in_own_checkpoint(&mut cluster, sender_b, &kp_b, gas_b).await;
+    let cp_b = cluster.latest_checkpoint().await.unwrap().unwrap();
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Exclude-only term with two excludes: `NOT sender = B AND NOT sender = 0x0`.
+    // cp_b contains only B's transfer plus the system settlement/barrier txs
+    // (sender 0x0), so excluding both empties its complement and the whole
+    // checkpoint drops out — checkpoint-level negation is observable here.
+    // cp_a still matches via A's transfer and the funding transfers.
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.filter = Some(tx_filter(vec![
+        tx_not_sender_literal(sender_b),
+        tx_not_sender_literal(RtdAddress::ZERO),
+    ]));
+    req.options = Some(query_options(100));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+    let seqs: std::collections::HashSet<u64> =
+        resp.checkpoints.iter().map(checkpoint_sequence).collect();
+    assert!(
+        seqs.contains(&cp_a),
+        "checkpoint with A's tx should match the unanchored complement, got {seqs:?}"
+    );
+    assert!(
+        !seqs.contains(&cp_b),
+        "checkpoint containing only B's and system txs should be excluded, got {seqs:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_query_options() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, mut gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Three checkpoints, each with one transfer tx. The helper threads the
+    // updated gas ref forward.
+    let mut checkpoint_seqs = Vec::new();
+    for _ in 0..3 {
+        let (_, new_gas) = transfer_self(&mut cluster, sender, &kp, gas).await;
+        let checkpoint = cluster.create_checkpoint().await;
+        checkpoint_seqs.push(checkpoint.sequence_number);
+        gas = new_gas;
+    }
+    let checkpoint_start = *checkpoint_seqs.first().unwrap();
+    let checkpoint_end = checkpoint_seqs.last().unwrap() + 1;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // First response: limit_items=2.
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.start_checkpoint = Some(checkpoint_start);
+    req.end_checkpoint = Some(checkpoint_end);
+    req.options = Some(query_options(2));
+    let response1 = list_checkpoints_result(&mut client, req).await;
+    assert_eq!(
+        response1.checkpoints.len(),
+        2,
+        "first response should have 2 items"
+    );
+    assert_item_limit_end(response1.end, response1.end_reason);
+    assert_checkpoint_cursors(&response1);
+    let cursor = checkpoint_end_cursor(
+        &response1,
+        "first checkpoint response should have an end cursor",
+    );
+
+    let response1_seqs: Vec<u64> = response1
+        .checkpoints
+        .iter()
+        .map(checkpoint_sequence)
+        .collect();
+
+    // Second response using the last item cursor.
+    let mut req2 = ListCheckpointsRequest::default();
+    req2.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req2.start_checkpoint = Some(checkpoint_start);
+    req2.end_checkpoint = Some(checkpoint_end);
+    req2.options = Some(query_options_after(2, cursor));
+    let response2 = list_checkpoints_result(&mut client, req2).await;
+    assert_eq!(
+        response2.checkpoints.len(),
+        1,
+        "final response should have 1 item"
+    );
+    assert!(
+        response2.end,
+        "short final checkpoint response should include end frame"
+    );
+    assert_eq!(response2.end_reason, Some(QueryEndReason::CheckpointBound));
+    assert_checkpoint_cursors(&response2);
+    assert_standalone_terminal(response2.terminal_frame);
+
+    let response2_seqs: Vec<u64> = response2
+        .checkpoints
+        .iter()
+        .map(checkpoint_sequence)
+        .collect();
+    for s in &response2_seqs {
+        assert!(
+            !response1_seqs.contains(s),
+            "response2 cp {s} should not appear in response1"
+        );
+        assert!(
+            *s > *response1_seqs.last().unwrap(),
+            "response2 should resume strictly after response1"
+        );
+    }
+
+    let final_cursor =
+        last_checkpoint_cursor(&response2, "final checkpoint response should have a cursor");
+    let mut req3 = ListCheckpointsRequest::default();
+    req3.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req3.start_checkpoint = Some(checkpoint_start);
+    req3.end_checkpoint = Some(checkpoint_end);
+    req3.options = Some(query_options_after(2, final_cursor));
+    let response3 = list_checkpoints_result(&mut client, req3).await;
+    assert!(
+        response3.checkpoints.is_empty(),
+        "cursor after final checkpoint should return no items"
+    );
+    assert!(
+        response3.end,
+        "cursor after final checkpoint should include end frame"
+    );
+    assert_eq!(response3.end_reason, Some(QueryEndReason::CheckpointBound));
+    let (_, terminal_watermark) = response3
+        .frames
+        .last()
+        .expect("empty-window terminal watermark");
+    assert_eq!(
+        terminal_watermark.checkpoint,
+        Some(checkpoint_end - 1),
+        "a cursor at the window's end vouches for the window's last checkpoint"
+    );
+
+    let mut reverse_req = ListCheckpointsRequest::default();
+    reverse_req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    reverse_req.start_checkpoint = Some(checkpoint_start);
+    reverse_req.end_checkpoint = Some(checkpoint_end);
+    reverse_req.options = Some(query_options_descending(2));
+    let reverse1 = list_checkpoints_result(&mut client, reverse_req).await;
+    assert_eq!(reverse1.checkpoints.len(), 2, "reverse response size");
+    assert_item_limit_end(reverse1.end, reverse1.end_reason);
+    assert_checkpoint_cursors(&reverse1);
+    let reverse1_seqs: Vec<_> = reverse1
+        .checkpoints
+        .iter()
+        .map(checkpoint_sequence)
+        .collect();
+    assert!(
+        reverse1_seqs.windows(2).all(|pair| pair[0] > pair[1]),
+        "reverse checkpoints should be descending"
+    );
+
+    let cursor = checkpoint_end_cursor(
+        &reverse1,
+        "first reverse checkpoint response should have an end cursor",
+    );
+    let mut reverse_req2 = ListCheckpointsRequest::default();
+    reverse_req2.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    reverse_req2.start_checkpoint = Some(checkpoint_start);
+    reverse_req2.end_checkpoint = Some(checkpoint_end);
+    reverse_req2.options = Some(query_options_descending_before(2, cursor));
+    let reverse2 = list_checkpoints_result(&mut client, reverse_req2).await;
+    assert_eq!(
+        reverse2.checkpoints.len(),
+        1,
+        "final reverse checkpoint response should have 1 item"
+    );
+    assert!(
+        reverse2.end,
+        "short final reverse checkpoint response should include end frame"
+    );
+    assert_checkpoint_cursors(&reverse2);
+    let reverse2_seqs: Vec<_> = reverse2
+        .checkpoints
+        .iter()
+        .map(checkpoint_sequence)
+        .collect();
+    assert!(
+        reverse2_seqs
+            .iter()
+            .all(|seq| *seq < *reverse1_seqs.last().unwrap()),
+        "second reverse checkpoint response should resume before response1"
+    );
+
+    let mut exact_req = ListCheckpointsRequest::default();
+    exact_req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    exact_req.start_checkpoint = Some(checkpoint_start);
+    exact_req.end_checkpoint = Some(checkpoint_end);
+    exact_req.options = Some(query_options(3));
+    let exact_result = list_checkpoints_result(&mut client, exact_req).await;
+    assert_eq!(
+        exact_result.checkpoints.len(),
+        3,
+        "exact checkpoint response size"
+    );
+    assert_item_limit_end(exact_result.end, exact_result.end_reason);
+    assert_item_limit_fused(exact_result.terminal_frame, &exact_result.frames);
+    assert_eq!(
+        standalone_watermark_count(&exact_result.frames),
+        0,
+        "ItemLimit must not emit a standalone watermark frame"
+    );
+    assert!(
+        matches!(exact_result.frames.last(), Some((WmFrame::Item, _))),
+        "ItemLimit must end on the last item frame"
+    );
+    assert_eq!(
+        exact_result
+            .checkpoints
+            .last()
+            .and_then(|response| response.end.as_ref())
+            .map(|end| end.reason()),
+        Some(QueryEndReason::ItemLimit),
+        "last checkpoint item must carry the ItemLimit end"
+    );
+    let exact_first_cursor = first_checkpoint_cursor(
+        &exact_result,
+        "exact checkpoint response should have a first cursor",
+    );
+    let exact_cursor = last_checkpoint_cursor(
+        &exact_result,
+        "exact checkpoint response should have a cursor",
+    );
+
+    let mut bounded_req = ListCheckpointsRequest::default();
+    bounded_req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    bounded_req.start_checkpoint = Some(checkpoint_start);
+    bounded_req.end_checkpoint = Some(checkpoint_end);
+    bounded_req.options = Some(query_options_between(
+        3,
+        exact_first_cursor.clone(),
+        exact_cursor.clone(),
+    ));
+    let bounded = list_checkpoints_result(&mut client, bounded_req).await;
+    assert_eq!(
+        bounded.checkpoints.len(),
+        1,
+        "exclusive checkpoint cursor bounds should leave the middle checkpoint"
+    );
+    assert_eq!(bounded.end_reason, Some(QueryEndReason::CursorBound));
+
+    let mut bounded_desc_req = ListCheckpointsRequest::default();
+    bounded_desc_req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    bounded_desc_req.start_checkpoint = Some(checkpoint_start);
+    bounded_desc_req.end_checkpoint = Some(checkpoint_end);
+    bounded_desc_req.options = Some(query_options_between_descending(
+        3,
+        exact_first_cursor,
+        exact_cursor.clone(),
+    ));
+    let bounded_desc = list_checkpoints_result(&mut client, bounded_desc_req).await;
+    assert_eq!(
+        bounded_desc.checkpoints.len(),
+        1,
+        "descending exclusive checkpoint cursor bounds should leave the middle checkpoint"
+    );
+    assert_eq!(bounded_desc.end_reason, Some(QueryEndReason::CursorBound));
+
+    let mut exact_next_req = ListCheckpointsRequest::default();
+    exact_next_req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    exact_next_req.start_checkpoint = Some(checkpoint_start);
+    exact_next_req.end_checkpoint = Some(checkpoint_end);
+    exact_next_req.options = Some(query_options_after(3, exact_cursor));
+    let exact_next_result = list_checkpoints_result(&mut client, exact_next_req).await;
+    assert!(
+        exact_next_result.checkpoints.is_empty(),
+        "response after exact-size checkpoint result should be empty"
+    );
+    assert!(
+        exact_next_result.end,
+        "response after exact-size checkpoint result should include end frame"
+    );
+    assert_eq!(
+        exact_next_result.end_reason,
+        Some(QueryEndReason::CheckpointBound)
+    );
+    let (_, terminal_watermark) = exact_next_result
+        .frames
+        .last()
+        .expect("empty-window terminal watermark");
+    assert_eq!(
+        terminal_watermark.checkpoint,
+        Some(checkpoint_end - 1),
+        "a cursor at the window's end vouches for the window's last checkpoint"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_combinator_and() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let (pkg, gas_a) = publish_package(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+
+    // Checkpoint 1: sender A + matching move call (the only intended match).
+    let (_, gas_a) = call_move(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    cluster.create_checkpoint().await;
+    let cp_a_call = cluster
+        .latest_checkpoint()
+        .await
+        .unwrap()
+        .expect("checkpoint seq should exist after create_checkpoint");
+
+    // Checkpoint 2: sender A + transfer (no move call).
+    let _ = transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    let cp_a_transfer = cluster.latest_checkpoint().await.unwrap().unwrap();
+
+    // Checkpoint 3: sender B + matching move call.
+    let _ = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    cluster.create_checkpoint().await;
+    let cp_b_call = cluster.latest_checkpoint().await.unwrap().unwrap();
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let move_call_path = format!(
+        "{}::emit_test_event::emit_test_event",
+        pkg.to_canonical_string(true)
+    );
+    let filter = tx_and(vec![tx_sender(sender_a), tx_move_call(&move_call_path)]);
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.filter = Some(filter);
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert_checkpoint_cursors(&resp);
+    let seqs: std::collections::HashSet<u64> =
+        resp.checkpoints.iter().map(checkpoint_sequence).collect();
+
+    assert!(
+        seqs.contains(&cp_a_call),
+        "expected cp containing A+call to match"
+    );
+    assert!(
+        !seqs.contains(&cp_a_transfer),
+        "cp containing only A+transfer must not match (no move call)"
+    );
+    assert!(
+        !seqs.contains(&cp_b_call),
+        "cp containing B+call must not match (wrong sender)"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_empty_range_past_watermark() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    transfer_in_own_checkpoint(&mut cluster, sender, &kp, gas).await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // start_checkpoint deliberately past the watermark; expect empty result.
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+    req.start_checkpoint = Some(1_000_000);
+    req.options = Some(query_options(10));
+    let resp = list_checkpoints_result(&mut client, req).await;
+    assert!(resp.checkpoints.is_empty());
+    assert!(resp.end, "empty checkpoint range should include end frame");
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_checkpoint_cursors(&resp);
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_with_transactions_read_mask() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, mut gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // One checkpoint with three self-transfers. The transfers chain the same
+    // gas object, so they are causally ordered and appear in the checkpoint
+    // contents in build order — capture that order to assert exact per-cp
+    // `transactions[].digest` order (not just set membership).
+    let mut expected_digests: Vec<rtd_types::digests::TransactionDigest> = Vec::new();
+    for _ in 0..3 {
+        let (digest, new_gas) = transfer_self(&mut cluster, sender, &kp, gas).await;
+        expected_digests.push(digest);
+        gas = new_gas;
+    }
+    let checkpoint = cluster.create_checkpoint().await;
+    let seq = checkpoint.sequence_number;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths([
+        "sequence_number",
+        "transactions.digest",
+    ]));
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+
+    let proto_cp = resp
+        .checkpoints
+        .iter()
+        .filter_map(|cp| cp.checkpoint.as_ref())
+        .find(|cp| cp.sequence_number == Some(seq))
+        .expect("checkpoint with our sequence number returned");
+
+    // The checkpoint also contains system transactions (e.g. a
+    // consensus-commit prologue) around our transfers, so filter the returned
+    // digests down to the ones we created and assert their relative order is
+    // preserved end-to-end — that is what the Stage C reconstruction must get
+    // right regardless of BigTable row arrival order.
+    let expected: Vec<String> = expected_digests.iter().map(|d| d.to_string()).collect();
+    let expected_set: std::collections::HashSet<&String> = expected.iter().collect();
+    let returned_ours: Vec<String> = proto_cp
+        .transactions
+        .iter()
+        .filter_map(|tx| tx.digest.clone())
+        .filter(|d| expected_set.contains(d))
+        .collect();
+    assert_eq!(
+        returned_ours, expected,
+        "our transactions must appear in transactions[].digest in checkpoint contents order"
+    );
+}
+
+#[tokio::test]
+async fn test_list_checkpoints_with_objects_read_mask() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // One checkpoint with a transfer; capture the gas object id so we can
+    // verify it shows up in objects[].object_id.
+    let gas_id_string = gas.0.to_canonical_string(true);
+    transfer_self(&mut cluster, sender, &kp, gas).await;
+    cluster.create_checkpoint().await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListCheckpointsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths([
+        "sequence_number",
+        "transactions.digest",
+        "objects.objects.object_id",
+        "objects.objects.version",
+    ]));
+    req.options = Some(query_options(100));
+
+    let resp = list_checkpoints_result(&mut client, req).await;
+
+    // At least one returned checkpoint should populate objects[] with the
+    // gas object that the transfer mutated.
+    let saw_gas_object = resp.checkpoints.iter().any(|cp| {
+        let proto_cp = cp.checkpoint.as_ref().expect("checkpoint populated");
+        proto_cp
+            .objects
+            .as_ref()
+            .map(|os| {
+                os.objects.iter().any(|o| {
+                    o.object_id
+                        .as_ref()
+                        .is_some_and(|oid| oid == &gas_id_string)
+                })
+            })
+            .unwrap_or(false)
+    });
+    assert!(
+        saw_gas_object,
+        "expected gas object {gas_id_string} to appear in some checkpoint's objects[]"
+    );
+
+    // The same checkpoint should also populate transactions[].digest, since
+    // the heavy path fetches transactions even when only objects is in the
+    // mask.
+    let any_transactions = resp.checkpoints.iter().any(|cp| {
+        let proto_cp = cp.checkpoint.as_ref().expect("checkpoint populated");
+        proto_cp.transactions.iter().any(|tx| tx.digest.is_some())
+    });
+    assert!(
+        any_transactions,
+        "expected at least one tx.digest populated"
+    );
+}
+
+// GetCheckpoint hydrates transactions and objects from BigTable (the GCS
+// checkpoint-bucket dependency was removed). Without it, a `transactions`/
+// `objects` read mask silently returned empty.
+#[tokio::test]
+async fn test_get_checkpoint_with_transactions_and_objects() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(10 * DEFAULT_GAS_BUDGET).unwrap();
+    let gas_id_string = gas.0.to_canonical_string(true);
+
+    let (digest, _new_gas) = transfer_self(&mut cluster, sender, &kp, gas).await;
+    let checkpoint = cluster.create_checkpoint().await;
+    let seq = checkpoint.sequence_number;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = GetCheckpointRequest::default();
+    req.checkpoint_id = Some(CheckpointId::SequenceNumber(seq));
+    req.read_mask = Some(FieldMask::from_paths([
+        "sequence_number",
+        "transactions.digest",
+        "objects.objects.object_id",
+        "objects.objects.version",
+    ]));
+
+    let cp = client
+        .get_checkpoint(req)
+        .await
+        .unwrap()
+        .into_inner()
+        .checkpoint
+        .expect("checkpoint populated");
+    assert_eq!(cp.sequence_number, Some(seq));
+
+    // Transactions hydrated from BigTable.
+    let returned: std::collections::HashSet<String> = cp
+        .transactions
+        .iter()
+        .filter_map(|tx| tx.digest.clone())
+        .collect();
+    assert!(
+        returned.contains(&digest.to_string()),
+        "expected tx digest {digest} in transactions[].digest, got {returned:?}"
+    );
+
+    // Objects hydrated from BigTable: the transfer's mutated gas object appears.
+    let saw_gas_object = cp
+        .objects
+        .as_ref()
+        .map(|os| {
+            os.objects
+                .iter()
+                .any(|o| o.object_id.as_deref() == Some(gas_id_string.as_str()))
+        })
+        .unwrap_or(false);
+    assert!(
+        saw_gas_object,
+        "expected gas object {gas_id_string} in checkpoint objects[]"
+    );
+
+    // Balance changes are stored on transaction rows and must be populated even
+    // when checkpoint objects are not requested.
+    let mut balance_changes_req = GetCheckpointRequest::default();
+    balance_changes_req.checkpoint_id = Some(CheckpointId::SequenceNumber(seq));
+    balance_changes_req.read_mask = Some(FieldMask::from_paths([
+        "transactions.digest",
+        "transactions.balance_changes",
+    ]));
+
+    let balance_changes_checkpoint = client
+        .get_checkpoint(balance_changes_req)
+        .await
+        .unwrap()
+        .into_inner()
+        .checkpoint
+        .expect("checkpoint populated");
+    let digest = digest.to_string();
+    let transaction = balance_changes_checkpoint
+        .transactions
+        .iter()
+        .find(|transaction| transaction.digest.as_deref() == Some(digest.as_str()))
+        .unwrap_or_else(|| panic!("expected transaction {digest} in checkpoint"));
+    assert!(
+        !transaction.balance_changes.is_empty(),
+        "expected transaction {digest} to include balance changes"
+    );
+}
+
+// --- Watermark contract tests ---
+
+/// Build a sparse layout: `noise_before` checkpoints of `noise_sender` transfers,
+/// one checkpoint of `match_sender`, then `noise_after` more `noise_sender`
+/// checkpoints. Returns the matched-sender's checkpoint sequence number.
+async fn build_sparse_layout(
+    cluster: &mut FullCluster,
+    noise_sender: RtdAddress,
+    noise_kp: &AccountKeyPair,
+    mut noise_gas: ObjectRef,
+    match_sender: RtdAddress,
+    match_kp: &AccountKeyPair,
+    match_gas: ObjectRef,
+    noise_before: usize,
+    noise_after: usize,
+) -> u64 {
+    for _ in 0..noise_before {
+        noise_gas = transfer_in_own_checkpoint(cluster, noise_sender, noise_kp, noise_gas).await;
+    }
+    transfer_in_own_checkpoint(cluster, match_sender, match_kp, match_gas).await;
+    let match_cp = cluster
+        .latest_checkpoint()
+        .await
+        .unwrap()
+        .expect("match checkpoint should exist");
+    for _ in 0..noise_after {
+        noise_gas = transfer_in_own_checkpoint(cluster, noise_sender, noise_kp, noise_gas).await;
+    }
+    match_cp
+}
+
+#[tokio::test]
+async fn test_list_transactions_sparse_filter_emits_watermarks() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(40 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(2 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // 20 noise checkpoints, 1 match, 20 more noise — `noise_after > 0`
+    // guarantees the scan reaches EOF on a non-matching frontier, so the flat
+    // trace includes a payload-less watermark on the folded final end frame.
+    let match_cp = build_sparse_layout(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        sender_b,
+        &kp_b,
+        gas_b,
+        20,
+        20,
+    )
+    .await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest", "checkpoint"]));
+    req.filter = Some(tx_sender(sender_b));
+    req.options = Some(query_options(100));
+
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_transaction_cursors(&resp);
+
+    assert_eq!(
+        resp.transactions.len(),
+        1,
+        "exactly one sender_b transaction should match"
+    );
+    let only_cp = resp.transactions[0]
+        .transaction
+        .as_ref()
+        .and_then(|tx| tx.checkpoint)
+        .expect("checkpoint populated");
+    assert_eq!(
+        only_cp, match_cp,
+        "matched tx is in the expected checkpoint"
+    );
+
+    // Payload-less watermark frames, including the folded final `{watermark, end}`
+    // frame, are recorded as standalone frames in the trace.
+    assert!(
+        standalone_watermark_count(&resp.frames) >= 1,
+        "sparse scan must emit at least one standalone Watermark frame"
+    );
+    assert_eq!(
+        resp.end_reason,
+        Some(QueryEndReason::LedgerTip),
+        "scan should reach the ledger tip"
+    );
+    assert_standalone_terminal(resp.terminal_frame);
+
+    // The last cursor from any flat frame round-trips to an empty ledger-tip
+    // response — proves the trailing payload-less watermark is a real
+    // resumption point, not a wire decoration.
+    let last_cursor = resp.end_cursor.clone().expect("trailing cursor present");
+    let mut next_req = ListTransactionsRequest::default();
+    next_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    next_req.filter = Some(tx_sender(sender_b));
+    next_req.options = Some(query_options_after(100, last_cursor));
+    let next_resp = list_transactions_result(&mut client, next_req).await;
+    assert!(
+        next_resp.transactions.is_empty(),
+        "resuming past the trailing cursor must not replay items"
+    );
+    // An open-ended resume from the tip has nothing left to scan and ends at the ledger tip, not
+    // at its own cursor.
+    assert_eq!(
+        next_resp.end_reason,
+        Some(QueryEndReason::LedgerTip),
+        "resuming from the tip must end at the ledger tip"
+    );
+}
+
+#[tokio::test]
+async fn test_list_events_sparse_filter_emits_watermarks() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, mut gas_a) = cluster.funded_account(50 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(5 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // sender_b publishes the event package and emits one event in its own
+    // checkpoint. sender_a fills the surrounding checkpoints with self-transfers
+    // (which emit no Move events) so the event-filter scan crosses a long gap.
+    for _ in 0..20 {
+        gas_a = transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    }
+    let (pkg_id, gas_b) = publish_package(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+    let (_, _) = call_move(
+        &mut cluster,
+        sender_b,
+        &kp_b,
+        gas_b,
+        pkg_id,
+        "emit_test_event",
+        "emit_test_event",
+    )
+    .await;
+    cluster.create_checkpoint().await;
+    for _ in 0..20 {
+        gas_a = transfer_in_own_checkpoint(&mut cluster, sender_a, &kp_a, gas_a).await;
+    }
+    let _ = gas_a;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListEventsRequest::default();
+    req.read_mask = Some(event_type_and_position_mask());
+    req.filter = Some(ev_sender(sender_b));
+    req.options = Some(query_options(100));
+
+    let resp = list_events_result(&mut client, req).await;
+    assert_event_cursors(&resp);
+
+    assert_eq!(
+        resp.events.len(),
+        1,
+        "exactly one sender_b event should match"
+    );
+    // Payload-less watermark frames, including the folded final `{watermark, end}`
+    // frame, are recorded as standalone frames in the trace.
+    assert!(
+        standalone_watermark_count(&resp.frames) >= 1,
+        "sparse event scan must emit at least one standalone Watermark frame"
+    );
+    assert_eq!(resp.end_reason, Some(QueryEndReason::LedgerTip));
+    assert_standalone_terminal(resp.terminal_frame);
+
+    let last_cursor = resp.end_cursor.clone().expect("trailing cursor present");
+    let mut next_req = ListEventsRequest::default();
+    next_req.read_mask = Some(event_type_and_position_mask());
+    next_req.filter = Some(ev_sender(sender_b));
+    next_req.options = Some(query_options_after(100, last_cursor));
+    let next_resp = list_events_result(&mut client, next_req).await;
+    assert!(
+        next_resp.events.is_empty(),
+        "resuming past the trailing cursor must not replay events"
+    );
+    // As for transactions: an open-ended resume from the tip ends at the ledger tip.
+    assert_eq!(
+        next_resp.end_reason,
+        Some(QueryEndReason::LedgerTip),
+        "resuming from the tip must end at the ledger tip"
+    );
+}
+
+/// Every payload-less watermark frame recorded as `Standalone` (including the
+/// folded terminal `{ watermark, end }` frame) must be a valid resume point:
+/// a follow-up query with `after = <that cursor>` must not replay any of the
+/// original `seen_digests` that came at or before that cursor.
+#[tokio::test]
+async fn test_list_transactions_resume_from_standalone_watermark() {
+    let mut cluster = list_api_cluster().await;
+    let (sender_a, kp_a, gas_a) = cluster.funded_account(40 * DEFAULT_GAS_BUDGET).unwrap();
+    let (sender_b, kp_b, gas_b) = cluster.funded_account(2 * DEFAULT_GAS_BUDGET).unwrap();
+
+    let _match_cp = build_sparse_layout(
+        &mut cluster,
+        sender_a,
+        &kp_a,
+        gas_a,
+        sender_b,
+        &kp_b,
+        gas_b,
+        20,
+        20,
+    )
+    .await;
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    let mut req = ListTransactionsRequest::default();
+    req.read_mask = Some(FieldMask::from_paths(["digest"]));
+    req.filter = Some(tx_sender(sender_b));
+    req.options = Some(query_options(100));
+    let resp = list_transactions_result(&mut client, req).await;
+    assert_transaction_cursors(&resp);
+
+    let original_digests: Vec<String> = resp
+        .transactions
+        .iter()
+        .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+        .collect();
+    assert_eq!(original_digests.len(), 1, "sanity: one match expected");
+
+    // Walk every standalone WM in delivery order. After each one, the items
+    // delivered AT OR BEFORE it in the original response must NOT reappear in
+    // a follow-up resume; the items AFTER it must.
+    let mut delivered_before: Vec<String> = Vec::new();
+    let mut item_idx = 0;
+    let mut standalone_seen = 0;
+    for (kind, wm) in &resp.frames {
+        match kind {
+            WmFrame::Item => {
+                if let Some(d) = resp.transactions[item_idx]
+                    .transaction
+                    .as_ref()
+                    .and_then(|tx| tx.digest.clone())
+                {
+                    delivered_before.push(d);
+                }
+                item_idx += 1;
+            }
+            WmFrame::Standalone => {
+                standalone_seen += 1;
+                let cursor = wm.cursor.clone().expect("standalone WM carries cursor");
+                let mut resume_req = ListTransactionsRequest::default();
+                resume_req.read_mask = Some(FieldMask::from_paths(["digest"]));
+                resume_req.filter = Some(tx_sender(sender_b));
+                resume_req.options = Some(query_options_after(100, cursor));
+                let resume_resp = list_transactions_result(&mut client, resume_req).await;
+                let resume_digests: Vec<String> = resume_resp
+                    .transactions
+                    .iter()
+                    .filter_map(|t| t.transaction.as_ref().and_then(|tx| tx.digest.clone()))
+                    .collect();
+                for replayed in &delivered_before {
+                    assert!(
+                        !resume_digests.contains(replayed),
+                        "resume past standalone WM #{standalone_seen} replayed already-delivered \
+                         digest {replayed}"
+                    );
+                }
+                let unseen: Vec<&String> = original_digests
+                    .iter()
+                    .filter(|d| !delivered_before.contains(*d))
+                    .collect();
+                for expected in &unseen {
+                    assert!(
+                        resume_digests.contains(expected),
+                        "resume past standalone WM #{standalone_seen} dropped expected digest \
+                         {expected} (unseen={unseen:?}, got={resume_digests:?})"
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        standalone_seen >= 1,
+        "expected at least one standalone WM to validate as a resume point"
+    );
+}
+
+/// Execute `n` self-transfers from `sender` (each matched by a sender filter on
+/// `sender`), then create a single checkpoint containing them. Returns that
+/// checkpoint's sequence number and the updated gas ref.
+async fn checkpoint_matching_txns(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    mut gas: ObjectRef,
+    n: usize,
+) -> (u64, ObjectRef) {
+    for _ in 0..n {
+        let (_, new_gas) = transfer_self(cluster, sender, kp, gas).await;
+        gas = new_gas;
+    }
+    let checkpoint = cluster.create_checkpoint().await;
+    (checkpoint.sequence_number, gas)
+}
+
+fn is_resumable(reason: QueryEndReason) -> bool {
+    matches!(
+        reason,
+        QueryEndReason::ItemLimit | QueryEndReason::ScanLimit
+    )
+}
+
+/// Drain a filtered `ListTransactions` fully, following cursors, and return the
+/// distinct set of checkpoint sequence numbers its transactions fall in.
+async fn drain_transaction_checkpoints(
+    client: &mut LedgerServiceClient<Channel>,
+    filter: TransactionFilter,
+    ascending: bool,
+    limit: u32,
+) -> BTreeSet<u64> {
+    let mut cps = BTreeSet::new();
+    let mut cursor: Option<prost::bytes::Bytes> = None;
+    for _ in 0..100 {
+        let mut req = ListTransactionsRequest::default();
+        req.read_mask = Some(FieldMask::from_paths(["checkpoint"]));
+        req.filter = Some(filter.clone());
+        req.options = Some(if ascending {
+            query_options_maybe_after(limit, cursor.clone())
+        } else {
+            query_options_descending_maybe_before(limit, cursor.clone())
+        });
+        let result = list_transactions_result(client, req).await;
+        for item in &result.transactions {
+            let cp = item
+                .transaction
+                .as_ref()
+                .and_then(|tx| tx.checkpoint)
+                .expect("transaction checkpoint populated");
+            cps.insert(cp);
+        }
+        let reason = result.end_reason.expect("list_transactions end reason");
+        match (is_resumable(reason), result.end_cursor.clone()) {
+            (true, Some(c)) => cursor = Some(c),
+            _ => return cps,
+        }
+    }
+    panic!("drain_transaction_checkpoints did not terminate");
+}
+
+/// Drain a filtered `ListCheckpoints` fully, following cursors, and return the
+/// set of checkpoint sequence numbers plus the final terminal reason.
+async fn drain_checkpoint_set(
+    client: &mut LedgerServiceClient<Channel>,
+    filter: TransactionFilter,
+    ascending: bool,
+    limit: u32,
+) -> (BTreeSet<u64>, QueryEndReason) {
+    let mut cps = BTreeSet::new();
+    let mut cursor: Option<prost::bytes::Bytes> = None;
+    for _ in 0..100 {
+        let mut req = ListCheckpointsRequest::default();
+        req.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+        req.filter = Some(filter.clone());
+        req.options = Some(if ascending {
+            query_options_maybe_after(limit, cursor.clone())
+        } else {
+            query_options_descending_maybe_before(limit, cursor.clone())
+        });
+        let result = list_checkpoints_result(client, req).await;
+        for item in &result.checkpoints {
+            cps.insert(checkpoint_sequence(item));
+        }
+        let reason = result.end_reason.expect("list_checkpoints end reason");
+        match (is_resumable(reason), result.end_cursor.clone()) {
+            (true, Some(c)) => cursor = Some(c),
+            _ => return (cps, reason),
+        }
+    }
+    panic!("drain_checkpoint_set did not terminate");
+}
+
+/// Regression: filtered `ListCheckpoints` must return exactly the checkpoints
+/// that filtered `ListTransactions` reports — even when a single bitmap bucket
+/// holds more matching transactions than one scan chunk.
+///
+/// The tx_seq -> distinct-checkpoint layer used to `break` its scan loop
+/// whenever a chunk filled (rather than only on a true upstream EOF), so a
+/// dense bucket truncated the result after one chunk and the stream ended with
+/// the pre-computed terminal reason (CHECKPOINT_BOUND / LEDGER_TIP) before the
+/// scan reached the bound. The set under-returned and was order-dependent.
+#[tokio::test]
+async fn test_list_checkpoints_dense_bucket_matches_transactions() {
+    // Small reads for the `tx_seq_digest` reads (ListTransactions) and
+    // ListCheckpoints' transaction -> checkpoint lookups (`tx_cp_resolve`) let
+    // a modest dataset reproduce the multi-read-within-one-bucket scan. Every
+    // matching tx in a feasible dataset shares bitmap bucket 0 (BUCKET_SIZE =
+    // 65_536) and `tx_seq_digest` bucket 0 (1,000 transactions), so the read
+    // boundary — set by the 2-key cap, since these stages' seeks are
+    // `tx_seq_digest` buckets — is what drives the loop.
+    let small_reads = StageConfig {
+        max_seeks_per_read: Some(2),
+        max_keys_per_read: Some(2),
+        ..Default::default()
+    };
+    let stages = StagesConfig {
+        tx_seq_digest: Some(small_reads.clone()),
+        tx_cp_resolve: Some(small_reads),
+        ..Default::default()
+    };
+    let kv_rpc_config = KvRpcConfig {
+        stages: Some(stages),
+        ..Default::default()
+    };
+
+    let mut cluster = list_api_cluster_with_config(kv_rpc_config).await;
+
+    let (match_sender, match_kp, mut match_gas) =
+        cluster.funded_account(60 * DEFAULT_GAS_BUDGET).unwrap();
+    let (noise_sender, noise_kp, mut noise_gas) =
+        cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+
+    // Sparse matches spanning the range: two checkpoints densely packed with
+    // matching txs (> the 2-key cap) at the low and high ends, two single-match
+    // checkpoints in the middle, with noise checkpoints interspersed and
+    // trailing so the scan crosses empty checkpoint regions and reaches the tip
+    // on a non-matching checkpoint.
+    let (cp_lo, gas) =
+        checkpoint_matching_txns(&mut cluster, match_sender, &match_kp, match_gas, 3).await;
+    match_gas = gas;
+    noise_gas = transfer_in_own_checkpoint(&mut cluster, noise_sender, &noise_kp, noise_gas).await;
+    let (cp_m1, gas) =
+        checkpoint_matching_txns(&mut cluster, match_sender, &match_kp, match_gas, 1).await;
+    match_gas = gas;
+    noise_gas = transfer_in_own_checkpoint(&mut cluster, noise_sender, &noise_kp, noise_gas).await;
+    let (cp_m2, gas) =
+        checkpoint_matching_txns(&mut cluster, match_sender, &match_kp, match_gas, 1).await;
+    match_gas = gas;
+    noise_gas = transfer_in_own_checkpoint(&mut cluster, noise_sender, &noise_kp, noise_gas).await;
+    let (cp_hi, gas) =
+        checkpoint_matching_txns(&mut cluster, match_sender, &match_kp, match_gas, 3).await;
+    match_gas = gas;
+    noise_gas = transfer_in_own_checkpoint(&mut cluster, noise_sender, &noise_kp, noise_gas).await;
+    let _ = (match_gas, noise_gas);
+
+    let expected: BTreeSet<u64> = [cp_lo, cp_m1, cp_m2, cp_hi].into_iter().collect();
+    assert_eq!(expected.len(), 4, "distinct matching checkpoints");
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+    let filter = tx_sender(match_sender);
+
+    // Small page size so the drains also follow cursors across multiple pages.
+    const LIMIT: u32 = 3;
+
+    for ascending in [true, false] {
+        let tx_cps =
+            drain_transaction_checkpoints(&mut client, filter.clone(), ascending, LIMIT).await;
+        assert_eq!(
+            tx_cps, expected,
+            "ListTransactions distinct checkpoints (ascending={ascending})"
+        );
+
+        let (cp_set, reason) =
+            drain_checkpoint_set(&mut client, filter.clone(), ascending, LIMIT).await;
+        assert_eq!(
+            cp_set, tx_cps,
+            "ListCheckpoints set must equal ListTransactions distinct checkpoints \
+             (ascending={ascending})"
+        );
+        // The fully drained stream genuinely reaches the range end, so the
+        // terminal reason must be a reached-end reason (never a premature one
+        // while matches remain).
+        assert!(
+            matches!(
+                reason,
+                QueryEndReason::LedgerTip | QueryEndReason::CheckpointBound
+            ),
+            "ListCheckpoints terminal reason (ascending={ascending}): {reason:?}"
+        );
+    }
+}
+
+// --- Cursors sent back in the opposite direction ---
+
+/// The first transaction of the event bitmap's second bucket. A filtered event scan whose
+/// budget covers one bucket stops on a frontier here.
+const SECOND_EVENT_BUCKET_TX: u64 = 4_096;
+
+/// A query whose cursors are sent back in either direction.
+#[derive(Clone, Debug)]
+enum CursorQuery {
+    Transactions(TransactionFilter),
+    Events(Option<EventFilter>),
+}
+
+/// One page of a [`CursorQuery`]: the scan-order key and cursor of each item, every frame's
+/// cursor, how the page ended, and the checkpoint its last frame claims as covered.
+struct CursorPage {
+    items: Vec<(u64, u32)>,
+    item_cursors: Vec<prost::bytes::Bytes>,
+    cursors: Vec<prost::bytes::Bytes>,
+    end_cursor: prost::bytes::Bytes,
+    end_reason: QueryEndReason,
+    end_claim: Option<u64>,
+}
+
+/// A cursor's kind and the scan-order key of its position.
+fn cursor_key(cursor: &[u8]) -> (CursorKind, (u64, u32)) {
+    let token = CursorToken::decode(cursor).expect("cursor decodes");
+    let key = match token.position {
+        Position::Transactions { tx_seq, .. } => (tx_seq, 0),
+        Position::Events {
+            tx_seq,
+            event_index,
+            ..
+        } => (tx_seq, event_index),
+        Position::Checkpoints { checkpoint } => (checkpoint, 0),
+    };
+    (token.kind, key)
+}
+
+async fn cursor_page(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &CursorQuery,
+    window: (Option<u64>, Option<u64>),
+    ascending: bool,
+    resume: Option<prost::bytes::Bytes>,
+    far_bound: Option<prost::bytes::Bytes>,
+) -> CursorPage {
+    let mut options = QueryOptions::default();
+    options.limit = Some(3);
+    if ascending {
+        options.after = resume;
+        options.before = far_bound;
+    } else {
+        options.ordering = Some(Ordering::Descending as i32);
+        options.before = resume;
+        options.after = far_bound;
+    }
+    let (frames, end_cursor, end_reason) = match query {
+        CursorQuery::Transactions(filter) => {
+            let mut request = ListTransactionsRequest::default();
+            request.start_checkpoint = window.0;
+            request.end_checkpoint = window.1;
+            request.filter = Some(filter.clone());
+            request.read_mask = Some(FieldMask::from_paths(["digest"]));
+            request.options = Some(options);
+            let result = list_transactions_result(client, request).await;
+            (result.frames, result.end_cursor, result.end_reason)
+        }
+        CursorQuery::Events(filter) => {
+            let mut request = ListEventsRequest::default();
+            request.start_checkpoint = window.0;
+            request.end_checkpoint = window.1;
+            request.filter = filter.clone();
+            request.read_mask = Some(event_type_and_position_mask());
+            request.options = Some(options);
+            let result = list_events_result(client, request).await;
+            (result.frames, result.end_cursor, result.end_reason)
+        }
+    };
+    let cursor = |watermark: &Watermark| {
+        watermark
+            .cursor
+            .clone()
+            .expect("every frame carries a cursor")
+    };
+    let item_cursors: Vec<_> = frames
+        .iter()
+        .filter(|(kind, _)| *kind == WmFrame::Item)
+        .map(|(_, watermark)| cursor(watermark))
+        .collect();
+    CursorPage {
+        items: item_cursors.iter().map(|item| cursor_key(item).1).collect(),
+        item_cursors,
+        cursors: frames
+            .iter()
+            .map(|(_, watermark)| cursor(watermark))
+            .collect(),
+        end_cursor: end_cursor.expect("every page carries a resume cursor"),
+        end_reason: end_reason.expect("every page ends with a reason"),
+        end_claim: frames
+            .last()
+            .and_then(|(_, watermark)| watermark.checkpoint),
+    }
+}
+
+/// Everything paging a [`CursorQuery`] to its end returned.
+#[derive(Default)]
+struct Walk {
+    items: Vec<(u64, u32)>,
+    item_cursors: Vec<prost::bytes::Bytes>,
+    cursors: Vec<prost::bytes::Bytes>,
+    end_reasons: Vec<QueryEndReason>,
+}
+
+async fn walk(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &CursorQuery,
+    window: (Option<u64>, Option<u64>),
+    ascending: bool,
+    mut resume: Option<prost::bytes::Bytes>,
+    far_bound: Option<prost::bytes::Bytes>,
+) -> Walk {
+    let mut walk = Walk::default();
+    for _ in 0..1_000 {
+        let page = cursor_page(client, query, window, ascending, resume, far_bound.clone()).await;
+        walk.items.extend(page.items);
+        walk.item_cursors.extend(page.item_cursors);
+        walk.cursors.extend(page.cursors);
+        walk.end_reasons.push(page.end_reason);
+        if !is_resumable(page.end_reason) {
+            return walk;
+        }
+        resume = Some(page.end_cursor);
+    }
+    panic!("paging did not reach the end: {query:?}");
+}
+
+/// Every cursor paging `query` returns in either ordering, with and without a far cursor bound,
+/// sent back with the opposite ordering, returns exactly the items its position and kind admit.
+/// A bounded paging's closing cursor, sent back in its own ordering without the far bound (an
+/// item), resumes with exactly the items the bound excluded. Returns every page's end reason.
+async fn assert_cursors_resume_in_the_opposite_direction(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &CursorQuery,
+    window: (Option<u64>, Option<u64>),
+) -> Vec<QueryEndReason> {
+    let all = walk(client, query, window, true, None, None).await;
+    assert!(all.items.len() >= 4, "too few items to page: {query:?}");
+    // Far bounds at every third item: the bounded pages end on a restatement of the bound.
+    let far_bounds: Vec<_> = all.item_cursors.iter().step_by(3).cloned().collect();
+
+    let mut end_reasons = Vec::new();
+    for ascending in [true, false] {
+        let mut cursors = Vec::new();
+        for far_bound in std::iter::once(None).chain(far_bounds.iter().cloned().map(Some)) {
+            let paged = walk(client, query, window, ascending, None, far_bound.clone()).await;
+            let far_key = far_bound
+                .as_deref()
+                .map(|far_bound| cursor_key(far_bound).1);
+            let within_far_bound = |item: &(u64, u32)| match far_key {
+                None => true,
+                Some(far_key) if ascending => *item < far_key,
+                Some(far_key) => *item > far_key,
+            };
+            let in_bounds: Vec<_> = if ascending {
+                all.items.iter().copied().filter(within_far_bound).collect()
+            } else {
+                all.items
+                    .iter()
+                    .rev()
+                    .copied()
+                    .filter(within_far_bound)
+                    .collect()
+            };
+            assert_eq!(
+                paged.items, in_bounds,
+                "ascending={ascending} paging bounded at {far_key:?}: {query:?}"
+            );
+            cursors.extend(paged.cursors.iter().cloned());
+            end_reasons.extend(paged.end_reasons);
+            let Some(far_key) = far_key else {
+                continue;
+            };
+            let excluded: Vec<_> = if ascending {
+                all.items
+                    .iter()
+                    .copied()
+                    .filter(|&item| item >= far_key)
+                    .collect()
+            } else {
+                all.items
+                    .iter()
+                    .rev()
+                    .copied()
+                    .filter(|&item| item <= far_key)
+                    .collect()
+            };
+            let closing = paged
+                .cursors
+                .last()
+                .cloned()
+                .expect("a page carries a cursor");
+            let resumed = walk(client, query, window, ascending, Some(closing), None).await;
+            assert_eq!(
+                resumed.items, excluded,
+                "closing cursor of an ascending={ascending} page bounded at {far_key:?}: \
+                 {query:?}"
+            );
+        }
+        for cursor in cursors {
+            let (kind, key) = cursor_key(&cursor);
+            let expected: Vec<_> = if ascending {
+                all.items
+                    .iter()
+                    .rev()
+                    .copied()
+                    .filter(|&item| item < key)
+                    .collect()
+            } else {
+                all.items
+                    .iter()
+                    .copied()
+                    .filter(|&item| match kind {
+                        CursorKind::Item => item > key,
+                        CursorKind::Boundary => item >= key,
+                    })
+                    .collect()
+            };
+            let opposite = walk(client, query, window, !ascending, Some(cursor), None).await;
+            assert_eq!(
+                opposite.items, expected,
+                "{kind:?} cursor at {key:?} from an ascending={ascending} page, sent back: \
+                 {query:?}"
+            );
+        }
+    }
+    end_reasons
+}
+
+/// Cursors are opaque: a client may send any cursor it received back as either `after` or
+/// `before`, in either ordering. Scan frontiers (from the event bitmap's bucket edge and the
+/// unfiltered event scan's transaction cap) and cursor bounds restated by a page's end must each
+/// return every item their position admits.
+#[tokio::test]
+async fn test_list_cursors_resume_in_the_opposite_direction() {
+    let kv_rpc_config = KvRpcConfig {
+        ledger_history: Some(LedgerHistoryConfig {
+            list_events: Some(LedgerHistoryMethodConfig {
+                max_limit_items: Some(2),
+                default_limit_items: Some(2),
+                ..Default::default()
+            }),
+            // One bucket per request, which a filter of a single literal allows.
+            bitmap_bucket_budget_tx: Some(1),
+            bitmap_bucket_budget_event: Some(1),
+            max_bitmap_filter_literals: Some(1),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut cluster = list_api_cluster_with_config(kv_rpc_config).await;
+    let (bulk, bulk_kp, mut bulk_gas) = cluster.funded_account(100 * DEFAULT_GAS_BUDGET).unwrap();
+    let (emitter, emitter_kp, emitter_gas) =
+        cluster.funded_account(100 * DEFAULT_GAS_BUDGET).unwrap();
+    let (pkg, mut emitter_gas) = publish_package(
+        &mut cluster,
+        emitter,
+        &emitter_kp,
+        emitter_gas,
+        emit_test_event_pkg_path(),
+    )
+    .await;
+    let mut checkpoint = cluster.create_checkpoint().await;
+
+    // Checkpoints mixing event-emitting transactions with event-less ones.
+    let mixed_start = checkpoint.sequence_number + 1;
+    for _ in 0..3 {
+        for emits in [true, false, true, true] {
+            if emits {
+                emitter_gas = call_move(
+                    &mut cluster,
+                    emitter,
+                    &emitter_kp,
+                    emitter_gas,
+                    pkg,
+                    "emit_test_event",
+                    "emit_test_event",
+                )
+                .await
+                .1;
+            } else {
+                bulk_gas = transfer_self(&mut cluster, bulk, &bulk_kp, bulk_gas)
+                    .await
+                    .1;
+            }
+        }
+        checkpoint = cluster.create_checkpoint().await;
+    }
+    let mixed_end = checkpoint.sequence_number + 1;
+
+    // Event-less transactions up to just below the event bitmap's second bucket, then one
+    // checkpoint whose event-emitting transactions straddle the bucket edge.
+    let mut next_tx = checkpoint.network_total_transactions;
+    while next_tx + 1_000 < SECOND_EVENT_BUCKET_TX - 3 {
+        for _ in 0..1_000 {
+            bulk_gas = transfer_self(&mut cluster, bulk, &bulk_kp, bulk_gas)
+                .await
+                .1;
+        }
+        next_tx = cluster
+            .create_checkpoint_before_list_apis_sync()
+            .await
+            .network_total_transactions;
+    }
+    assert!(
+        next_tx <= SECOND_EVENT_BUCKET_TX - 3,
+        "the edge checkpoint must start below the bucket edge, at {next_tx}"
+    );
+    for _ in next_tx..SECOND_EVENT_BUCKET_TX - 3 {
+        bulk_gas = transfer_self(&mut cluster, bulk, &bulk_kp, bulk_gas)
+            .await
+            .1;
+    }
+    for _ in 0..6 {
+        emitter_gas = call_move(
+            &mut cluster,
+            emitter,
+            &emitter_kp,
+            emitter_gas,
+            pkg,
+            "emit_test_event",
+            "emit_test_event",
+        )
+        .await
+        .1;
+    }
+    cluster.create_checkpoint().await;
+    for _ in 0..2 {
+        emitter_gas = call_move(
+            &mut cluster,
+            emitter,
+            &emitter_kp,
+            emitter_gas,
+            pkg,
+            "emit_test_event",
+            "emit_test_event",
+        )
+        .await
+        .1;
+        bulk_gas = transfer_self(&mut cluster, bulk, &bulk_kp, bulk_gas)
+            .await
+            .1;
+        cluster.create_checkpoint().await;
+    }
+
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    // Filtered events: a one-bucket budget stops each scan at the bucket edge, inside the edge
+    // checkpoint.
+    let end_reasons = assert_cursors_resume_in_the_opposite_direction(
+        &mut client,
+        &CursorQuery::Events(Some(ev_sender(emitter))),
+        (None, None),
+    )
+    .await;
+    assert!(end_reasons.contains(&QueryEndReason::ScanLimit));
+
+    // Unfiltered events in the mixed checkpoints: the transaction cap stops each scan between
+    // transactions of one checkpoint.
+    let end_reasons = assert_cursors_resume_in_the_opposite_direction(
+        &mut client,
+        &CursorQuery::Events(None),
+        (Some(mixed_start), Some(mixed_end)),
+    )
+    .await;
+    assert!(end_reasons.contains(&QueryEndReason::ScanLimit));
+
+    // Filtered transactions: pages end on items and on restated cursor bounds inside
+    // checkpoints.
+    assert_cursors_resume_in_the_opposite_direction(
+        &mut client,
+        &CursorQuery::Transactions(tx_sender(emitter)),
+        (None, None),
+    )
+    .await;
+}
+
+/// A descending page bounded by `after: <item X>` excludes X. Its closing cursor, sent back as
+/// `before` without the `after` bound, must resume with X: at the last item of the window, whose
+/// bounded page is empty, and at an item with items above it.
+#[tokio::test]
+async fn test_list_descending_after_item_closing_cursor_resumes_with_the_item() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (pkg, mut gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    cluster.create_checkpoint().await;
+    // One checkpoint of three event-emitting transactions.
+    for _ in 0..3 {
+        gas = call_move(
+            &mut cluster,
+            sender,
+            &kp,
+            gas,
+            pkg,
+            "emit_test_event",
+            "emit_test_event",
+        )
+        .await
+        .1;
+    }
+    let checkpoint = cluster.create_checkpoint().await.sequence_number;
+    let window = (Some(checkpoint), Some(checkpoint + 1));
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    for query in [
+        CursorQuery::Transactions(tx_sender(sender)),
+        CursorQuery::Events(Some(ev_sender(sender))),
+    ] {
+        let all = walk(&mut client, &query, window, true, None, None).await;
+        assert_eq!(all.items.len(), 3, "{query:?}");
+        // The last item, then one with an item above it.
+        for index in [2, 1] {
+            let item = all.item_cursors[index].clone();
+            let bounded = walk(&mut client, &query, window, false, None, Some(item)).await;
+            let above: Vec<_> = all.items[index + 1..].iter().rev().copied().collect();
+            assert_eq!(bounded.items, above, "after item {index}: {query:?}");
+            assert_eq!(
+                bounded.end_reasons.last(),
+                Some(&QueryEndReason::CursorBound),
+                "after item {index}: {query:?}"
+            );
+
+            let closing = bounded.cursors.last().cloned().expect("a closing cursor");
+            let resumed = walk(&mut client, &query, window, false, Some(closing), None).await;
+            let from_item: Vec<_> = all.items[..=index].iter().rev().copied().collect();
+            assert_eq!(
+                resumed.items, from_item,
+                "closing cursor after item {index}, sent back as `before`: {query:?}"
+            );
+        }
+    }
+}
+
+/// A page whose starting cursor lies strictly past its checkpoint window (`after` above it
+/// ascending, `before` below it descending) has nothing to scan. It ends with the window's reason
+/// and claims the window's last checkpoint in scan direction, so a client following the end
+/// reason stops instead of re-sending the page. It closes on the boundary where its starting
+/// cursor resumes: sent back over a wider window, in either ordering, the closing cursor neither
+/// re-serves the starting item nor skips past it.
+#[tokio::test]
+async fn test_list_starting_cursor_past_the_window_ends_with_the_window_reason() {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (pkg, mut gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    cluster.create_checkpoint().await;
+    // Two checkpoints of two event-emitting transactions each.
+    let mut checkpoints = Vec::new();
+    for _ in 0..2 {
+        for _ in 0..2 {
+            gas = call_move(
+                &mut cluster,
+                sender,
+                &kp,
+                gas,
+                pkg,
+                "emit_test_event",
+                "emit_test_event",
+            )
+            .await
+            .1;
+        }
+        checkpoints.push(cluster.create_checkpoint().await.sequence_number);
+    }
+    let (low, high) = (checkpoints[0], checkpoints[1]);
+    let both = (Some(low), Some(high + 1));
+    let mut client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+
+    for query in [
+        CursorQuery::Transactions(tx_sender(sender)),
+        CursorQuery::Events(Some(ev_sender(sender))),
+    ] {
+        let all = walk(&mut client, &query, both, true, None, None).await;
+        assert_eq!(all.items.len(), 4, "{query:?}");
+
+        // Ascending over `low` alone, after the first item of `high`.
+        let page = cursor_page(
+            &mut client,
+            &query,
+            (Some(low), Some(low + 1)),
+            true,
+            Some(all.item_cursors[2].clone()),
+            None,
+        )
+        .await;
+        assert!(page.items.is_empty(), "ascending: {query:?}");
+        assert_eq!(
+            page.end_reason,
+            QueryEndReason::CheckpointBound,
+            "ascending: {query:?}"
+        );
+        assert_eq!(page.end_claim, Some(low), "ascending: {query:?}");
+        assert_eq!(
+            cursor_key(&page.end_cursor).0,
+            CursorKind::Boundary,
+            "ascending: {query:?}"
+        );
+        let resumed = walk(&mut client, &query, both, true, Some(page.end_cursor), None).await;
+        assert_eq!(resumed.items, all.items[3..], "ascending: {query:?}");
+
+        // Descending over `high` alone, before the last item of `low`.
+        let page = cursor_page(
+            &mut client,
+            &query,
+            (Some(high), Some(high + 1)),
+            false,
+            Some(all.item_cursors[1].clone()),
+            None,
+        )
+        .await;
+        assert!(page.items.is_empty(), "descending: {query:?}");
+        assert_eq!(
+            page.end_reason,
+            QueryEndReason::CheckpointBound,
+            "descending: {query:?}"
+        );
+        assert_eq!(page.end_claim, Some(high), "descending: {query:?}");
+        let resumed = walk(
+            &mut client,
+            &query,
+            both,
+            false,
+            Some(page.end_cursor.clone()),
+            None,
+        )
+        .await;
+        assert_eq!(resumed.items, all.items[..1], "descending: {query:?}");
+        let turned = walk(&mut client, &query, both, true, Some(page.end_cursor), None).await;
+        assert_eq!(
+            turned.items,
+            all.items[1..],
+            "descending, turned ascending: {query:?}"
+        );
+    }
+
+    // ListCheckpoints, whose positions are checkpoints: (ascending, window, starting item,
+    // closing boundary, claim).
+    for (ascending, window, start, end, claim) in [
+        (true, (Some(low), Some(low + 1)), high, high + 1, low),
+        (false, (Some(high), Some(high + 1)), low, low, high),
+    ] {
+        let start = CursorToken::item(Position::Checkpoints { checkpoint: start }).encode();
+        let options = if ascending {
+            query_options_after(10, start)
+        } else {
+            query_options_descending_before(10, start)
+        };
+        let mut request = ListCheckpointsRequest::default();
+        request.start_checkpoint = window.0;
+        request.end_checkpoint = window.1;
+        request.read_mask = Some(FieldMask::from_paths(["sequence_number"]));
+        request.options = Some(options);
+        let result = list_checkpoints_result(&mut client, request).await;
+        let context = format!("checkpoints, ascending {ascending}");
+        assert!(result.checkpoints.is_empty(), "{context}");
+        assert_eq!(
+            result.end_reason,
+            Some(QueryEndReason::CheckpointBound),
+            "{context}"
+        );
+        assert_eq!(
+            result
+                .frames
+                .last()
+                .and_then(|(_, watermark)| watermark.checkpoint),
+            Some(claim),
+            "{context}"
+        );
+        let closing = CursorToken::decode(&result.end_cursor.expect("a closing cursor")).unwrap();
+        assert_eq!(
+            closing,
+            CursorToken::boundary(Position::Checkpoints { checkpoint: end }),
+            "{context}"
+        );
+    }
+}
+
+// --- Positions inside the window's edge checkpoints ---
+
+/// An item's ledger position, `(checkpoint, transaction_index, event_index)`. A transaction sits at
+/// event index 0, the gap before its events.
+type LedgerPosition = (u64, u64, u32);
+
+/// A query scanned between positions inside its window's edge checkpoints.
+#[derive(Clone, Debug)]
+enum PositionQuery {
+    Transactions(Option<TransactionFilter>),
+    Events(Option<EventFilter>),
+}
+
+/// The checkpoint window `[start_checkpoint, end_checkpoint)`, with an optional start position in
+/// `start_checkpoint` and end position in `end_checkpoint - 1`, each a `(transaction_index,
+/// event_index)`. Event indexes are only sent by event queries.
+#[derive(Clone, Copy, Debug)]
+struct PositionWindow {
+    start_checkpoint: u64,
+    start: Option<(u64, Option<u32>)>,
+    end_checkpoint: u64,
+    end: Option<(u64, Option<u32>)>,
+}
+
+/// Everything paging a [`PositionQuery`] to its end returned.
+#[derive(Default)]
+struct PositionScan {
+    items: Vec<LedgerPosition>,
+    /// Every page's end reason.
+    end_reasons: Vec<QueryEndReason>,
+    /// The last page's closing cursor.
+    end_cursor: Option<prost::bytes::Bytes>,
+}
+
+/// Three checkpoints of several event-emitting transactions each, from two interleaved senders.
+struct PositionFixture {
+    /// Keeps the cluster serving while the test queries it.
+    _cluster: FullCluster,
+    client: LedgerServiceClient<Channel>,
+    /// The sender of every other transaction, for filtered scans.
+    sender: RtdAddress,
+    /// The fixture's checkpoints, ascending.
+    checkpoints: [u64; 3],
+}
+
+/// Execute `emit_many(events)` from `sender` and return the updated gas ref.
+fn emit_many(
+    cluster: &mut FullCluster,
+    sender: RtdAddress,
+    kp: &AccountKeyPair,
+    gas: ObjectRef,
+    pkg: ObjectID,
+    events: u64,
+) -> ObjectRef {
+    let mut builder = ProgrammableTransactionBuilder::new();
+    let arg = builder.pure(events).unwrap();
+    builder.programmable_move_call(
+        pkg,
+        ident_str!("emit_test_event").to_owned(),
+        ident_str!("emit_many").to_owned(),
+        vec![],
+        vec![arg],
+    );
+    let data = TransactionData::new_programmable(
+        sender,
+        vec![gas],
+        builder.finish(),
+        DEFAULT_GAS_BUDGET,
+        cluster.reference_gas_price(),
+    );
+    let (fx, err) = cluster
+        .execute_transaction(Transaction::from_data_and_signer(data, vec![kp]))
+        .expect("emit_many failed");
+    assert!(err.is_none(), "emit_many({events}): {err:?}");
+    fx.mutated()
+        .into_iter()
+        .find(|((id, _, _), _)| *id == gas.0)
+        .map(|((id, version, digest), _)| (id, version, digest))
+        .expect("gas mutated")
+}
+
+/// Each fixture checkpoint's transactions, as (account, events emitted). Account 0 is the
+/// fixture's `sender`; the two accounts alternate.
+const POSITION_LAYOUT: [&[(usize, u64)]; 3] = [
+    &[(0, 2), (1, 3), (0, 1), (1, 2)],
+    &[(1, 3), (0, 2), (1, 1), (0, 3)],
+    &[(0, 2), (1, 2), (0, 3)],
+];
+
+async fn position_fixture() -> PositionFixture {
+    let mut cluster = list_api_cluster().await;
+    let (sender, kp, gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (other, other_kp, other_gas) = cluster.funded_account(20 * DEFAULT_GAS_BUDGET).unwrap();
+    let (pkg, gas) =
+        publish_package(&mut cluster, sender, &kp, gas, emit_test_event_pkg_path()).await;
+    cluster.create_checkpoint().await;
+
+    let accounts = [(sender, &kp), (other, &other_kp)];
+    let mut gas = [gas, other_gas];
+    let mut checkpoints = [0; 3];
+    for (index, transactions) in POSITION_LAYOUT.into_iter().enumerate() {
+        for &(account, events) in transactions {
+            let (address, kp) = accounts[account];
+            gas[account] = emit_many(&mut cluster, address, kp, gas[account], pkg, events);
+        }
+        checkpoints[index] = cluster.create_checkpoint().await.sequence_number;
+    }
+
+    let client = LedgerServiceClient::connect(cluster.kv_rpc_url().to_string())
+        .await
+        .unwrap();
+    PositionFixture {
+        _cluster: cluster,
+        client,
+        sender,
+        checkpoints,
+    }
+}
+
+/// Asserts that `all`, a query's items over the whole fixture, ascending, are the fixture's
+/// transactions (or their events) at the positions [`POSITION_LAYOUT`] gives them: only the
+/// fixture sender's when `sender_only`, every account's otherwise. An unfiltered transaction scan
+/// also lists the system transactions that close each checkpoint, which emit no events.
+fn assert_layout_items(
+    all: &[LedgerPosition],
+    checkpoints: [u64; 3],
+    events: bool,
+    sender_only: bool,
+) {
+    let mut expected = Vec::new();
+    for (index, transactions) in POSITION_LAYOUT.into_iter().enumerate() {
+        for (transaction_index, &(account, event_count)) in transactions.iter().enumerate() {
+            if sender_only && account != 0 {
+                continue;
+            }
+            let position =
+                |event_index| (checkpoints[index], transaction_index as u64, event_index);
+            if events {
+                expected.extend((0..event_count as u32).map(position));
+            } else {
+                expected.push(position(0));
+            }
+        }
+    }
+    let listed: Vec<_> = if events || sender_only {
+        all.to_vec()
+    } else {
+        all.iter()
+            .copied()
+            .filter(|&(checkpoint, transaction_index, _)| {
+                let index = checkpoints
+                    .iter()
+                    .position(|fixture_checkpoint| *fixture_checkpoint == checkpoint)
+                    .expect("every item lies in a fixture checkpoint");
+                transaction_index < POSITION_LAYOUT[index].len() as u64
+            })
+            .collect()
+    };
+    assert_eq!(
+        listed, expected,
+        "events {events}, sender only {sender_only}"
+    );
+}
+
+fn transaction_window(
+    start_checkpoint: u64,
+    start: Option<u64>,
+    end_checkpoint: u64,
+    end: Option<u64>,
+) -> PositionWindow {
+    PositionWindow {
+        start_checkpoint,
+        start: start.map(|transaction_index| (transaction_index, None)),
+        end_checkpoint,
+        end: end.map(|transaction_index| (transaction_index, None)),
+    }
+}
+
+fn event_window(
+    start_checkpoint: u64,
+    start: Option<(u64, Option<u32>)>,
+    end_checkpoint: u64,
+    end: Option<(u64, Option<u32>)>,
+) -> PositionWindow {
+    PositionWindow {
+        start_checkpoint,
+        start,
+        end_checkpoint,
+        end,
+    }
+}
+
+/// One page of `query` over `window`, of at most `limit` items, bounded by `after` and `before`.
+async fn position_page(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &PositionQuery,
+    window: PositionWindow,
+    ascending: bool,
+    limit: u32,
+    after: Option<prost::bytes::Bytes>,
+    before: Option<prost::bytes::Bytes>,
+) -> PositionScan {
+    let mut options = query_options(limit);
+    options.after = after;
+    options.before = before;
+    if !ascending {
+        options.ordering = Some(Ordering::Descending as i32);
+    }
+    let (items, end_cursor, end_reason) = match query {
+        PositionQuery::Transactions(filter) => {
+            let mut request = ListTransactionsRequest::default();
+            request.start_checkpoint = Some(window.start_checkpoint);
+            request.start_transaction_index = window.start.map(|(transaction, _)| transaction);
+            request.end_checkpoint = Some(window.end_checkpoint);
+            request.end_transaction_index = window.end.map(|(transaction, _)| transaction);
+            request.filter = filter.clone();
+            request.read_mask = Some(FieldMask::from_paths([
+                "digest",
+                "checkpoint",
+                "transaction_index",
+            ]));
+            request.options = Some(options);
+            let result = list_transactions_result(client, request).await;
+            assert_transaction_cursors(&result);
+            let items = result
+                .transactions
+                .iter()
+                .map(|item| {
+                    let transaction = item.transaction.as_ref().unwrap();
+                    (
+                        transaction.checkpoint.expect("checkpoint requested"),
+                        transaction
+                            .transaction_index
+                            .expect("transaction_index requested"),
+                        0,
+                    )
+                })
+                .collect();
+            (items, result.end_cursor, result.end_reason)
+        }
+        PositionQuery::Events(filter) => {
+            let mut request = ListEventsRequest::default();
+            request.start_checkpoint = Some(window.start_checkpoint);
+            request.start_transaction_index = window.start.map(|(transaction, _)| transaction);
+            request.start_event_index = window.start.and_then(|(_, event)| event);
+            request.end_checkpoint = Some(window.end_checkpoint);
+            request.end_transaction_index = window.end.map(|(transaction, _)| transaction);
+            request.end_event_index = window.end.and_then(|(_, event)| event);
+            request.filter = filter.clone();
+            request.read_mask = Some(FieldMask::from_paths([
+                "checkpoint",
+                "transaction_index",
+                "event_index",
+            ]));
+            request.options = Some(options);
+            let result = list_events_result(client, request).await;
+            assert_event_cursors(&result);
+            let items = result
+                .events
+                .iter()
+                .map(|item| {
+                    let event = item.event.as_ref().unwrap();
+                    (
+                        event.checkpoint.expect("checkpoint requested"),
+                        event
+                            .transaction_index
+                            .expect("transaction_index requested"),
+                        event.event_index.expect("event_index requested"),
+                    )
+                })
+                .collect();
+            (items, result.end_cursor, result.end_reason)
+        }
+    };
+    PositionScan {
+        items,
+        end_reasons: vec![end_reason.expect("every page ends with a reason")],
+        end_cursor,
+    }
+}
+
+/// Pages `query` over `window` to its end, at most `limit` items a page, resuming each page from
+/// the previous page's closing cursor and keeping the other cursor bound.
+async fn position_scan(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &PositionQuery,
+    window: PositionWindow,
+    ascending: bool,
+    limit: u32,
+    mut after: Option<prost::bytes::Bytes>,
+    mut before: Option<prost::bytes::Bytes>,
+) -> PositionScan {
+    let mut scan = PositionScan::default();
+    for _ in 0..1_000 {
+        let page = position_page(
+            client,
+            query,
+            window,
+            ascending,
+            limit,
+            after.clone(),
+            before.clone(),
+        )
+        .await;
+        scan.items.extend(page.items);
+        scan.end_reasons.extend(page.end_reasons);
+        scan.end_cursor = page.end_cursor;
+        if !is_resumable(*scan.end_reasons.last().unwrap()) {
+            return scan;
+        }
+        if ascending {
+            after = scan.end_cursor.clone();
+        } else {
+            before = scan.end_cursor.clone();
+        }
+    }
+    panic!("paging did not reach the end: {query:?} over {window:?}");
+}
+
+/// `window`'s start position (inclusive) and end position (exclusive) as [`LedgerPosition`]s. An
+/// offset past the end of its checkpoint or transaction needs no clamping to compare: no item lies
+/// past that end.
+fn window_bounds(
+    query: &PositionQuery,
+    window: PositionWindow,
+) -> (LedgerPosition, LedgerPosition) {
+    let event_index = |index: Option<u32>| match query {
+        PositionQuery::Transactions(_) => 0,
+        PositionQuery::Events(_) => index.unwrap_or(0),
+    };
+    let start = window
+        .start
+        .map_or((window.start_checkpoint, 0, 0), |(transaction, event)| {
+            (window.start_checkpoint, transaction, event_index(event))
+        });
+    let end = window
+        .end
+        .map_or((window.end_checkpoint, 0, 0), |(transaction, event)| {
+            (window.end_checkpoint - 1, transaction, event_index(event))
+        });
+    (start, end)
+}
+
+/// The items of `all` (ascending) that `window` admits, in scan order.
+fn expected_items(
+    all: &[LedgerPosition],
+    query: &PositionQuery,
+    window: PositionWindow,
+    ascending: bool,
+) -> Vec<LedgerPosition> {
+    let (start, end) = window_bounds(query, window);
+    let mut items: Vec<_> = all
+        .iter()
+        .copied()
+        .filter(|item| start <= *item && *item < end)
+        .collect();
+    if !ascending {
+        items.reverse();
+    }
+    items
+}
+
+/// Every window in `windows` returns exactly the items of `query` between its positions, in either
+/// ordering, both in one page and paged from each page's closing cursor with the positions kept,
+/// ending with `CHECKPOINT_BOUND`. Returns `query`'s items over `whole` ascending.
+async fn assert_positions_bound_the_scan(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &PositionQuery,
+    whole: PositionWindow,
+    windows: &[PositionWindow],
+    page_limit: u32,
+) -> Vec<LedgerPosition> {
+    let all = position_scan(client, query, whole, true, 100, None, None).await;
+    assert_eq!(
+        all.end_reasons,
+        [QueryEndReason::CheckpointBound],
+        "{query:?}"
+    );
+    for &window in windows {
+        for ascending in [true, false] {
+            let context = format!("{query:?} over {window:?}, ascending {ascending}");
+            let expected = expected_items(&all.items, query, window, ascending);
+
+            let one_page = position_scan(client, query, window, ascending, 100, None, None).await;
+            assert_eq!(one_page.items, expected, "{context}");
+            assert_eq!(
+                one_page.end_reasons,
+                [QueryEndReason::CheckpointBound],
+                "{context}"
+            );
+
+            let paged =
+                position_scan(client, query, window, ascending, page_limit, None, None).await;
+            assert_eq!(paged.items, expected, "paged: {context}");
+            let (last, earlier) = paged.end_reasons.split_last().unwrap();
+            assert_eq!(*last, QueryEndReason::CheckpointBound, "paged: {context}");
+            assert!(
+                earlier.iter().all(|reason| is_resumable(*reason)),
+                "paged: {context}: {:?}",
+                paged.end_reasons
+            );
+        }
+    }
+    all.items
+}
+
+/// A page closing at one of `window`'s positions, or on its last item before one, closes on a
+/// cursor that resumes exactly there: sent back over `whole` without the positions, it returns the
+/// rest of `all` in scan order, and sent back with them, it returns nothing more.
+async fn assert_closing_cursors_resume_at_positions(
+    client: &mut LedgerServiceClient<Channel>,
+    query: &PositionQuery,
+    all: &[LedgerPosition],
+    whole: PositionWindow,
+    window: PositionWindow,
+) {
+    let (start, end) = window_bounds(query, window);
+    for ascending in [true, false] {
+        let context = format!("{query:?} over {window:?}, ascending {ascending}");
+        let expected = expected_items(all, query, window, ascending);
+        assert!(!expected.is_empty(), "{context}");
+        let resume = |cursor: prost::bytes::Bytes| {
+            if ascending {
+                (Some(cursor), None)
+            } else {
+                (None, Some(cursor))
+            }
+        };
+        let rest_of = |past: &dyn Fn(&LedgerPosition) -> bool| {
+            let mut rest: Vec<_> = all.iter().copied().filter(past).collect();
+            if !ascending {
+                rest.reverse();
+            }
+            rest
+        };
+
+        // Closing at the position.
+        let scan = position_scan(client, query, window, ascending, 100, None, None).await;
+        let closing = scan.end_cursor.expect("a closing cursor");
+        let (after, before) = resume(closing.clone());
+        let resumed = position_scan(client, query, whole, ascending, 100, after, before).await;
+        let rest = if ascending {
+            rest_of(&|item| *item >= end)
+        } else {
+            rest_of(&|item| *item < start)
+        };
+        assert_eq!(resumed.items, rest, "at the position: {context}");
+        let (after, before) = resume(closing);
+        let resumed = position_scan(client, query, window, ascending, 100, after, before).await;
+        assert!(resumed.items.is_empty(), "at the position: {context}");
+        assert_eq!(
+            resumed.end_reasons,
+            [QueryEndReason::CheckpointBound],
+            "at the position: {context}"
+        );
+
+        // Closing on the last item before the position.
+        let limit = expected.len() as u32;
+        let page = position_page(client, query, window, ascending, limit, None, None).await;
+        assert_eq!(page.items, expected, "on the last item: {context}");
+        let last = *expected.last().unwrap();
+        let closing = page.end_cursor.expect("a closing cursor");
+        let (after, before) = resume(closing.clone());
+        let resumed = position_scan(client, query, whole, ascending, 100, after, before).await;
+        let rest = if ascending {
+            rest_of(&|item| *item > last)
+        } else {
+            rest_of(&|item| *item < last)
+        };
+        assert_eq!(resumed.items, rest, "on the last item: {context}");
+        let (after, before) = resume(closing);
+        let resumed = position_scan(client, query, window, ascending, 100, after, before).await;
+        assert!(resumed.items.is_empty(), "on the last item: {context}");
+    }
+}
+
+/// `ListTransactions` scans from a start position inside `start_checkpoint` to an end position
+/// inside `end_checkpoint - 1`: filtered or not, in either ordering, in one page or paged, it
+/// returns exactly the transactions between them. Offsets past a checkpoint's end clamp to it,
+/// closing cursors resume at the positions, and an index without its checkpoint bound is
+/// rejected.
+#[tokio::test]
+async fn test_list_transactions_between_checkpoint_positions() {
+    let mut fixture = position_fixture().await;
+    let [low, mid, high] = fixture.checkpoints;
+    let sender = fixture.sender;
+    let client = &mut fixture.client;
+    let window = transaction_window;
+    let whole = window(low, None, high + 1, None);
+    let unfiltered = PositionQuery::Transactions(None);
+    let all = position_scan(client, &unfiltered, whole, true, 100, None, None)
+        .await
+        .items;
+    assert_layout_items(&all, fixture.checkpoints, false, false);
+
+    // An end checkpoint past the tip ends the window there, without the end position.
+    let scan = position_scan(
+        client,
+        &unfiltered,
+        window(mid, None, high + 10, Some(0)),
+        true,
+        100,
+        None,
+        None,
+    )
+    .await;
+    let from_mid: Vec<_> = all.iter().copied().filter(|item| item.0 >= mid).collect();
+    assert_eq!(scan.items, from_mid);
+    assert_eq!(scan.end_reasons, [QueryEndReason::LedgerTip]);
+
+    for (query, sender_only) in [
+        (unfiltered, false),
+        (PositionQuery::Transactions(Some(tx_sender(sender))), true),
+    ] {
+        let all = assert_positions_bound_the_scan(
+            client,
+            &query,
+            whole,
+            &[
+                window(low, Some(1), high + 1, Some(2)),
+                window(low, Some(2), mid + 1, Some(1)),
+                window(mid, Some(1), mid + 1, Some(3)),
+                window(mid, Some(2), mid + 1, Some(2)),
+                window(mid, Some(3), mid + 1, Some(1)),
+                window(low, Some(1), mid + 1, Some(100)),
+                // The end position counts from the start of `end_checkpoint - 1`: index 0 leaves
+                // all of that checkpoint out, and index k keeps its first k transactions.
+                window(low, None, high + 1, Some(0)),
+                window(high, None, high + 1, Some(2)),
+                // A start index past the start checkpoint's transactions starts at the next
+                // checkpoint.
+                window(low, Some(100), high + 1, None),
+                // Positions at the window's edges return what a request without them does.
+                window(low, Some(0), high + 1, None),
+                window(low, None, high + 1, Some(100)),
+                whole,
+            ],
+            2,
+        )
+        .await;
+        assert_layout_items(&all, fixture.checkpoints, false, sender_only);
+        assert_closing_cursors_resume_at_positions(
+            client,
+            &query,
+            &all,
+            whole,
+            window(low, Some(1), high + 1, Some(1)),
+        )
+        .await;
+    }
+
+    // A transaction index without its checkpoint bound.
+    let mut request = ListTransactionsRequest::default();
+    request.end_checkpoint = Some(high + 1);
+    request.start_transaction_index = Some(1);
+    expect_invalid_list_transactions(client, request).await;
+}
+
+/// `ListEvents` scans from a start position `(start_transaction_index, start_event_index)` inside
+/// `start_checkpoint` to an end position inside `end_checkpoint - 1`: filtered or not, in either
+/// ordering, in one page or paged, it returns exactly the events between them. A transaction index
+/// past its checkpoint's end clamps to the next checkpoint's first event, an event index past its
+/// transaction's events to the next transaction, closing cursors resume at the positions, and an
+/// event index without its transaction index is rejected.
+#[tokio::test]
+async fn test_list_events_between_checkpoint_positions() {
+    let mut fixture = position_fixture().await;
+    let [low, mid, high] = fixture.checkpoints;
+    let sender = fixture.sender;
+    let client = &mut fixture.client;
+    let window = event_window;
+    let whole = window(low, None, high + 1, None);
+    let unfiltered = PositionQuery::Events(None);
+    for (query, sender_only) in [
+        (unfiltered, false),
+        (PositionQuery::Events(Some(ev_sender(sender))), true),
+    ] {
+        let all = assert_positions_bound_the_scan(
+            client,
+            &query,
+            whole,
+            &[
+                window(low, Some((1, Some(1))), high + 1, Some((1, Some(1)))),
+                window(mid, Some((0, Some(2))), mid + 1, Some((3, Some(1)))),
+                window(mid, Some((1, Some(1))), mid + 1, Some((1, Some(1)))),
+                // An unset event index is the gap before the transaction's first event.
+                window(low, Some((2, None)), mid + 1, Some((1, Some(2)))),
+                window(mid, Some((3, None)), mid + 1, Some((1, Some(1)))),
+                // The end position counts from the start of `end_checkpoint - 1`: transaction
+                // index 0 leaves all of that checkpoint out, and an event index keeps that many
+                // events of its transaction.
+                window(low, None, high + 1, Some((0, None))),
+                window(low, None, high + 1, Some((0, Some(1)))),
+                window(high, None, high + 1, Some((1, Some(1)))),
+                // A start transaction index past the start checkpoint's transactions starts at
+                // the next checkpoint's first event, whatever the start event index.
+                window(low, Some((100, Some(1))), high + 1, None),
+                // An event index past its transaction's events starts at the next transaction,
+                // and ends after the whole transaction.
+                window(low, Some((1, Some(100))), mid + 1, Some((1, Some(100)))),
+                // Positions at the window's edges return what a request without them does.
+                window(low, Some((0, Some(0))), high + 1, None),
+                window(low, None, high + 1, Some((100, Some(1)))),
+                whole,
+            ],
+            3,
+        )
+        .await;
+        assert_layout_items(&all, fixture.checkpoints, true, sender_only);
+        assert_closing_cursors_resume_at_positions(
+            client,
+            &query,
+            &all,
+            whole,
+            window(low, Some((1, Some(1))), high + 1, Some((2, Some(1)))),
+        )
+        .await;
+    }
+
+    // An event index without its transaction index.
+    let mut request = ListEventsRequest::default();
+    request.start_checkpoint = Some(low);
+    request.end_checkpoint = Some(high + 1);
+    request.start_event_index = Some(1);
+    expect_invalid_list_events(client, request).await;
+}

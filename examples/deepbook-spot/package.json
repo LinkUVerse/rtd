@@ -8,8 +8,8 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@mysten/deepbook-v3": "1.5.9",
-    "@mysten/sui": "2.22.1"
+    "@linku/deepbook-v3": "1.5.9",
+    "@linku/rtd": "2.22.1"
   },
   "devDependencies": {
     "typescript": "^5.5.3"

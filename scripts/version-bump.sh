@@ -1,8 +1,8 @@
 #!/bin/bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
-# Unified Sui version bump script.
+# Unified Rtd version bump script.
 # Updates Cargo.toml, then runs cargo check.
 #
 # This script handles file changes ONLY — git operations (commit, push, PR)
@@ -28,7 +28,7 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Bump the Sui workspace version across all required files.
+Bump the Rtd workspace version across all required files.
 
 Options:
   --type patch|minor   Bump direction (default: patch)
@@ -80,7 +80,7 @@ fi
 # ── Extract current version ──────────────────────────────────────────
 if [[ ! -f "Cargo.toml" ]]; then
   echo -e "${RED}Error: Cargo.toml not found in current directory.${NC}" >&2
-  echo "Run this script from the root of the sui repository." >&2
+  echo "Run this script from the root of the rtd repository." >&2
   exit 1
 fi
 
@@ -113,7 +113,7 @@ if [[ "$CURRENT_VERSION" == "$NEW_VERSION" ]]; then
 fi
 
 # ── Confirmation ─────────────────────────────────────────────────────
-echo -e "${GREEN}=== Sui Version Bump ===${NC}"
+echo -e "${GREEN}=== Rtd Version Bump ===${NC}"
 echo ""
 echo "Current version: $CURRENT_VERSION"
 echo -e "New version:     ${GREEN}$NEW_VERSION${NC} ($BUMP_TYPE bump)"

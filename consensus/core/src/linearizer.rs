@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
@@ -350,7 +350,7 @@ fn median_timestamps_by_stake_inner(
 #[cfg(test)]
 mod tests {
     use consensus_config::AuthorityIndex;
-    use mysten_common::ZipDebugEqIteratorExt as _;
+    use linku_common::ZipDebugEqIteratorExt as _;
     use rstest::rstest;
 
     use super::*;

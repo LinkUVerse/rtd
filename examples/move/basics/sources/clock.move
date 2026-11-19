@@ -1,10 +1,10 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 module basics::clock;
 
-use sui::clock::Clock;
-use sui::event;
+use rtd::clock::Clock;
+use rtd::event;
 
 public struct TimeEvent has copy, drop, store {
     timestamp_ms: u64,

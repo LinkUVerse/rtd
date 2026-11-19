@@ -1,7 +1,7 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-// Targets the pinned/system-package optimization from MystenLabs/sui#26508.
+// Targets the pinned/system-package optimization from LinkUVerse/rtd#26508.
 //
 // `0x42::lib` is the callee package. When pinned via `MoveRuntime::new_with_system_packages`,
 // the JIT translator rewrites cross-package calls into it as direct function pointers; when

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// An implementation of Tic Tac Toe, using owned objects.
@@ -19,8 +19,8 @@
 /// only requires one transaction.
 module tic_tac_toe::owned;
 
-use sui::event;
-use sui::transfer::Receiving;
+use rtd::event;
+use rtd::transfer::Receiving;
 
 // === Object Types ===
 

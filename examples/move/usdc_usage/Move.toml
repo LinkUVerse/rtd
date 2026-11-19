@@ -3,8 +3,8 @@ name = "usdc_usage"
 edition = "2024.beta"
 
 [dependencies]
-Sui = { override = true, local = "../../../crates/sui-framework/packages/sui-framework" }
-usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
+Rtd = { override = true, local = "../../../crates/rtd-framework/packages/rtd-framework" }
+usdc = { git = "https://github.com/circlefin/stablecoin-rtd.git", subdir = "packages/usdc", rev = "master" }
 
 
 [addresses]

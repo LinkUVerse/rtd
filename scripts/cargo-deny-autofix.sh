@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 #
 # Detects `cargo deny check advisories` errors in the CI-gated workspaces and
@@ -26,8 +26,8 @@ fi
 # Standalone example workspaces: not gated by cargo-deny in CI, but keep their
 # lockfiles in sync when we bump a crate (best effort).
 EXTRA_LOCKFILE_DIRS=(
-  examples/rust/basic-sui-indexer
-  examples/rust/clickhouse-sui-indexer
+  examples/rust/basic-rtd-indexer
+  examples/rust/clickhouse-rtd-indexer
   examples/rust/walrus-attributes-indexer
 )
 

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -13,10 +13,10 @@ use consensus_config::{AuthorityIndex, Stake, local_committee_and_keys};
 use consensus_types::block::{BlockRef, Round};
 use itertools::Itertools as _;
 #[cfg(test)]
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_scope;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_scope;
 use parking_lot::RwLock;
-use sui_macros::fail_point;
+use rtd_macros::fail_point;
 use tokio::sync::{broadcast, watch};
 use tracing::{debug, info, trace, warn};
 
@@ -369,7 +369,7 @@ impl Core {
             self.signals.new_accepted_block(block.clone());
         }
         #[cfg(test)]
-        sui_macros::handle_fail_point("consensus-after-accept-certified-blocks");
+        rtd_macros::handle_fail_point("consensus-after-accept-certified-blocks");
         accepted_blocks
     }
 
@@ -3522,7 +3522,7 @@ mod test {
             let accepted_leader = certified_commits[crash_before_index - 1].leader();
             let finalized_commit_ref = prior[0].commit_ref;
             let test_thread = std::thread::current().id();
-            sui_macros::register_fail_point("consensus-after-accept-certified-blocks", move || {
+            rtd_macros::register_fail_point("consensus-after-accept-certified-blocks", move || {
                 if std::thread::current().id() != test_thread {
                     return;
                 }
@@ -3538,7 +3538,7 @@ mod test {
             let crash = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 fixture.core.try_commit(certified_commits[1..].to_vec())
             }));
-            sui_macros::clear_fail_point("consensus-after-accept-certified-blocks");
+            rtd_macros::clear_fail_point("consensus-after-accept-certified-blocks");
             assert_eq!(
                 crash.unwrap_err().downcast_ref::<&str>(),
                 Some(&"crash after certified block acceptance")

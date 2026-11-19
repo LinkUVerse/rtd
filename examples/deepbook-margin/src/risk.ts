@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#read-risk
@@ -8,7 +8,7 @@ import type { RiskParams } from './risk-params.js';
 // Read your live risk ratio and see how close it is to liquidation.
 // `getMarginManagerState` values your collateral and debt through the pool's
 // Pyth oracles and returns the resulting risk ratio in one call, along with the
-// oracle prices it used. Because it is oracle-priced, it moves whenever SUI
+// oracle prices it used. Because it is oracle-priced, it moves whenever RTD
 // moves, and it drifts down on its own as interest accrues on the debt.
 export interface RiskStatus {
 	riskRatio: number;

@@ -1,4 +1,4 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 name: Setup Rust build environment
@@ -29,7 +29,7 @@ inputs:
       that outlive a 1h session and would otherwise fail with an sccache S3
       `ExpiredToken` mid-build (e.g. the slow macos-latest-large release leg). The
       assumed role's MaxSessionDuration must be >= this value
-      (sui-sccache-rw-github is set to 14400).
+      (rtd-sccache-rw-github is set to 14400).
     required: false
   key-prefix:
     description: S3 key prefix for cache partitioning (e.g., ubuntu-ghcloud, windows-ghcloud)
@@ -42,7 +42,7 @@ runs:
     #
     # Why upstream, not apt? Ubuntu 22.04 apt ships mold 1.0.3 (Oct 2022) which
     # has known unsoundness bugs that cause SIGSEGV in large Rust workspaces
-    # (reproduced against Sui's test suite in Docker). Ubuntu 24.04 apt ships
+    # (reproduced against Rtd's test suite in Docker). Ubuntu 24.04 apt ships
     # mold 2.30. Either way, pinning to a specific upstream binary gives us
     # distro-independent, version-deterministic linking.
     #
@@ -103,7 +103,7 @@ runs:
       with:
         role-to-assume: ${{ inputs.role-to-assume }}
         # Identify the run/attempt in CloudTrail's AssumeRoleWithWebIdentity events.
-        role-session-name: sui-sccache-${{ github.run_id }}-${{ github.run_attempt }}
+        role-session-name: rtd-sccache-${{ github.run_id }}-${{ github.run_attempt }}
         # Empty -> action default (3600 = 1h). Set higher for builds that run
         # past 1h (the role's MaxSessionDuration must allow the requested value).
         role-duration-seconds: ${{ inputs.role-duration-seconds }}
@@ -124,7 +124,7 @@ runs:
       if: inputs.role-to-assume != '' || inputs.aws-access-key-id != ''
       shell: bash
       run: |
-        echo "SCCACHE_BUCKET=mystenlabs-sccache" >> "$GITHUB_ENV"
+        echo "SCCACHE_BUCKET=linkuverse-sccache" >> "$GITHUB_ENV"
         echo "SCCACHE_REGION=us-west-2" >> "$GITHUB_ENV"
         echo "SCCACHE_S3_KEY_PREFIX=${{ inputs.key-prefix }}" >> "$GITHUB_ENV"
 

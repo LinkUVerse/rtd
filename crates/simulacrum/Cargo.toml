@@ -1,7 +1,7 @@
 [package]
 name = "simulacrum"
 version = "0.1.0"
-authors = ["Mysten Labs <build@mystenlabs.com>"]
+authors = ["LinkU Labs <build@linkuverse.com>"]
 license = "Apache-2.0"
 publish = false
 edition = "2024"
@@ -19,14 +19,14 @@ zstd.workspace = true
 move-core-types.workspace = true
 rand.workspace = true
 prometheus.workspace = true
-sui-core.workspace = true
+rtd-core.workspace = true
 
 move-bytecode-utils.workspace = true
-sui-config.workspace = true
-sui-framework-snapshot.workspace = true
-sui-protocol-config.workspace = true
-sui-rpc.workspace = true
-sui-types.workspace = true
-sui-execution.workspace = true
-sui-swarm-config.workspace = true
-sui-transaction-checks.workspace = true
+rtd-config.workspace = true
+rtd-framework-snapshot.workspace = true
+rtd-protocol-config.workspace = true
+rtd-rpc.workspace = true
+rtd-types.workspace = true
+rtd-execution.workspace = true
+rtd-swarm-config.workspace = true
+rtd-transaction-checks.workspace = true

@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 pub mod errors;
 mod options;
@@ -27,8 +27,8 @@ use crate::{
 };
 use backoff::backoff::Backoff;
 use fastcrypto::hash::{Digest, HashFunction};
-use mysten_common::debug_fatal;
-use mysten_metrics::RegistryID;
+use linku_common::debug_fatal;
+use linku_metrics::RegistryID;
 use prometheus::{Histogram, HistogramTimer};
 use rocksdb::properties::num_files_at_level;
 use rocksdb::{
@@ -47,7 +47,7 @@ use std::{
     time::Duration,
 };
 use std::{collections::HashSet, ffi::CStr};
-use sui_macros::{fail_point, nondeterministic};
+use rtd_macros::{fail_point, nondeterministic};
 #[cfg(tidehunter)]
 use tidehunter::{db::Db as TideHunterDb, key_shape::KeySpace};
 use tokio::sync::oneshot;
@@ -62,7 +62,7 @@ static WRITE_SYNC_ENABLED: OnceLock<bool> = OnceLock::new();
 
 fn write_sync_enabled() -> bool {
     *WRITE_SYNC_ENABLED
-        .get_or_init(|| std::env::var("SUI_DB_SYNC_TO_DISK").is_ok_and(|v| v == "1" || v == "true"))
+        .get_or_init(|| std::env::var("RTD_DB_SYNC_TO_DISK").is_ok_and(|v| v == "1" || v == "true"))
 }
 
 /// Initialize the write sync setting from config.

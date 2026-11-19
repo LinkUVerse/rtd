@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{fmt, hash::Hash, ops::Deref, sync::Arc};
@@ -24,7 +24,7 @@ use crate::{
 
 pub(crate) const GENESIS_ROUND: Round = 0;
 
-/// Sui transaction in serialised bytes
+/// Rtd transaction in serialised bytes
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Default, Debug)]
 pub struct Transaction {
     data: Bytes,

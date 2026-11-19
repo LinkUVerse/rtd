@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 use std::{marker::PhantomData, sync::Arc};
 
@@ -7,7 +7,7 @@ use prometheus::{Histogram, HistogramTimer};
 use rocksdb::{DBWithThreadMode, Direction, MultiThreaded};
 
 #[cfg(not(test))]
-use mysten_common::debug_fatal;
+use linku_common::debug_fatal;
 
 use crate::metrics::{DBMetrics, RocksDBPerfContext};
 

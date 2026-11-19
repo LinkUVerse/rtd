@@ -1,0 +1,9 @@
+[package]
+name = "legacy_coin"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../../../../../rtd-framework/packages/rtd-framework" }
+
+[addresses]
+legacy_coin = "0x0"

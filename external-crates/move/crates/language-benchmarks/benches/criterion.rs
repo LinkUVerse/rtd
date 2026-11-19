@@ -92,14 +92,14 @@ fn interpreter_step<M: Measurement + 'static>(c: &mut Criterion<M>) {
 }
 
 /// Cross-package call dispatch with the callee published as a regular package — every call
-/// pays the vtable lookup. Baseline for `cross_pkg_call_pinned` (MystenLabs/sui#26508).
+/// pays the vtable lookup. Baseline for `cross_pkg_call_pinned` (LinkUVerse/rtd#26508).
 fn cross_pkg_call_unpinned<M: Measurement + 'static>(c: &mut Criterion<M>) {
     bench_pinned_pkg_call(c, "cross_pkg_call.move", /* pinned */ false);
 }
 
 /// Cross-package call dispatch with the callee installed as a pinned system package — the JIT
 /// rewrites the user package's calls into it as direct function pointers, eliminating the
-/// per-call vtable lookup (MystenLabs/sui#26508).
+/// per-call vtable lookup (LinkUVerse/rtd#26508).
 fn cross_pkg_call_pinned<M: Measurement + 'static>(c: &mut Criterion<M>) {
     bench_pinned_pkg_call(c, "cross_pkg_call.move", /* pinned */ true);
 }

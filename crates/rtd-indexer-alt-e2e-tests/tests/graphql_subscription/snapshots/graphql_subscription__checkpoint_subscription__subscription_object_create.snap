@@ -1,0 +1,67 @@
+---
+source: crates/rtd-indexer-alt-e2e-tests/tests/graphql_subscription/checkpoint_subscription.rs
+expression: item
+---
+{
+  "data": {
+    "checkpoints": {
+      "node": {
+        "sequenceNumber": "[seq]",
+        "transactions": {
+          "nodes": [
+            {
+              "digest": "[digest]",
+              "effects": {
+                "objectChanges": {
+                  "nodes": [
+                    {
+                      "inputState": {
+                        "address": "[address]",
+                        "version": "[version]",
+                        "digest": "[digest]",
+                        "asMoveObject": {
+                          "contents": {
+                            "type": {
+                              "repr": "[pkg]::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>"
+                            }
+                          }
+                        }
+                      },
+                      "outputState": {
+                        "address": "[address]",
+                        "version": "[version]",
+                        "digest": "[digest]",
+                        "asMoveObject": {
+                          "contents": {
+                            "type": {
+                              "repr": "[pkg]::coin::Coin<0x0000000000000000000000000000000000000000000000000000000000000002::rtd::RTD>"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "inputState": null,
+                      "outputState": {
+                        "address": "[address]",
+                        "version": "[version]",
+                        "digest": "[digest]",
+                        "asMoveObject": {
+                          "contents": {
+                            "type": {
+                              "repr": "[pkg]::wrapping::Item"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

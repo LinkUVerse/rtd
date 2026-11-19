@@ -1,6 +1,6 @@
-## Sui v1.62 Gas Schedule Updates (and what to expect)
+## Rtd v1.62 Gas Schedule Updates (and what to expect)
 
-Sui v1.62 includes targeted gas schedule and metering fixes to more accurately account for the true execution cost and introduce a few new gas changes to reduce over-charging.
+Rtd v1.62 includes targeted gas schedule and metering fixes to more accurately account for the true execution cost and introduce a few new gas changes to reduce over-charging.
 
 ### Summary of gas schedule changes
 

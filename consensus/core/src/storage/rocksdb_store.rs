@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -10,8 +10,8 @@ use std::{
 use bytes::Bytes;
 use consensus_config::AuthorityIndex;
 use consensus_types::block::{BlockDigest, BlockRef, Round, TransactionIndex};
-use mysten_common::ZipDebugEqIteratorExt;
-use sui_macros::fail_point;
+use linku_common::ZipDebugEqIteratorExt;
+use rtd_macros::fail_point;
 #[cfg(not(tidehunter))]
 use typed_store::rocks::{DBMapTableConfigMap, default_db_options};
 use typed_store::{

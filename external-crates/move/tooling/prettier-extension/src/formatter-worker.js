@@ -1,9 +1,9 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 'use strict';
 
-const plugin = require('@mysten/prettier-plugin-move');
+const plugin = require('@linku/prettier-plugin-move');
 const { format } = require('prettier');
 const { parentPort } = require('node:worker_threads');
 

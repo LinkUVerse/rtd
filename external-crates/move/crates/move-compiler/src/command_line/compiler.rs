@@ -28,7 +28,7 @@ use crate::{
         program_info::ModuleInfo,
         unique_map::UniqueMap,
     },
-    sui_mode, to_bytecode,
+    rtd_mode, to_bytecode,
     typing::{self, visitor::TypingVisitorObj},
     unit_test,
 };
@@ -358,21 +358,21 @@ impl Compiler {
             let uses_default_config =
                 package_configs.is_empty() || targets.iter().any(|path| path.package.is_none());
 
-            let sui_mode = package_configs
+            let rtd_mode = package_configs
                 .values()
-                .any(|config| !config.is_dependency && config.flavor == Flavor::Sui)
+                .any(|config| !config.is_dependency && config.flavor == Flavor::Rtd)
                 || (uses_default_config
                     && default_config
                         .as_ref()
                         .map(|config| config.flavor)
                         .unwrap_or_default()
-                        == Flavor::Sui);
-            let flavor = if sui_mode { Flavor::Sui } else { Flavor::Core };
+                        == Flavor::Rtd);
+            let flavor = if rtd_mode { Flavor::Rtd } else { Flavor::Core };
 
             known_warning_filters.extend(known_diagnostic_filters(flavor));
 
             // Manifest lint settings determine which optional lint visitors run.
-            configure_lint_visitors(&mut visitors, level, &settings, sui_mode);
+            configure_lint_visitors(&mut visitors, level, &settings, rtd_mode);
 
             Some(settings.filter_scope(&known_warning_filters))
         } else {
@@ -1236,12 +1236,12 @@ fn configure_lint_visitors(
     visitors: &mut IndexMap<TypeId, Visitor>,
     selection: LintSelection,
     settings: &DiagnosticFilterSettings,
-    sui_mode: bool,
+    rtd_mode: bool,
 ) {
     let lint_config = settings.lints.clone().unwrap_or_default();
     let mut lint_visitors = vec![];
-    if sui_mode {
-        lint_visitors.extend(sui_mode::linters::linter_visitors_with_config(
+    if rtd_mode {
+        lint_visitors.extend(rtd_mode::linters::linter_visitors_with_config(
             selection,
             &lint_config,
         ));

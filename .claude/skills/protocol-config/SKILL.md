@@ -1,11 +1,11 @@
 ---
 name: protocol-config
-description: Safely modify or verify Sui protocol config changes, including version bumps, release-branch checks, guards, and snapshots.
+description: Safely modify or verify Rtd protocol config changes, including version bumps, release-branch checks, guards, and snapshots.
 ---
 
 # Modify Protocol Config
 
-Guides you through safely modifying the Sui protocol configuration, or verifies that existing changes were made correctly.
+Guides you through safely modifying the Rtd protocol configuration, or verifies that existing changes were made correctly.
 
 ## Usage
 
@@ -29,7 +29,7 @@ When verifying existing work, follow steps 1-4 to confirm the changes are safe, 
 
 ## Background
 
-The protocol config is defined in `crates/sui-protocol-config/src/lib.rs`. It controls blockchain behavior across all Sui networks. The critical constraint is:
+The protocol config is defined in `crates/rtd-protocol-config/src/lib.rs`. It controls blockchain behavior across all Rtd networks. The critical constraint is:
 
 **Once a protocol version has been released to a production network, its settings CANNOT be changed.**
 
@@ -43,26 +43,26 @@ Find the latest release branch:
 
 ```bash
 git fetch origin
-git branch -r | grep 'origin/releases/sui-v' | grep -E '\-release$' | sort -V | tail -1
+git branch -r | grep 'origin/releases/rtd-v' | grep -E '\-release$' | sort -V | tail -1
 ```
 
-This returns something like `origin/releases/sui-v1.66.0-release`.
+This returns something like `origin/releases/rtd-v1.66.0-release`.
 
 ### 2. Check the max protocol version in the release branch
 
 ```bash
-git show <release-branch>:crates/sui-protocol-config/src/lib.rs | grep 'const MAX_PROTOCOL_VERSION'
+git show <release-branch>:crates/rtd-protocol-config/src/lib.rs | grep 'const MAX_PROTOCOL_VERSION'
 ```
 
 For example:
 ```bash
-git show origin/releases/sui-v1.66.0-release:crates/sui-protocol-config/src/lib.rs | grep 'const MAX_PROTOCOL_VERSION'
+git show origin/releases/rtd-v1.66.0-release:crates/rtd-protocol-config/src/lib.rs | grep 'const MAX_PROTOCOL_VERSION'
 ```
 
 ### 3. Check the max protocol version in your feature branch
 
 ```bash
-grep 'const MAX_PROTOCOL_VERSION' crates/sui-protocol-config/src/lib.rs
+grep 'const MAX_PROTOCOL_VERSION' crates/rtd-protocol-config/src/lib.rs
 ```
 
 ### 4. Determine if you need a new protocol version
@@ -150,7 +150,7 @@ This pattern is rarely needed. It enables a feature ONLY on mainnet while keepin
 After making changes, update the protocol config snapshots:
 
 ```bash
-cargo insta test -p sui-protocol-config --accept
+cargo insta test -p rtd-protocol-config --accept
 ```
 
 ### 9. Common mistakes to avoid
@@ -171,5 +171,5 @@ cargo insta test -p sui-protocol-config --accept
 
 ## File Locations
 
-- Protocol config: `crates/sui-protocol-config/src/lib.rs`
-- Snapshots: `crates/sui-protocol-config/src/snapshots/`
+- Protocol config: `crates/rtd-protocol-config/src/lib.rs`
+- Snapshots: `crates/rtd-protocol-config/src/snapshots/`

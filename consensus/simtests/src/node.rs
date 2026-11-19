@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{
@@ -17,9 +17,9 @@ use consensus_core::{
     TransactionClient, TransactionVerifier, storage::rocksdb_store::RocksDBStore, to_socket_addr,
 };
 use consensus_types::block::BlockTimestampMs;
-use mysten_common::random_util::TempDir;
-use mysten_metrics::monitored_mpsc::UnboundedReceiver;
-use mysten_metrics::monitored_mpsc::unbounded_channel;
+use linku_common::random_util::TempDir;
+use linku_metrics::monitored_mpsc::UnboundedReceiver;
+use linku_metrics::monitored_mpsc::unbounded_channel;
 use parking_lot::Mutex;
 use prometheus::Registry;
 use tracing::{info, trace};
@@ -80,7 +80,7 @@ impl AuthorityNode {
     ///
     /// The empty store applies only to the process that this call starts.
     pub async fn start_with_empty_store(&self) -> Result<()> {
-        let db_dir = Arc::new(mysten_common::tempdir()?);
+        let db_dir = Arc::new(linku_common::tempdir()?);
         let mut config = self.config.clone();
         config.parameters.db_path = db_dir.path().to_path_buf();
         config.db_dir = db_dir;
@@ -105,7 +105,7 @@ impl AuthorityNode {
     }
 
     /// Return the simulator node ID for the running authority.
-    pub fn sim_node_id(&self) -> sui_simulator::task::NodeId {
+    pub fn sim_node_id(&self) -> rtd_simulator::task::NodeId {
         self.inner
             .lock()
             .as_ref()
@@ -211,20 +211,20 @@ pub(crate) struct AuthorityNodeInner {
 
 #[derive(Debug)]
 struct NodeHandle {
-    node_id: sui_simulator::task::NodeId,
+    node_id: rtd_simulator::task::NodeId,
 }
 
 impl Drop for NodeHandle {
     fn drop(&mut self) {
         tracing::info!("shutting down {}", self.node_id);
-        if let Some(handle) = sui_simulator::runtime::Handle::try_current() {
+        if let Some(handle) = rtd_simulator::runtime::Handle::try_current() {
             handle.delete_node(self.node_id);
         }
     }
 }
 
 impl AuthorityNodeInner {
-    fn node_id(&self) -> sui_simulator::task::NodeId {
+    fn node_id(&self) -> rtd_simulator::task::NodeId {
         self.handle.as_ref().expect("Node handle missing").node_id
     }
 
@@ -248,7 +248,7 @@ impl AuthorityNodeInner {
         let (startup_sender, mut startup_receiver) = tokio::sync::watch::channel(false);
         let (cancel_sender, cancel_receiver) = tokio::sync::watch::channel(false);
 
-        let handle = sui_simulator::runtime::Handle::current();
+        let handle = rtd_simulator::runtime::Handle::current();
         let builder = handle.create_node();
 
         // Determine IP address and node name based on whether this is an Observer node

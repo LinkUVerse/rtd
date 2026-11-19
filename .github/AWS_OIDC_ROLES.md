@@ -1,11 +1,11 @@
 <!--
-Copyright (c) Mysten Labs, Inc.
+Copyright (c) LinkU Labs, Inc.
 SPDX-License-Identifier: Apache-2.0
 -->
 
 # AWS OIDC roles for GitHub Actions
 
-Spec for the AWS IAM roles that let `MystenLabs/sui` workflows authenticate to
+Spec for the AWS IAM roles that let `LinkUVerse/rtd` workflows authenticate to
 AWS via **GitHub OIDC** instead of long-lived `AWS_ACCESS_KEY_ID` /
 `AWS_SECRET_ACCESS_KEY` secrets. This document is the source of truth for the
 **AWS account owner** to provision the roles; the workflows reference the
@@ -31,44 +31,44 @@ ARN used by the trust policies below:
 ## Trust-policy rules (read this before writing any role)
 
 1. **Always pin `:aud` to `sts.amazonaws.com`** (`StringEquals`).
-2. **Always constrain `:sub`. Never use `repo:MystenLabs/sui:*`.** A wildcard
+2. **Always constrain `:sub`. Never use `repo:LinkUVerse/rtd:*`.** A wildcard
    `sub` would let **`pull_request`-triggered jobs assume the role** — GitHub's
-   OIDC `sub` for a PR is `repo:MystenLabs/sui:pull_request`, so a fork or any PR
+   OIDC `sub` for a PR is `repo:LinkUVerse/rtd:pull_request`, so a fork or any PR
    could obtain AWS credentials. Pin to branch/tag/environment subjects.
 3. **Preferred: a dedicated GitHub Environment** (e.g. `aws-sccache`) with
    environment protection rules restricting which branches/tags can deploy to
    it. The `sub` is then a single exact value
-   `repo:MystenLabs/sui:environment:<name>`, and the branch restriction is
+   `repo:LinkUVerse/rtd:environment:<name>`, and the branch restriction is
    enforced by the environment — the cleanest, least-error-prone option.
 4. **Alternative: explicit `ref` subjects** via `StringLike` when not using an
-   environment. Wildcards *within* a ref (e.g. `…:ref:refs/heads/releases/sui-*-release`)
+   environment. Wildcards *within* a ref (e.g. `…:ref:refs/heads/releases/rtd-*-release`)
    are fine; a bare `…:*` is not.
 5. `pull_request` is intentionally excluded from the RW roles (it is the
    fork/untrusted path → no S3 write). See "PR read-only cache" below.
 
 ---
 
-## Role 1 — `sui-github-actions-sccache`
+## Role 1 — `rtd-github-actions-sccache`
 
 **Used by:** the `setup-sccache` composite action (18 call sites). Read/write
 to the shared compile cache, **only from trusted contexts**. Forks and PRs do
 not assume this role (they fall back to a local cache).
 
 > **Status: ALREADY PROVISIONED.** This role exists in account `011083325127` as
-> **`arn:aws:iam::011083325127:role/sui-sccache-rw-github`** (created 2026-05-22),
-> with the managed policy `sui-sccache-rw` (exactly the least-privilege policy
+> **`arn:aws:iam::011083325127:role/rtd-sccache-rw-github`** (created 2026-05-22),
+> with the managed policy `rtd-sccache-rw` (exactly the least-privilege policy
 > below). Use this ARN as the `role-to-assume` value — **do not create a second
 > role.** Its current trust matches the "explicit refs" variant below but is
 > scoped to **only** the four protected branches:
-> `repo:MystenLabs/sui:ref:refs/heads/{main,devnet,testnet,mainnet}` — `aud`
+> `repo:LinkUVerse/rtd:ref:refs/heads/{main,devnet,testnet,mainnet}` — `aud`
 > pinned, no wildcard.
 >
-> **Gap to close (Phase-5 release flip):** `releases/sui-*-release` branch trust
+> **Gap to close (Phase-5 release flip):** `releases/rtd-*-release` branch trust
 > was added 2026-06-08, but the live trust does **not** yet include the release
 > **tags**. Add these three exact subjects (matching the workflow's dispatch guard
 > in `release.yml`, not a broad `*-v*`) before flipping the release.yml sccache
 > caller to OIDC:
-> `repo:MystenLabs/sui:ref:refs/tags/{devnet,testnet,mainnet}-v*`. The
+> `repo:LinkUVerse/rtd:ref:refs/tags/{devnet,testnet,mainnet}-v*`. The
 > dispatch path's `main` sub is already trusted and its chosen-ref hazard is
 > closed by the landed tag-prefix + `refs/tags/` checkout guards (PR #26953).
 
@@ -86,7 +86,7 @@ Preferred (environment `aws-sccache`):
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:MystenLabs/sui:environment:aws-sccache"
+        "token.actions.githubusercontent.com:sub": "repo:LinkUVerse/rtd:environment:aws-sccache"
       }
     }
   }]
@@ -100,14 +100,14 @@ Alternative (explicit refs — use if not adopting an environment):
   "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
   "StringLike": {
     "token.actions.githubusercontent.com:sub": [
-      "repo:MystenLabs/sui:ref:refs/heads/main",
-      "repo:MystenLabs/sui:ref:refs/heads/devnet",
-      "repo:MystenLabs/sui:ref:refs/heads/testnet",
-      "repo:MystenLabs/sui:ref:refs/heads/mainnet",
-      "repo:MystenLabs/sui:ref:refs/heads/releases/sui-*-release",
-      "repo:MystenLabs/sui:ref:refs/tags/devnet-v*",
-      "repo:MystenLabs/sui:ref:refs/tags/testnet-v*",
-      "repo:MystenLabs/sui:ref:refs/tags/mainnet-v*"
+      "repo:LinkUVerse/rtd:ref:refs/heads/main",
+      "repo:LinkUVerse/rtd:ref:refs/heads/devnet",
+      "repo:LinkUVerse/rtd:ref:refs/heads/testnet",
+      "repo:LinkUVerse/rtd:ref:refs/heads/mainnet",
+      "repo:LinkUVerse/rtd:ref:refs/heads/releases/rtd-*-release",
+      "repo:LinkUVerse/rtd:ref:refs/tags/devnet-v*",
+      "repo:LinkUVerse/rtd:ref:refs/tags/testnet-v*",
+      "repo:LinkUVerse/rtd:ref:refs/tags/mainnet-v*"
     ]
   }
 }
@@ -116,7 +116,7 @@ Alternative (explicit refs — use if not adopting an environment):
 (Scheduled and `workflow_dispatch` runs execute on a branch — usually `main` —
 so they are covered by the branch subjects above.)
 
-### Permission policy (least-privilege; bucket `mystenlabs-sccache`)
+### Permission policy (least-privilege; bucket `linkuverse-sccache`)
 
 ```json
 {
@@ -126,13 +126,13 @@ so they are covered by the branch subjects above.)
       "Sid": "SccacheObjectRW",
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": "arn:aws:s3:::mystenlabs-sccache/*"
+      "Resource": "arn:aws:s3:::linkuverse-sccache/*"
     },
     {
       "Sid": "SccacheListBucket",
       "Effect": "Allow",
       "Action": "s3:ListBucket",
-      "Resource": "arn:aws:s3:::mystenlabs-sccache"
+      "Resource": "arn:aws:s3:::linkuverse-sccache"
     }
   ]
 }
@@ -142,7 +142,7 @@ so they are covered by the branch subjects above.)
 
 > **Decided: option A.** Allow all PRs, including forks, **read-only** access to
 > the sccache cache through a new RO OIDC role. The cache holds compiled
-> artifacts built from public `sui` source with no identified sensitive material,
+> artifacts built from public `rtd` source with no identified sensitive material,
 > and PRs get **no write access** so cache poisoning stays blocked. If concrete
 > sensitivity is ever identified in cache contents, revisit option C — but we do
 > not carry the workflow capability-split complexity preemptively. Options B/C
@@ -150,8 +150,8 @@ so they are covered by the branch subjects above.)
 
 Today same-repo PRs get **read/write** cache via the static key. Option A demotes
 PRs to **read-only** so a PR can't poison the shared cache, using a second role
-**`sui-sccache-ro-github`** (naming parallels the existing
-`sui-sccache-rw-github`; trust on `pull_request`, policy granting only
+**`rtd-sccache-ro-github`** (naming parallels the existing
+`rtd-sccache-rw-github`; trust on `pull_request`, policy granting only
 `s3:GetObject` + `s3:ListBucket`, **no `PutObject`**).
 
 **To provision (AWS account `011083325127`):**
@@ -161,20 +161,20 @@ PRs to **read-only** so a PR can't poison the shared cache, using a second role
 "Condition": {
   "StringEquals": {
     "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-    "token.actions.githubusercontent.com:sub": "repo:MystenLabs/sui:pull_request"
+    "token.actions.githubusercontent.com:sub": "repo:LinkUVerse/rtd:pull_request"
   }
 }
 ```
 
 ```json
-// Permission policy — bucket mystenlabs-sccache, read-only (NO PutObject)
+// Permission policy — bucket linkuverse-sccache, read-only (NO PutObject)
 {
   "Version": "2012-10-17",
   "Statement": [
     { "Sid": "SccacheObjectRO", "Effect": "Allow",
-      "Action": "s3:GetObject", "Resource": "arn:aws:s3:::mystenlabs-sccache/*" },
+      "Action": "s3:GetObject", "Resource": "arn:aws:s3:::linkuverse-sccache/*" },
     { "Sid": "SccacheListBucket", "Effect": "Allow",
-      "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::mystenlabs-sccache" }
+      "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::linkuverse-sccache" }
   ]
 }
 ```
@@ -185,7 +185,7 @@ extends each `SCCACHE_ROLE` expression to resolve the RO ARN on `pull_request`.
 
 **For the record — "fork = none" is not enforceable by the trust policy** (the
 reason A was chosen over C). GitHub's OIDC `sub` for *every* PR — same-repo and
-fork alike — is the same value `repo:MystenLabs/sui:pull_request`. AWS cannot tell
+fork alike — is the same value `repo:LinkUVerse/rtd:pull_request`. AWS cannot tell
 a fork PR from a same-repo PR from that claim, so the trust alone cannot grant RO
 to same-repo PRs while denying forks. The rejected alternatives:
 
@@ -222,17 +222,17 @@ on gating the role input.)
 
 ---
 
-## Role 2 — `sui-github-actions-release-s3`
+## Role 2 — `rtd-github-actions-release-s3`
 
 **Used by:** `release.yml` — uploads/downloads release binaries to
-`s3://sui-releases`. Runs on the `release: created` event (a release tag) and
+`s3://rtd-releases`. Runs on the `release: created` event (a release tag) and
 `workflow_dispatch`. Keep this **separate** from the cache role (different
 bucket, narrower trust).
 
 > **Status: ACTIVE.** Provisioned 2026-06-08 as
-> **`arn:aws:iam::011083325127:role/sui-releases-rw-github`** (inline policy
-> `sui-releases-rw` = exactly the least-privilege policy below). Trust =
-> `repo:MystenLabs/sui:environment:release` (the environment variant), aud
+> **`arn:aws:iam::011083325127:role/rtd-releases-rw-github`** (inline policy
+> `rtd-releases-rw` = exactly the least-privilege policy below). Trust =
+> `repo:LinkUVerse/rtd:environment:release` (the environment variant), aud
 > pinned, no wildcard. The `release` GitHub Environment exists with a custom
 > deployment branch policy (`main` branch + `devnet-v*`/`testnet-v*`/`mainnet-v*`
 > tags), and `release.yml`'s `upload-release-archives-to-s3` job declares
@@ -242,7 +242,7 @@ bucket, narrower trust).
 
 `release.yml` triggers on **both** `release: created` (a tag ref) **and**
 `workflow_dispatch`. A manual dispatch runs with a **branch** subject
-(`repo:MystenLabs/sui:ref:refs/heads/main`) *even when the `sui_tag` input names
+(`repo:LinkUVerse/rtd:ref:refs/heads/main`) *even when the `rtd_tag` input names
 a release tag* — so a tag-only `:sub` allowlist would reject the manual path and
 break dispatch-triggered releases.
 
@@ -254,7 +254,7 @@ Environment requirements" below). The release job declares `environment: release
 "Condition": {
   "StringEquals": {
     "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-    "token.actions.githubusercontent.com:sub": "repo:MystenLabs/sui:environment:release"
+    "token.actions.githubusercontent.com:sub": "repo:LinkUVerse/rtd:environment:release"
   }
 }
 ```
@@ -266,15 +266,15 @@ tag and would also match any other job on `main`):
 ```json
 "StringLike": {
   "token.actions.githubusercontent.com:sub": [
-    "repo:MystenLabs/sui:ref:refs/tags/devnet-v*",
-    "repo:MystenLabs/sui:ref:refs/tags/testnet-v*",
-    "repo:MystenLabs/sui:ref:refs/tags/mainnet-v*",
-    "repo:MystenLabs/sui:ref:refs/heads/main"
+    "repo:LinkUVerse/rtd:ref:refs/tags/devnet-v*",
+    "repo:LinkUVerse/rtd:ref:refs/tags/testnet-v*",
+    "repo:LinkUVerse/rtd:ref:refs/tags/mainnet-v*",
+    "repo:LinkUVerse/rtd:ref:refs/heads/main"
   ]
 }
 ```
 
-### Permission policy (bucket `sui-releases`)
+### Permission policy (bucket `rtd-releases`)
 
 Release archives are large (multi-hundred-MB `.tgz`), so `aws s3 cp` uses
 **multipart** uploads — include the multipart actions (`s3:PutObject` authorizes
@@ -287,37 +287,37 @@ cover cleanup of interrupted transfers):
   "Statement": [
     { "Sid": "ReleaseObjectRW", "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload"],
-      "Resource": "arn:aws:s3:::sui-releases/*" },
+      "Resource": "arn:aws:s3:::rtd-releases/*" },
     { "Sid": "ReleaseListBucket", "Effect": "Allow",
       "Action": ["s3:ListBucket", "s3:ListBucketMultipartUploads"],
-      "Resource": "arn:aws:s3:::sui-releases" }
+      "Resource": "arn:aws:s3:::rtd-releases" }
   ]
 }
 ```
 
-> Note: `sccache-warmup.yml` writes a small summary to `s3://mystenlabs-sccache`.
+> Note: `sccache-warmup.yml` writes a small summary to `s3://linkuverse-sccache`.
 > It can reuse Role 1 (it runs on `main`/scheduled), so no separate role is
 > needed there.
 
 ### Credential sequencing — `release.yml` touches BOTH buckets
 
-`release.yml` builds with sccache (`mystenlabs-sccache`, Role 1) **and** uploads
-artifacts to `sui-releases` (Role 2). `configure-aws-credentials` (and therefore
+`release.yml` builds with sccache (`linkuverse-sccache`, Role 1) **and** uploads
+artifacts to `rtd-releases` (Role 2). `configure-aws-credentials` (and therefore
 `setup-sccache`) **overwrites the AWS credential env vars** each time it runs —
 whichever role was configured last wins within a job.
 
 Resolved with a **two-job split**: `release-build` no longer holds any
-`sui-releases` credentials — its only remaining AWS credentials are the static
+`rtd-releases` credentials — its only remaining AWS credentials are the static
 sccache keys `setup-sccache` configures for the cache bucket (pending Role 1
 trust for release-event subs), and the existing-archive download uses the
 bucket's public read access. The `upload-release-archives-to-s3` job —
 `environment: release`, Role 2 — receives the archives as workflow artifacts
-and performs every `sui-releases` write. The two roles never coexist in one
+and performs every `rtd-releases` write. The two roles never coexist in one
 job, so there is no credential sequencing to manage.
 
 ---
 
-## Role 3 — `sui-github-actions-kms-test`
+## Role 3 — `rtd-github-actions-kms-test`
 
 > **Status: NOT created — BLOCKED (2026-06-08).** Two blockers: (1) the AWS KMS
 > test in `turborepo.yml` is **disabled** (`E2E_AWS_KMS_TEST_ENABLE: "false"`), so
@@ -326,17 +326,17 @@ job, so there is no credential sequencing to manage.
 > so the permission policy below can't be scoped to a real key ARN without
 > guessing. **Unblock:** supply the test key ARN (from that secret) and confirm
 > the test is being re-enabled; then create the role with the
-> `repo:MystenLabs/sui:environment:sui-typescript-aws-kms-test-env` subject (that
+> `repo:LinkUVerse/rtd:environment:rtd-typescript-aws-kms-test-env` subject (that
 > environment already exists) scoped to the one key. Good news: the env-subject is
 > available, so the trust shape is settled — only the key ARN + re-enable remain.
 
 **Used by:** the AWS KMS test in `turborepo.yml` (`kms:Sign`/`Verify` against a
-**dedicated test key**, job-scoped to environment `sui-typescript-aws-kms-test-env`).
+**dedicated test key**, job-scoped to environment `rtd-typescript-aws-kms-test-env`).
 Scope the trust to that environment subject.
 
 - If it runs only on `main`/scheduled, use the same trusted-ref pattern as Role 1.
 - If it must run on **PRs**, the minimal blast radius of a test-only KMS key may
-  justify allowing `repo:MystenLabs/sui:pull_request` here — **owner's decision**.
+  justify allowing `repo:LinkUVerse/rtd:pull_request` here — **owner's decision**.
   Unlike a cache bucket, a sign/verify-only test key carries no data-exfiltration
   or cache-poisoning risk. Document the choice explicitly.
 
@@ -379,7 +379,7 @@ jobs:
         # non-main ref (whose sub the role does NOT trust) falls back to a local
         # cache instead of failing the AssumeRole. For schedule/push this is
         # always main.
-        role-to-assume: ${{ github.ref == 'refs/heads/main' && 'arn:aws:iam::011083325127:role/sui-sccache-rw-github' || '' }}
+        role-to-assume: ${{ github.ref == 'refs/heads/main' && 'arn:aws:iam::011083325127:role/rtd-sccache-rw-github' || '' }}
         key-prefix: ${{ matrix.os }}
         # aws-access-key-id/secret omitted — OIDC takes priority
 ```
@@ -388,7 +388,7 @@ jobs:
 is set, falls back to static keys when only those are set, and skips the S3
 cache when neither is set (fork PRs / off-ref dispatch). This lets callers
 migrate one at a time. The action sets `role-session-name`
-(`sui-sccache-<run_id>-<attempt>`) and `allowed-account-ids: 011083325127` on
+(`rtd-sccache-<run_id>-<attempt>`) and `allowed-account-ids: 011083325127` on
 both configure-credentials paths.
 
 ## Hardening (apply per role / caller)
@@ -412,7 +412,7 @@ A `…:environment:<name>` subject is only as tight as the environment's rules. 
 `aws-sccache` / `release`:
 
 - Set **deployment branch/tag rules** to exactly the trusted refs (e.g. `main`,
-  `releases/sui-*-release`, the release tag patterns). Without them, *any* branch
+  `releases/rtd-*-release`, the release tag patterns). Without them, *any* branch
   could target the environment and obtain the role.
 - Do **not** attach broad/unrelated secrets to the environment — it should grant
   the OIDC subject and nothing else.
@@ -422,7 +422,7 @@ A `…:environment:<name>` subject is only as tight as the environment's rules. 
 
 1. **`sccache-warmup.yml`** — safest first (scheduled/dispatch on `main`, RW).
 2. **`nightly.yml`** — scheduled on `main`.
-3. **PR CI** (`sui-ci-tests.yml` et al.) — introduce Role 1 (RW) for trusted
+3. **PR CI** (`rtd-ci-tests.yml` et al.) — introduce Role 1 (RW) for trusted
    refs and Role `…-sccache-ro` for `pull_request`, completing the
    protected=RW / PR=RO / fork=none split.
 4. **`release.yml`** — Role 2, after the cache roles are proven.

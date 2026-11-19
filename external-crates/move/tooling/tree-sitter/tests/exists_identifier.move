@@ -1,6 +1,6 @@
 module a::m;
 
-use sui::dynamic_field::exists;
+use rtd::dynamic_field::exists;
 
 fun f(id: &UID) {
     assert!(exists<vector<u8>>(id, b""), 0);

@@ -1,1 +1,1 @@
-`@mysten/signers` has moved to https://github.com/MystenLabs/ts-sdks/tree/main/packages/signers
+`@linku/signers` has moved to https://github.com/LinkUVerse/ts-sdks/tree/main/packages/signers

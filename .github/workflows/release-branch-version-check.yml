@@ -5,7 +5,7 @@ name: Release Branch Version Check
 on:
   pull_request:
     branches:
-      - 'releases/sui-v*-release'
+      - 'releases/rtd-v*-release'
 
 permissions:
   contents: read

@@ -1,11 +1,11 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 name: Run simtest phases on the simtest host
 description: >
   Starts scripts/simtest/simtest-run.sh detached on simtest-01 for the given
   SIMTEST_PHASES, polls until it writes its exit marker, prints the tail of its
-  output and exits with the remote exit code. Expects ~/sui to be cloned and
+  output and exits with the remote exit code. Expects ~/rtd to be cloned and
   cargo-simtest installed on the host.
 
   Host files for a phase: ~/simtest_<phase>_stdout.log and
@@ -29,7 +29,7 @@ inputs:
     description: Log directory on the host for this run id.
     required: true
   protocol-config-override:
-    description: SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE value, empty for latest.
+    description: RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE value, empty for latest.
     required: false
     default: ""
   test-num:
@@ -62,7 +62,7 @@ runs:
       shell: bash
       run: |
         tsh -i ${{ inputs.identity-file }} ssh ubuntu@simtest-01 "rm -f ~/simtest_${{ inputs.phase }}_exit_code; printf 'workflow=%s\nrun_id=%s\nrun_url=%s\nstarted_at=%s\nmin_free_gb=%s\nlog_dir=%s\nphase=%s\n' '${{ github.workflow }}' '${{ github.run_id }}' '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" '${{ inputs.min-free-gb }}' '${{ inputs.log-dir }}' '${{ inputs.phase }}' > ~/simtest_active_run"
-        tsh -i ${{ inputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/sui || exit 1; nohup setsid bash -c 'RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ inputs.test-num }} SIMTEST_RUN_ID=${{ inputs.run-id }} SIMTEST_PHASES=${{ inputs.phases }} SUI_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ inputs.protocol-config-override }} ./scripts/simtest/simtest-run.sh; echo \$? > ~/simtest_${{ inputs.phase }}_exit_code.tmp && mv ~/simtest_${{ inputs.phase }}_exit_code.tmp ~/simtest_${{ inputs.phase }}_exit_code' < /dev/null > ~/simtest_${{ inputs.phase }}_stdout.log 2>&1 &"
+        tsh -i ${{ inputs.identity-file }} ssh ubuntu@simtest-01 "source ~/.bashrc && source ~/.cargo/env && cd ~/rtd || exit 1; nohup setsid bash -c 'RUSTUP_MAX_RETRIES=10 CARGO_TERM_COLOR=always CARGO_INCREMENTAL=0 CARGO_NET_RETRY=10 RUST_BACKTRACE=short RUST_LOG=off NUM_CPUS=24 TEST_NUM=${{ inputs.test-num }} SIMTEST_RUN_ID=${{ inputs.run-id }} SIMTEST_PHASES=${{ inputs.phases }} RTD_PROTOCOL_CONFIG_CHAIN_OVERRIDE=${{ inputs.protocol-config-override }} ./scripts/simtest/simtest-run.sh; echo \$? > ~/simtest_${{ inputs.phase }}_exit_code.tmp && mv ~/simtest_${{ inputs.phase }}_exit_code.tmp ~/simtest_${{ inputs.phase }}_exit_code' < /dev/null > ~/simtest_${{ inputs.phase }}_stdout.log 2>&1 &"
 
     - name: Wait for simtest completion
       shell: bash

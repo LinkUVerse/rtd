@@ -1,0 +1,586 @@
+// Copyright (c) LinkU Labs, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+};
+
+use rtd_types::base_types::AuthorityName;
+use rtd_types::transaction::AllowedProposers;
+
+use crate::{
+    authority_aggregator::AuthorityAggregator,
+    safe_client::SafeClient,
+    status_aggregator::StatusAggregator,
+    transaction_driver::error::{
+        AggregatedEffectsDigests, TransactionDriverError, TransactionRequestError,
+        aggregate_request_errors,
+    },
+    validator_client_monitor::{TransactionClass, ValidatorClientMonitor},
+};
+
+/// Select validators with latencies within 2% of the lowest latency.
+pub(crate) const SELECT_LATENCY_DELTA: f64 = 0.02;
+
+/// Targeting for an unrestricted transaction while validators stagger submission:
+/// rank targets by the transaction's stagger order instead of pure latency, so
+/// requests land on validators that propose it immediately.
+pub(crate) struct StaggerTargets {
+    /// The transaction's stagger order over the full committee.
+    pub order: Vec<AuthorityName>,
+    /// How many leading slots propose immediately (free slots, widened by paid
+    /// amplification) — the same count the validators grant.
+    pub free_slots: usize,
+    /// How many leading slots may propose at all: the free slots plus the holders.
+    /// Validators past them reject the submission, so they are never targeted.
+    pub proposer_slots: usize,
+}
+
+/// Provides the next target validator to retry operations,
+/// and gathers the errors along with the operations.
+///
+/// In TransactionDriver, submitting a transaction and getting full effects follow the same pattern:
+/// 1. Retry against all validators until the operation succeeds.
+/// 2. If non‑retriable errors from a quorum of validators are returned, the operation should fail permanently.
+///
+/// When an `allowed_validators` is provided, only the validators in the list will be used to submit the transaction to.
+/// When the allowed validator list is empty, any validator can be used an then the validators are selected based on their scores.
+///
+/// When a `blocked_validators` is provided, the validators in the list cannot be used to submit the transaction to.
+/// When the blocked validator list is empty, no restrictions are applied.
+///
+/// When `allowed_proposers` is provided, only those validators are used. Unlike the lists above,
+/// this comes from the transaction itself: proposal by anyone else is byzantine behavior and would
+/// invalidate the whole block, so submitting elsewhere can only waste the attempt.
+///
+/// This component helps to manager this retry pattern.
+pub(crate) struct RequestRetrier<A: Clone> {
+    ranked_clients: VecDeque<(AuthorityName, Arc<SafeClient<A>>)>,
+    pub(crate) non_retriable_errors_aggregator: StatusAggregator<TransactionRequestError>,
+    pub(crate) retriable_errors_aggregator: StatusAggregator<TransactionRequestError>,
+}
+
+impl<A: Clone> RequestRetrier<A> {
+    pub(crate) fn new(
+        auth_agg: &Arc<AuthorityAggregator<A>>,
+        client_monitor: &Arc<ValidatorClientMonitor<A>>,
+        allowed_validators: Vec<String>,
+        blocked_validators: Vec<String>,
+        allowed_proposers: Option<&AllowedProposers>,
+        stagger_targets: Option<StaggerTargets>,
+    ) -> Self {
+        let ranked_validators = if let Some(targets) = stagger_targets {
+            // Free slots first — best latency score within them — then the rest of the
+            // stagger order. Retries beyond the free slots must keep walking the slot
+            // order rather than fall back to latency ranking: the latency-preferred
+            // validators are exactly the ones that would hold the transaction.
+            let latency_rank: HashMap<AuthorityName, usize> = client_monitor
+                .select_shuffled_preferred_validators(
+                    &auth_agg.committee,
+                    SELECT_LATENCY_DELTA,
+                    TransactionClass::Unrestricted,
+                )
+                .into_iter()
+                .enumerate()
+                .map(|(rank, name)| (name, rank))
+                .collect();
+            let mut order = targets.order;
+            // Paid amplification can widen the free slots past the stake cut; the
+            // validators propose for those slots too.
+            order.truncate(targets.proposer_slots.max(targets.free_slots));
+            let free_slots = targets.free_slots.min(order.len());
+            order[..free_slots]
+                .sort_by_key(|name| latency_rank.get(name).copied().unwrap_or(usize::MAX));
+            order
+        } else {
+            // Restricted transactions rank on restricted-class stats, which staggering
+            // holds can never inflate; everything else ranks on the unrestricted view.
+            let tx_class = if allowed_proposers.is_some() {
+                TransactionClass::Restricted
+            } else {
+                TransactionClass::Unrestricted
+            };
+            client_monitor.select_shuffled_preferred_validators(
+                &auth_agg.committee,
+                SELECT_LATENCY_DELTA,
+                tx_class,
+            )
+        };
+        let ranked_clients = ranked_validators
+            .into_iter()
+            .filter(|name| {
+                allowed_proposers.is_none_or(|allowed| {
+                    auth_agg
+                        .committee
+                        .authority_index(name)
+                        .is_some_and(|index| allowed.proposers.contains(&index))
+                })
+            })
+            .map(|name| (name, auth_agg.get_display_name(&name)))
+            .filter(|(_name, display_name)| {
+                allowed_validators.is_empty() || allowed_validators.contains(display_name)
+            })
+            .filter(|(_name, display_name)| {
+                blocked_validators.is_empty() || !blocked_validators.contains(display_name)
+            })
+            .filter_map(|(name, _display_name)| {
+                // There is not guarantee that the `name` are in the `auth_agg.authority_clients` if those are coming from the list
+                // of `allowed_validators`, as the provided `auth_agg` might have been updated with a new committee that doesn't contain the validator in question.
+                auth_agg
+                    .authority_clients
+                    .get(&name)
+                    .map(|client| (name, client.clone()))
+            })
+            .collect::<VecDeque<_>>();
+        let non_retriable_errors_aggregator = StatusAggregator::new(auth_agg.committee.clone());
+        let retriable_errors_aggregator = StatusAggregator::new(auth_agg.committee.clone());
+        Self {
+            ranked_clients,
+            non_retriable_errors_aggregator,
+            retriable_errors_aggregator,
+        }
+    }
+
+    // Selects the next target validator to attempt an operation.
+    pub(crate) fn next_target(
+        &mut self,
+    ) -> Result<(AuthorityName, Arc<SafeClient<A>>), TransactionDriverError> {
+        if let Some((name, client)) = self.ranked_clients.pop_front() {
+            return Ok((name, client));
+        };
+
+        if self
+            .non_retriable_errors_aggregator
+            .reached_validity_threshold()
+        {
+            Err(TransactionDriverError::RejectedByValidators {
+                submission_non_retriable_errors: aggregate_request_errors(
+                    self.non_retriable_errors_aggregator.status_by_authority(),
+                ),
+                submission_retriable_errors: aggregate_request_errors(
+                    self.retriable_errors_aggregator.status_by_authority(),
+                ),
+            })
+        } else {
+            Err(TransactionDriverError::Aborted {
+                submission_non_retriable_errors: aggregate_request_errors(
+                    self.non_retriable_errors_aggregator.status_by_authority(),
+                ),
+                submission_retriable_errors: aggregate_request_errors(
+                    self.retriable_errors_aggregator.status_by_authority(),
+                ),
+                observed_effects_digests: AggregatedEffectsDigests {
+                    digests: Vec::new(),
+                },
+            })
+        }
+    }
+
+    // Adds an error associated with the operation against the authority.
+    //
+    // Returns an error if it has aggregated >= f+1 submission non-retriable errors.
+    // In this case, the transaction cannot finalize unless there is a software bug
+    // or > f malicious validators.
+    pub(crate) fn add_error(
+        &mut self,
+        name: AuthorityName,
+        error: TransactionRequestError,
+    ) -> Result<(), TransactionDriverError> {
+        if error.is_submission_retriable() {
+            self.retriable_errors_aggregator.insert(name, error);
+        } else {
+            self.non_retriable_errors_aggregator.insert(name, error);
+            if self
+                .non_retriable_errors_aggregator
+                .reached_validity_threshold()
+            {
+                return Err(TransactionDriverError::RejectedByValidators {
+                    submission_non_retriable_errors: aggregate_request_errors(
+                        self.non_retriable_errors_aggregator.status_by_authority(),
+                    ),
+                    submission_retriable_errors: aggregate_request_errors(
+                        self.retriable_errors_aggregator.status_by_authority(),
+                    ),
+                });
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rtd_types::{
+        base_types::ConciseableName,
+        error::{RtdErrorKind, UserInputError},
+    };
+
+    use crate::{
+        authority_aggregator::{AuthorityAggregatorBuilder, TimeoutConfig},
+        test_authority_clients::MockAuthorityApi,
+    };
+
+    use super::*;
+
+    pub(crate) fn get_authority_aggregator(
+        committee_size: usize,
+    ) -> AuthorityAggregator<MockAuthorityApi> {
+        let timeouts_config = TimeoutConfig::default();
+        AuthorityAggregatorBuilder::from_committee_size(committee_size)
+            .with_timeouts_config(timeouts_config)
+            .build_mock_authority_aggregator()
+    }
+
+    #[tokio::test]
+    async fn test_next_target() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+        let mut retrier =
+            RequestRetrier::new(&auth_agg, &client_monitor, vec![], vec![], None, None);
+
+        for name in auth_agg.committee.names() {
+            retrier.next_target().unwrap();
+            retrier
+                .add_error(
+                    *name,
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+        }
+
+        let Err(error) = retrier.next_target() else {
+            panic!("Expected an error");
+        };
+        assert!(error.is_submission_retriable(), "{}", error);
+    }
+
+    #[tokio::test]
+    async fn test_allowed_validators() {
+        use rtd_types::crypto::{AuthorityKeyPair, KeypairTraits, get_key_pair};
+
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+
+        // Create validators that don't exist in the auth_agg
+        let (_, key_pair1): (_, AuthorityKeyPair) = get_key_pair();
+        let (_, key_pair2): (_, AuthorityKeyPair) = get_key_pair();
+        let unknown_validator1: AuthorityName = key_pair1.public().into();
+        let unknown_validator2: AuthorityName = key_pair2.public().into();
+
+        // Mix of unknown validators and one known validator
+        let authorities: Vec<_> = auth_agg.committee.names().copied().collect();
+
+        println!("Case 1. Mix of unknown validators and one known validator");
+        {
+            let allowed_validators = vec![
+                unknown_validator1.concise().to_string(),
+                unknown_validator2.concise().to_string(),
+                authorities[0].concise().to_string(), // This one exists in auth_agg
+            ];
+
+            let retrier = RequestRetrier::new(
+                &auth_agg,
+                &client_monitor,
+                allowed_validators,
+                vec![],
+                None,
+                None,
+            );
+
+            // Should only have 1 remaining client (the known validator)
+            assert_eq!(retrier.ranked_clients.len(), 1);
+            assert_eq!(retrier.ranked_clients[0].0, authorities[0]);
+        }
+
+        println!("Case 2. Only unknown validators are provided");
+        {
+            let allowed_validators = vec![
+                unknown_validator1.concise().to_string(),
+                unknown_validator2.concise().to_string(),
+            ];
+
+            let retrier = RequestRetrier::new(
+                &auth_agg,
+                &client_monitor,
+                allowed_validators,
+                vec![],
+                None,
+                None,
+            );
+
+            // Should have no remaining clients since none of the allowed validators exist
+            assert_eq!(retrier.ranked_clients.len(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_blocked_validators() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+
+        // Create a list of validators that should be blocked and never picked up by the retrier.
+        let blocked_validators = auth_agg
+            .committee
+            .names()
+            .take(3)
+            .copied()
+            .collect::<Vec<_>>();
+        let blocked_display_names = blocked_validators
+            .iter()
+            .map(|name| auth_agg.get_display_name(name))
+            .collect::<Vec<_>>();
+
+        // Only the last validator will be picked up.
+        let allowed_validator = auth_agg.committee.names().nth(3).unwrap();
+
+        let mut retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            blocked_display_names,
+            None,
+            None,
+        );
+
+        // The last validator will be picked up.
+        assert_eq!(retrier.next_target().unwrap().0, *allowed_validator);
+        // No more validators will be picked up.
+        assert!(retrier.next_target().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_add_error() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let authorities: Vec<_> = auth_agg.committee.names().copied().collect();
+
+        // Add retriable errors.
+        {
+            let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+            let mut retrier =
+                RequestRetrier::new(&auth_agg, &client_monitor, vec![], vec![], None, None);
+
+            // 25% stake.
+            retrier
+                .add_error(
+                    authorities[0],
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+            // 50% stake.
+            retrier
+                .add_error(
+                    authorities[1],
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+            // 75% stake.
+            retrier
+                .add_error(
+                    authorities[1],
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+            // 100% stake.
+            retrier
+                .add_error(
+                    authorities[1],
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+            // Still there is no aggregated error.
+        }
+
+        // Add mix of retriable and non-retriable errors.
+        {
+            let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+            let mut retrier =
+                RequestRetrier::new(&auth_agg, &client_monitor, vec![], vec![], None, None);
+
+            // 25% stake retriable error.
+            retrier
+                .add_error(
+                    authorities[0],
+                    TransactionRequestError::TimedOutSubmittingTransaction,
+                )
+                .unwrap();
+            // 25% stake non-retriable error.
+            retrier
+                .add_error(
+                    authorities[1],
+                    TransactionRequestError::RejectedAtValidator(
+                        RtdErrorKind::UserInputError {
+                            error: UserInputError::EmptyCommandInput,
+                        }
+                        .into(),
+                    ),
+                )
+                .unwrap();
+            // 50% stake non-retriable error. Above validity threshold.
+            let aggregated_error = retrier
+                .add_error(
+                    authorities[2],
+                    TransactionRequestError::RejectedAtValidator(
+                        RtdErrorKind::UserInputError {
+                            error: UserInputError::EmptyCommandInput,
+                        }
+                        .into(),
+                    ),
+                )
+                .unwrap_err();
+            // The aggregated error is non-retriable.
+            assert!(!aggregated_error.is_submission_retriable());
+        }
+    }
+
+    /// While staggering is active, targets follow the transaction's stagger order:
+    /// free slots first (best latency score within them), then the remaining slots in
+    /// order — never the latency ranking, which would walk into holding validators.
+    #[tokio::test]
+    async fn test_stagger_targets_order() {
+        use crate::validator_client_monitor::{OperationFeedback, OperationType};
+        use std::time::Duration;
+
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+        let validators: Vec<_> = auth_agg.committee.names().copied().collect();
+
+        // Make validator 3 fastest, then 2, 1, 0 — the latency ranking is the exact
+        // reverse of the stagger order used below.
+        for (i, validator) in validators.iter().enumerate() {
+            client_monitor.record_interaction_result(OperationFeedback {
+                authority_name: *validator,
+                display_name: auth_agg.get_display_name(validator),
+                operation: OperationType::SharedObjectFinality,
+                tx_class: None,
+                ping_type: None,
+                result: Ok(Duration::from_millis(400 - (i as u64) * 100)),
+            });
+        }
+        client_monitor.force_update_cached_latencies(&auth_agg);
+
+        let targets = StaggerTargets {
+            order: validators.clone(),
+            free_slots: 2,
+            proposer_slots: 4,
+        };
+        let mut retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            vec![],
+            None,
+            Some(targets),
+        );
+
+        // Free slots are validators 0 and 1; validator 1 is faster, so it goes first.
+        assert_eq!(retrier.next_target().unwrap().0, validators[1]);
+        assert_eq!(retrier.next_target().unwrap().0, validators[0]);
+        // Past the free slots the stagger order continues unchanged, even though the
+        // latency ranking would prefer validator 3.
+        assert_eq!(retrier.next_target().unwrap().0, validators[2]);
+        assert_eq!(retrier.next_target().unwrap().0, validators[3]);
+        assert!(retrier.next_target().is_err());
+    }
+
+    /// Validators past the proposer set reject the submission, so the walk stops at the
+    /// set's end instead of asking them.
+    #[tokio::test]
+    async fn test_stagger_targets_stop_at_proposer_set() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+        let validators: Vec<_> = auth_agg.committee.names().copied().collect();
+
+        let targets = StaggerTargets {
+            order: validators.clone(),
+            free_slots: 1,
+            proposer_slots: 3,
+        };
+        let mut retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            vec![],
+            None,
+            Some(targets),
+        );
+        assert_eq!(retrier.next_target().unwrap().0, validators[0]);
+        assert_eq!(retrier.next_target().unwrap().0, validators[1]);
+        assert_eq!(retrier.next_target().unwrap().0, validators[2]);
+        assert!(retrier.next_target().is_err());
+
+        // Paid amplification widening the free slots past the cut keeps those targets.
+        let targets = StaggerTargets {
+            order: validators.clone(),
+            free_slots: 4,
+            proposer_slots: 2,
+        };
+        let mut retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            vec![],
+            None,
+            Some(targets),
+        );
+        for _ in 0..4 {
+            assert!(retrier.next_target().is_ok());
+        }
+        assert!(retrier.next_target().is_err());
+    }
+
+    /// Only the validators a transaction names may propose it; submitting anywhere else can only
+    /// waste the attempt, so those targets are dropped before any request is made.
+    #[tokio::test]
+    async fn test_allowed_proposers() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+        let committee = &auth_agg.committee;
+
+        let allowed = AllowedProposers {
+            epoch: committee.epoch(),
+            proposers: nonempty::nonempty![1, 3],
+        };
+        let retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            vec![],
+            Some(&allowed),
+            None,
+        );
+
+        assert_eq!(retrier.ranked_clients.len(), 2);
+        for (name, _) in &retrier.ranked_clients {
+            let index = committee.authority_index(name).unwrap();
+            assert!(
+                allowed.proposers.contains(&index),
+                "picked validator at index {index}, which the transaction does not allow"
+            );
+        }
+    }
+
+    /// An index outside the committee names no one, leaving nowhere to submit rather than
+    /// silently falling back to every validator.
+    #[tokio::test]
+    async fn test_allowed_proposers_outside_committee() {
+        let auth_agg = Arc::new(get_authority_aggregator(4));
+        let client_monitor = Arc::new(ValidatorClientMonitor::new_for_test(auth_agg.clone()));
+
+        let allowed = AllowedProposers {
+            epoch: auth_agg.committee.epoch(),
+            proposers: nonempty::nonempty![99],
+        };
+        let retrier = RequestRetrier::new(
+            &auth_agg,
+            &client_monitor,
+            vec![],
+            vec![],
+            Some(&allowed),
+            None,
+        );
+
+        assert_eq!(retrier.ranked_clients.len(), 0);
+    }
+}

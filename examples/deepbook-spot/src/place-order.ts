@@ -1,8 +1,8 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-import { Transaction } from '@mysten/sui/transactions';
-import { OrderType, SelfMatchingOptions } from '@mysten/deepbook-v3';
+import { Transaction } from '@linku/rtd/transactions';
+import { OrderType, SelfMatchingOptions } from '@linku/deepbook-v3';
 import type { DeepBookTestnetClient } from './client.js';
 
 // `clientOrderId` is your own tag for the order. The SDK types it as a string,

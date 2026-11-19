@@ -1,1 +1,1 @@
-`@mysten/enoki` has moved to https://github.com/MystenLabs/ts-sdks/tree/main/packages/enoki
+`@linku/enoki` has moved to https://github.com/LinkUVerse/ts-sdks/tree/main/packages/enoki

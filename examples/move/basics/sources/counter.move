@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// This example demonstrates a basic use of a shared object.
@@ -58,7 +58,7 @@ module basics::counter {
 #[test_only]
 module basics::counter_test {
     use basics::counter::{Self, Counter};
-    use sui::test_scenario as ts;
+    use rtd::test_scenario as ts;
 
     #[test]
     fun test_counter() {

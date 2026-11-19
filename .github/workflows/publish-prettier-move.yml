@@ -1,4 +1,4 @@
-# Copyright (c) Mysten Labs, Inc.
+# Copyright (c) LinkU Labs, Inc.
 # SPDX-License-Identifier: Apache-2.0
 
 name: Publish Prettier Move
@@ -53,10 +53,10 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: pnpm install --filter @mysten/prettier-plugin-move... --frozen-lockfile --ignore-scripts
+        run: pnpm install --filter @linku/prettier-plugin-move... --frozen-lockfile --ignore-scripts
 
       - name: Test
-        run: pnpm --filter @mysten/prettier-plugin-move test
+        run: pnpm --filter @linku/prettier-plugin-move test
 
       - name: Publish to npm
         working-directory: external-crates/move/tooling/prettier-move

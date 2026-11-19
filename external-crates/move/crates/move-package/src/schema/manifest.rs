@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::BTreeMap, path::PathBuf, str::FromStr};
@@ -633,7 +633,7 @@ mod tests {
     fn diagnostic_validation_uses_the_effective_flavor() {
         let source = "[lints.test]\npublic_entry = 'deny'";
         for profile in [DiagnosticProfile::Build, DiagnosticProfile::Test] {
-            assert!(diagnostic_settings(source, profile, Flavor::Sui).is_ok());
+            assert!(diagnostic_settings(source, profile, Flavor::Rtd).is_ok());
             assert_eq!(
                 diagnostic_settings(source, profile, Flavor::Core)
                     .unwrap_err()
@@ -1316,7 +1316,7 @@ mod tests {
             [package]
             name = "name"
             edition = "2024"
-            authors = "me@mystenlabs.com"
+            authors = "me@linkuverse.com"
             "#,
         )
         .unwrap_err()

@@ -42,20 +42,20 @@ version 5, `deepbook_predict_orders` version 2 and Sessions version 4 accept
 calls. `client.predict.read.executionMode()` reports which path a network is
 on.
 
-Testnet works from `@mysten/deepbook-v3` 2.10.0. Mainnet needs 2.13.0 or
+Testnet works from `@linku/deepbook-v3` 2.10.0. Mainnet needs 2.13.0 or
 later, the first release that calls Predict protocol version 5,
 `deepbook_predict_orders` version 2 and Sessions version 4 there, because
 earlier releases call a Predict, order-desk or Sessions version that the
 Mainnet Version 5 cutover retired. The `package.json` floor is 2.13.0, with
-the `@mysten/sui` 2.39.1 peer dependency it names.
+the `@linku/rtd` 2.39.1 peer dependency it names.
 
-The `sessions-*` files import from `@mysten/deepbook-v3/sessions`, a separate
+The `sessions-*` files import from `@linku/deepbook-v3/sessions`, a separate
 subpath from `/predict`. They build owner-signed grant transactions and
 session-signed trades, and like everything else here they only return the
 transaction.
 
 No package ID, object ID, or coin type is hardcoded here. They all come from
-`@mysten/deepbook-v3/predict`, which carries a record for each deployment its
+`@linku/deepbook-v3/predict`, which carries a record for each deployment its
 release was cut against. `src/config.ts` asserts that record is
 `deepbook-predict-testnet` on Testnet and `deepbook-predict-mainnet` on Mainnet
 at startup, so an SDK upgrade that moves a network to a new deployment fails

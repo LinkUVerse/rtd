@@ -1,0 +1,10 @@
+[package]
+name = "RtdExtraChangePublicFunctionSignature"
+edition = "2024.beta"
+
+[dependencies]
+Rtd = { local = "../system-packages/rtd-framework" }
+MoveStdlib = { local = "../system-packages/move-stdlib" }
+
+[addresses]
+rtd_system = "0x3"

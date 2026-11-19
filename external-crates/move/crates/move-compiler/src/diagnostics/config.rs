@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::BTreeMap, sync::LazyLock};
@@ -17,7 +17,7 @@ use crate::{
     editions::Flavor,
     linters::{self, LintSelection, LinterDiagnosticCategory},
     shared::known_attributes::DiagnosticAttribute,
-    sui_mode,
+    rtd_mode,
 };
 
 pub type KnownDiagnosticFilterGroup = (FilterPrefix, Vec<(FilterName, Vec<DiagnosticsID>)>);
@@ -60,7 +60,7 @@ pub fn known_diagnostic_filters(flavor: Flavor) -> KnownDiagnosticFilters {
     let mut known = vec![linters::known_filters()];
     match flavor {
         Flavor::Core => (),
-        Flavor::Sui => known.push(sui_mode::linters::known_filters()),
+        Flavor::Rtd => known.push(rtd_mode::linters::known_filters()),
     }
     known
 }

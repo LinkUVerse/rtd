@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// A simple NFT that can be airdropped to users without a value and converted to a random metal NFT.
@@ -6,8 +6,8 @@
 module random_nft::example;
 
 use std::string;
-use sui::object::delete;
-use sui::random::{Random, new_generator};
+use rtd::object::delete;
+use rtd::random::{Random, new_generator};
 
 const EInvalidParams: u64 = 0;
 

@@ -1040,7 +1040,7 @@ fn constants(
                 // serialized byte but materializes as a heap-allocated container.
                 //
                 // Constants cannot contain references, so `traverse_references` is irrelevant;
-                // `include_vector_size` matches the non-legacy size config in the Sui gas meter.
+                // `include_vector_size` matches the non-legacy size config in the Rtd gas meter.
                 u64::from(deserialized_value.abstract_memory_size(&SizeConfig {
                     traverse_references: false,
                     include_vector_size: true,

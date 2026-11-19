@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 /// ===========================================================================================
@@ -12,8 +12,8 @@
 /// ===========================================================================================
 module vesting::hybrid;
 
-use sui::clock::Clock;
-use sui::coin::{Self, Coin};
+use rtd::clock::Clock;
+use rtd::coin::{Self, Coin};
 use vesting::cliff;
 use vesting::linear;
 

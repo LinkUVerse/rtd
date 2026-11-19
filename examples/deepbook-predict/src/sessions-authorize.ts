@@ -1,4 +1,4 @@
-// Copyright (c) Mysten Labs, Inc.
+// Copyright (c) LinkU Labs, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
 // docs::#sessions-authorize
@@ -6,8 +6,8 @@ import {
 	MAX_SESSION_DURATION_MS,
 	SessionsContract,
 	getSessionsConfig,
-} from '@mysten/deepbook-v3/sessions';
-import { Transaction } from '@mysten/sui/transactions';
+} from '@linku/deepbook-v3/sessions';
+import { Transaction } from '@linku/rtd/transactions';
 import { NETWORK } from './config.js';
 
 // One contract instance drives every sessions call in these examples.
