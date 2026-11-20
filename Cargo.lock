@@ -13905,6 +13905,7 @@ dependencies = [
  "tonic 0.14.6",
  "tonic-prost",
  "tonic-reflection",
+ "tonic-web",
  "tower 0.5.3",
  "tracing",
 ]

@@ -383,6 +383,76 @@ fn spawn_listener(
         }))
 }
 
+/// Plaintext browser-facing listener. Serves the same LedgerService over
+/// gRPC-Web (and native gRPC), using the same `tonic_web::GrpcWebLayer` that
+/// `rtd-rpc-api` mounts on the fullnode gRPC router. The mTLS listener above is
+/// intentionally not changed.
+fn spawn_grpc_web_listener(
+    listen_address: SocketAddr,
+    ledger: KvRpcServer,
+    rpc_metrics: Arc<rtd_rpc_api::RpcMetrics>,
+    grpc_method_allowlist: rtd_rpc_api::GrpcMethodAllowlist,
+    request_log_layer: linku_network::request_log::GrpcRequestLogLayer,
+    enable_reflection: bool,
+    file_descriptor_sets: &[&'static [u8]],
+) -> anyhow::Result<rtd_futures::service::Service> {
+    use rtd_http::middleware::callback::CallbackLayer;
+    use rtd_rpc_api::RpcMetricsMakeCallbackHandler;
+    use tonic_web::GrpcWebLayer;
+
+    let min_checkpoint_view = ledger.min_checkpoint_view.subscribe();
+    let monotonic_read_wait_timeout = ledger.monotonic_read_wait_timeout;
+    let mut routes = tonic::service::Routes::new(move_package_service_with_response_compression(
+        ledger.clone(),
+    ))
+    .add_service(ledger_service_with_response_compression(ledger));
+
+    if enable_reflection {
+        let mut reflection_v1_builder = tonic_reflection::server::Builder::configure();
+        let mut reflection_v1alpha_builder = tonic_reflection::server::Builder::configure();
+        for &fds in file_descriptor_sets {
+            reflection_v1_builder = reflection_v1_builder.register_encoded_file_descriptor_set(fds);
+            reflection_v1alpha_builder =
+                reflection_v1alpha_builder.register_encoded_file_descriptor_set(fds);
+        }
+        routes = routes
+            .add_service(reflection_v1_builder.build_v1()?)
+            .add_service(reflection_v1alpha_builder.build_v1alpha()?);
+    }
+
+    let router = routes
+        .into_axum_router()
+        .layer(CallbackLayer::new(
+            RpcMetricsMakeCallbackHandler::with_grpc_method_allowlist(
+                rpc_metrics,
+                grpc_method_allowlist,
+            ),
+        ))
+        .layer(request_log_layer)
+        .layer(monotonic_read::MonotonicReadLayer::new(
+            min_checkpoint_view,
+            monotonic_read_wait_timeout,
+        ))
+        // Outermost: translates gRPC-Web frames before the layers above see them.
+        .layer(GrpcWebLayer::new());
+
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let service = rtd_futures::service::Service::new()
+        .spawn(async move {
+            let listener = tokio::net::TcpListener::bind(listen_address).await?;
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await?;
+            Ok(())
+        })
+        .with_shutdown_signal(async move {
+            let _ = tx.send(());
+        });
+    Ok(service)
+}
+
 impl KvRpcServer {
     pub async fn new(
         instance_id: String,
@@ -664,15 +734,14 @@ impl KvRpcServer {
             &file_descriptor_sets,
         )?;
 
-        // Second, unencrypted listener for trusted internal callers (e.g.
-        // other in-cluster services) that should not need to negotiate TLS
-        // to reach this server. Serves the same `LedgerService` and `MovePackageService`.
+        // Second, loopback listener for browser-facing gRPC-Web (and native
+        // plaintext gRPC) that does not negotiate TLS. Serves the same
+        // `LedgerService` and `MovePackageService` as the mTLS listener.
         if let Some(plaintext_address) = config.plaintext_address {
             let ledger =
                 ledger_for_plaintext.expect("cloned above whenever plaintext_address is set");
-            let plaintext_service = spawn_listener(
+            let plaintext_service = spawn_grpc_web_listener(
                 plaintext_address,
-                Server::builder(),
                 ledger,
                 rpc_metrics,
                 grpc_method_allowlist,

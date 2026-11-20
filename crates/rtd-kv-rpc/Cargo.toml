@@ -48,6 +48,7 @@ toml.workspace = true
 tonic.workspace = true
 tonic-prost.workspace = true
 tonic-reflection.workspace = true
+tonic-web.workspace = true
 prost.workspace = true
 tracing.workspace = true
 tower.workspace = true

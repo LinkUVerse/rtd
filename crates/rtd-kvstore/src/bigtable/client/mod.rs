@@ -304,6 +304,99 @@ impl BigTableClient {
         batch_write_flow_control: bool,
     ) -> Result<Self> {
         let config = pool_config;
+        // RTD self-hosted archive path: the local HBase gateway speaks the
+        // Bigtable wire protocol with mTLS and no Google credentials. Sui/GCP
+        // deployments leave this unset and keep the upstream Bigtable path.
+        if let Some(gateway_url) = std::env::var("RTD_HBASE_GATEWAY_ENDPOINT").ok() {
+            if credentials_path.is_some() {
+                bail!(
+                    "Google service-account credentials are not supported by the self-hosted RTD archive"
+                );
+            }
+            if gateway_url.contains("googleapis.com")
+                || gateway_url.contains("amazonaws.com")
+                || gateway_url.contains("blob.core.windows.net")
+            {
+                bail!("RTD_HBASE_GATEWAY_ENDPOINT must not point to a proprietary cloud service");
+            }
+            let mut endpoint = Channel::from_shared(gateway_url.clone())?
+                .http2_keep_alive_interval(Duration::from_secs(30))
+                .keep_alive_timeout(Duration::from_secs(10))
+                .keep_alive_while_idle(true);
+            if gateway_url.starts_with("https://") {
+                let ca_path = std::env::var("RTD_HBASE_GATEWAY_CA_CERT")
+                    .context("RTD_HBASE_GATEWAY_CA_CERT is required for mTLS")?;
+                let cert_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_CERT")
+                    .context("RTD_HBASE_GATEWAY_CLIENT_CERT is required for mTLS")?;
+                let key_path = std::env::var("RTD_HBASE_GATEWAY_CLIENT_KEY")
+                    .context("RTD_HBASE_GATEWAY_CLIENT_KEY is required for mTLS")?;
+                let mut tls_config = ClientTlsConfig::new()
+                    .ca_certificate(Certificate::from_pem(std::fs::read(ca_path)?))
+                    .identity(tonic::transport::Identity::from_pem(
+                        std::fs::read(cert_path)?,
+                        std::fs::read(key_path)?,
+                    ));
+                if let Ok(server_name) = std::env::var("RTD_HBASE_GATEWAY_SERVER_NAME") {
+                    tls_config = tls_config.domain_name(server_name);
+                }
+                endpoint = endpoint.tls_config(tls_config)?;
+            } else if gateway_url.starts_with("http://") {
+                if std::env::var("RTD_HBASE_GATEWAY_ALLOW_INSECURE_DEV").as_deref() != Ok("1") {
+                    bail!(
+                        "Plaintext HBase gateway connections are restricted to local development"
+                    );
+                }
+            } else {
+                bail!(
+                    "RTD_HBASE_GATEWAY_ENDPOINT must use https://, or http:// only for local development"
+                );
+            }
+            endpoint = endpoint.timeout(timeout.unwrap_or(DEFAULT_CHANNEL_TIMEOUT));
+            let project_id = project_id.unwrap_or_else(|| "rtd".to_string());
+            if !project_id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+                || !instance_id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
+            {
+                bail!("RTD archive project and instance IDs must be ASCII path components");
+            }
+            let instance_name = format!("projects/{}/instances/{}", project_id, instance_id);
+            let table_prefix = format!("{}/tables/", instance_name);
+            let primer = BigtablePrimer {
+                instance_name,
+                policy: String::new(),
+                token_provider: None,
+            };
+            let pool =
+                ChannelPool::new_connected(endpoint, config, Some(Box::new(primer)), registry)
+                    .await?;
+            let metrics = registry.map(KvMetrics::new);
+            let auth_channel = AuthChannel::new(
+                pool,
+                String::new(),
+                None,
+                bigtable_features_header(batch_write_flow_control),
+            );
+            let max_decoding_message_size =
+                max_decoding_message_size.unwrap_or(DEFAULT_MAX_DECODING_MESSAGE_SIZE);
+            let client = BigtableInternalClient::new(auth_channel)
+                .max_decoding_message_size(max_decoding_message_size);
+            let flow_controller = batch_write_flow_control
+                .then(|| BatchWriteFlowController::new(client_name.clone(), metrics.clone()));
+            return Ok(Self {
+                table_prefix,
+                client,
+                batch_write_flow_control: BatchWriteFlowControl::Disabled,
+                client_name,
+                metrics,
+                flow_controller,
+                app_profile_id,
+                read_rows_retry: ReadRowsRetryConfig::default(),
+            });
+        }
+
         let policy = if is_read_only {
             "https://www.googleapis.com/auth/bigtable.data.readonly"
         } else {
