@@ -33,6 +33,11 @@ static VERSION: &str = const_str::concat!(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // axum-server's tls-rustls-no-provider feature disables automatic selection;
+    // install the same ring provider used by the other RTD services.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
     let args = Args::parse();
 
     // Enable tracing, configured by environment variables.
